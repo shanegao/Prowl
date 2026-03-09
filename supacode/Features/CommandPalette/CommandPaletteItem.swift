@@ -30,6 +30,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case removeWorktree(Worktree.ID, Repository.ID)
     case archiveWorktree(Worktree.ID, Repository.ID)
     case refreshWorktrees
+    case ghosttyCommand(String)
     case openPullRequest(Worktree.ID)
     case markPullRequestReady(Worktree.ID)
     case mergePullRequest(Worktree.ID)
@@ -46,6 +47,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
   var isGlobal: Bool {
     switch kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees:
+      return true
+    case .ghosttyCommand:
       return true
     case .openPullRequest,
       .markPullRequestReady,
@@ -69,6 +72,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
     switch kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees:
       return true
+    case .ghosttyCommand:
+      return false
     case .openPullRequest,
       .markPullRequestReady,
       .mergePullRequest,
@@ -100,6 +105,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.newWorktree
     case .refreshWorktrees:
       return AppShortcuts.refreshWorktrees
+    case .ghosttyCommand:
+      return nil
     case .openPullRequest:
       return AppShortcuts.openPullRequest
     case .markPullRequestReady,
