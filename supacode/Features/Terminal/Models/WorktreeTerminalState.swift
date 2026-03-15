@@ -861,6 +861,10 @@ final class WorktreeTerminalState {
       surfaces.removeValue(forKey: view.id)
       return
     }
+    let nextSurface =
+      focusedSurfaceIdByTab[tabId] == view.id
+      ? tree.focusTargetAfterClosing(node)
+      : nil
     let newTree = tree.removing(node)
     view.closeSurface()
     surfaces.removeValue(forKey: view.id)
@@ -876,7 +880,7 @@ final class WorktreeTerminalState {
     trees[tabId] = newTree
     updateRunningState(for: tabId)
     if focusedSurfaceIdByTab[tabId] == view.id {
-      if let nextSurface = newTree.root?.leftmostLeaf() {
+      if let nextSurface {
         focusSurface(nextSurface, in: tabId)
       } else {
         focusedSurfaceIdByTab.removeValue(forKey: tabId)
