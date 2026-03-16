@@ -235,7 +235,8 @@ struct SettingsFeatureTests {
     var state = SettingsFeature.State()
     state.repositorySettings = RepositorySettingsFeature.State(
       rootURL: rootURL,
-      settings: .default
+      settings: .default,
+      onevcatSettings: .default
     )
     let store = TestStore(initialState: state) {
       SettingsFeature()
