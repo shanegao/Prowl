@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# DEPRECATED: Use release.sh instead for public releases with Sparkle appcast,
+# DMG packaging, and proper versioning.
+# This script is kept for reference only.
 set -euo pipefail
 
 origin_repo_from_remote() {

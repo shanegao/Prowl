@@ -6,13 +6,14 @@ This fork is primarily for onevcat-specific customizations; before doing any rel
 make build-ghostty-xcframework  # Rebuild GhosttyKit from Zig source (requires mise)
 make build-app                   # Build macOS app (Debug) via xcodebuild
 make run-app                     # Build and launch Debug app
-make install-dev-build           # Build and copy to /Applications
+make install-dev-build           # Build and copy to /Applications (Debug)
+make install-release             # Build Release, sign locally, install to /Applications
 make format                      # Run swift-format only
 make lint                        # Run swiftlint only (fix + lint)
 make check                       # Run both format and lint
 make test                        # Run all tests
 make log-stream                  # Stream app logs (subsystem: com.onevcat.prowl)
-make bump-version                # Bump patch version and create git tag
+make bump-version                # Bump version (date-based YYYY.M.DD) and create git tag
 make bump-and-release            # Bump version and push to trigger release
 ```
 

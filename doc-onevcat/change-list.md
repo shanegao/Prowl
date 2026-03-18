@@ -31,3 +31,4 @@
 | Add PreToolUse hook to block `gh pr create` targeting upstream; PRs must explicitly target fork. | `9970560` | Fork only |
 | Add PR target rule to CLAUDE.md: always target `onevcat/supacode`, never upstream. | `962ba62` | Fork only |
 | Rebrand user-facing identity from Supacode to Prowl: app name, icon, bundle display name, settings file paths (`prowl.json`), subsystem identifiers, and about/UI strings. Keep module name as `supacode` for code compatibility. | `5f7d84a`…`5676418` | Fork only |
+| Add public release infrastructure: Sparkle EdDSA key setup, date-based version scheme (`YYYY.M.DD`), full release script with DMG/notarization/appcast, `install-release` Makefile target, `/release` and `/sync-upstream` commands. | — | Fork only |

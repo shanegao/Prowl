@@ -1,4 +1,4 @@
-Sync upstream and publish a private fork release.
+Sync upstream changes into the fork's main branch.
 
 Follow the workflow documented in `doc-onevcat/fork-sync-and-release.md`:
 
@@ -7,5 +7,4 @@ Follow the workflow documented in `doc-onevcat/fork-sync-and-release.md`:
 3. After resolving conflicts, stage the resolved files, then complete the merge commit with `git commit --no-edit`
 4. Verify the build with `make build-app` (clear SPM cache at `/tmp/supacode-spm-cache/SourcePackages` if dependency resolution fails)
 5. Push to origin: `git push origin main`
-6. Run `./doc-onevcat/scripts/release-to-fork.sh` to build, sign, notarize, and publish the release
-7. Report the release URL when done
+6. Report what was synced (upstream commit range) when done

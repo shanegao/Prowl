@@ -18,7 +18,7 @@ VERSION ?=
 BUILD ?=
 XCODEBUILD_FLAGS ?=
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework build-app run-app install-dev-build archive export-archive format lint check test bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework build-app run-app install-dev-build install-release archive export-archive format lint check test bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -64,6 +64,63 @@ install-dev-build: build-app # install dev build to /Applications
 	ditto "$$src" "$$dst"; \
 	echo "installed $$dst"
 
+install-release: build-ghostty-xcframework # Build Release, sign locally, install to /Applications
+	@SIGNING_IDENTITY="$$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application/ {print $$2; exit}')"; \
+	if [ -z "$$SIGNING_IDENTITY" ]; then \
+		echo "error: no Developer ID Application identity found"; \
+		exit 1; \
+	fi; \
+	IDENTITY_SHA="$$(security find-identity -v -p codesigning 2>/dev/null | grep "$$SIGNING_IDENTITY" | head -1 | awk '{print $$2}')"; \
+	TEAM_ID="$$(echo "$$SIGNING_IDENTITY" | grep -oE '\([A-Z0-9]{10}\)$$' | tr -d '()')"; \
+	echo "identity: $$SIGNING_IDENTITY"; \
+	echo "team: $$TEAM_ID"; \
+	APPLE_TEAM_ID="$$TEAM_ID" DEVELOPER_ID_IDENTITY_SHA="$$IDENTITY_SHA" $(MAKE) archive; \
+	mkdir -p build; \
+	cat > build/ExportOptions.plist <<-PLIST
+	<?xml version="1.0" encoding="UTF-8"?>
+	<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+	<plist version="1.0">
+	<dict>
+	  <key>method</key>
+	  <string>developer-id</string>
+	  <key>signingStyle</key>
+	  <string>manual</string>
+	  <key>signingCertificate</key>
+	  <string>$$SIGNING_IDENTITY</string>
+	  <key>teamID</key>
+	  <string>$$TEAM_ID</string>
+	</dict>
+	</plist>
+	PLIST
+	$(MAKE) export-archive; \
+	APP_PATH="$$(find build/export -name '*.app' -maxdepth 3 -print -quit)"; \
+	if [ ! -d "$$APP_PATH" ]; then \
+		echo "error: exported app not found"; \
+		exit 1; \
+	fi; \
+	SPARKLE="$$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B"; \
+	if [ -d "$$SPARKLE" ]; then \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp -v "$$SPARKLE/XPCServices/Installer.xpc"; \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp --preserve-metadata=entitlements -v "$$SPARKLE/XPCServices/Downloader.xpc"; \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp -v "$$SPARKLE/Updater.app"; \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp -v "$$SPARKLE/Autoupdate"; \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp -v "$$SPARKLE/Sparkle"; \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp -v "$$APP_PATH/Contents/Frameworks/Sparkle.framework"; \
+	fi; \
+	SENTRY="$$APP_PATH/Contents/Frameworks/Sentry.framework"; \
+	if [ -d "$$SENTRY" ]; then \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp -v "$$SENTRY/Versions/A/Sentry"; \
+		codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp -v "$$SENTRY"; \
+	fi; \
+	codesign -f -s "$$IDENTITY_SHA" -o runtime --timestamp --preserve-metadata=entitlements,requirements,flags -v "$$APP_PATH"; \
+	codesign -vvv --deep --strict "$$APP_PATH"; \
+	PRODUCT="$$(basename "$$APP_PATH")"; \
+	DST="/Applications/$$PRODUCT"; \
+	echo "copying $$APP_PATH -> $$DST"; \
+	rm -rf "$$DST"; \
+	ditto "$$APP_PATH" "$$DST"; \
+	echo "installed $$DST (Release build, locally signed)"
+
 archive: build-ghostty-xcframework # Archive Release build for distribution
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Release -archivePath build/supacode.xcarchive archive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$$APPLE_TEAM_ID" CODE_SIGN_IDENTITY="$$DEVELOPER_ID_IDENTITY_SHA" OTHER_CODE_SIGN_FLAGS="--timestamp" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) $(XCODEBUILD_FLAGS) 2>&1 | mise exec -- xcsift -qw --format toon'
 
@@ -85,31 +142,29 @@ check: format lint # Format and lint
 log-stream: # Stream logs from the app via log stream
 	log stream --predicate 'subsystem == "com.onevcat.prowl"' --style compact --color always
 
-bump-version: # Bump app version (usage: make bump-version [VERSION=x.x.x] [BUILD=123])
+bump-version: # Bump app version (usage: make bump-version [VERSION=YYYY.M.DD] [BUILD=YYYYMMDD])
 	@if [ -z "$(VERSION)" ]; then \
-		current="$$(/usr/bin/awk -F' = ' '/MARKETING_VERSION = [0-9.]+;/{gsub(/;/,"",$$2);print $$2; exit}' "$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj")"; \
-		if [ -z "$$current" ]; then \
-			echo "error: MARKETING_VERSION not found"; \
-			exit 1; \
-		fi; \
-		major="$$(echo "$$current" | cut -d. -f1)"; \
-		minor="$$(echo "$$current" | cut -d. -f2)"; \
-		patch="$$(echo "$$current" | cut -d. -f3)"; \
-		version="$$major.$$minor.$$((patch + 1))"; \
+		version="$$(date +%Y.%-m.%-d)"; \
+		suffix=1; \
+		while git rev-parse "v$$version" >/dev/null 2>&1; do \
+			suffix=$$((suffix + 1)); \
+			version="$$(date +%Y.%-m.%-d).$$suffix"; \
+		done; \
 	else \
-		if ! echo "$(VERSION)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-			echo "error: VERSION must be in x.x.x format"; \
+		if ! echo "$(VERSION)" | grep -qE '^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]+)?$$'; then \
+			echo "error: VERSION must be in YYYY.M.DD or YYYY.M.DD.N format"; \
 			exit 1; \
 		fi; \
 		version="$(VERSION)"; \
 	fi; \
 	if [ -z "$(BUILD)" ]; then \
-		build="$$(/usr/bin/awk -F' = ' '/CURRENT_PROJECT_VERSION = [0-9]+;/{gsub(/;/,"",$$2);print $$2; exit}' "$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj")"; \
-		if [ -z "$$build" ]; then \
-			echo "error: CURRENT_PROJECT_VERSION not found"; \
-			exit 1; \
+		base_build="$$(date +%Y%m%d)"; \
+		current_build="$$(/usr/bin/awk -F' = ' '/CURRENT_PROJECT_VERSION = [0-9]+;/{gsub(/;/,"",$$2);print $$2; exit}' "$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj")"; \
+		if [ "$$current_build" -ge "$$base_build" ] 2>/dev/null; then \
+			build="$$((current_build + 1))"; \
+		else \
+			build="$$base_build"; \
 		fi; \
-		build="$$((build + 1))"; \
 	else \
 		if ! echo "$(BUILD)" | grep -qE '^[0-9]+$$'; then \
 			echo "error: BUILD must be an integer"; \
