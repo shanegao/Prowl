@@ -3,132 +3,126 @@ import Testing
 
 @testable import supacode
 
-struct CanvasWaterfallPackerTests {
-  private let packer = CanvasWaterfallPacker(spacing: 20, titleBarHeight: 28)
+struct CanvasCardPackerTests {
+  private let packer = CanvasCardPacker(spacing: 20, titleBarHeight: 28)
 
-  private func card(_ key: String, width: CGFloat = 800, height: CGFloat = 550) -> CanvasWaterfallPacker.CardInfo {
-    CanvasWaterfallPacker.CardInfo(key: key, size: CGSize(width: width, height: height))
+  private func card(_ key: String, width: CGFloat = 800, height: CGFloat = 550) -> CanvasCardPacker.CardInfo {
+    CanvasCardPacker.CardInfo(key: key, size: CGSize(width: width, height: height))
   }
 
-  // MARK: - Single column
+  // MARK: - Basic packing
 
-  @Test func singleCardSingleColumn() throws {
-    let result = packer.pack(cards: [card("a")], columns: 1, columnWidth: 800)
+  @Test func singleCardPacks() throws {
+    let result = packer.pack(cards: [card("a")], targetRatio: 16.0 / 9.0)
 
     let layout = try #require(result.layouts["a"])
-    // centerX = spacing + columnWidth / 2 = 20 + 400 = 420
-    #expect(layout.position.x == 420)
-    // centerY = spacing + (height + titleBar) / 2 = 20 + (550 + 28) / 2 = 20 + 289 = 309
-    #expect(layout.position.y == 309)
     #expect(layout.size == CGSize(width: 800, height: 550))
-    // totalHeight = spacing + (height + titleBar) + spacing = 20 + 578 + 20 = 618
-    #expect(result.totalHeight == 618)
+    #expect(result.boundingSize.width > 0)
+    #expect(result.boundingSize.height > 0)
   }
-
-  @Test func multipleCardsSingleColumnStackVertically() throws {
-    let cards = [card("a", height: 400), card("b", height: 300)]
-    let result = packer.pack(cards: cards, columns: 1, columnWidth: 800)
-
-    let layoutA = try #require(result.layouts["a"])
-    let layoutB = try #require(result.layouts["b"])
-
-    // Card "a" starts at spacing (20)
-    let aCardHeight: CGFloat = 400 + 28
-    #expect(layoutA.position.y == 20 + aCardHeight / 2)
-
-    // Card "b" starts after "a" + spacing
-    let bCardHeight: CGFloat = 300 + 28
-    let bStartY = 20 + aCardHeight + 20
-    #expect(layoutB.position.y == bStartY + bCardHeight / 2)
-
-    // Both in same column → same centerX
-    #expect(layoutA.position.x == layoutB.position.x)
-
-    // totalHeight = spacing + aCardH + spacing + bCardH + spacing
-    #expect(result.totalHeight == 20 + aCardHeight + 20 + bCardHeight + 20)
-  }
-
-  // MARK: - Multiple columns
-
-  @Test func twoCardsTwoColumnsPlaceSideBySide() throws {
-    let cards = [card("a"), card("b")]
-    let result = packer.pack(cards: cards, columns: 2, columnWidth: 800)
-
-    let layoutA = try #require(result.layouts["a"])
-    let layoutB = try #require(result.layouts["b"])
-
-    // Same Y (both start at top)
-    #expect(layoutA.position.y == layoutB.position.y)
-    // Different X (different columns)
-    #expect(layoutA.position.x != layoutB.position.x)
-    // Column 0 centerX = 20 + 800/2 = 420
-    #expect(layoutA.position.x == 420)
-    // Column 1 centerX = 20 + (800 + 20) + 800/2 = 20 + 820 + 400 = 1240
-    #expect(layoutB.position.x == 1240)
-  }
-
-  // MARK: - Waterfall distribution
-
-  @Test func thirdCardGoesToShorterColumn() throws {
-    let cards = [
-      card("a", height: 600),
-      card("b", height: 300),
-      card("c", height: 200),
-    ]
-    let result = packer.pack(cards: cards, columns: 2, columnWidth: 800)
-
-    let layoutA = try #require(result.layouts["a"])
-    let layoutB = try #require(result.layouts["b"])
-    let layoutC = try #require(result.layouts["c"])
-
-    // "a" → col 0, "b" → col 1 (both start at same height)
-    // After placing: col0 = 20+628+20 = 668, col1 = 20+328+20 = 368
-    // "c" → col 1 (shorter)
-    #expect(layoutA.position.x == layoutC.position.x || layoutB.position.x == layoutC.position.x)
-    // "c" should be in col 1 (same x as "b")
-    #expect(layoutC.position.x == layoutB.position.x)
-  }
-
-  // MARK: - Size preservation
 
   @Test func preservesOriginalCardSizes() {
     let cards = [
       card("a", width: 600, height: 400),
       card("b", width: 800, height: 300),
     ]
-    let result = packer.pack(cards: cards, columns: 2, columnWidth: 800)
+    let result = packer.pack(cards: cards, targetRatio: 1.5)
 
     #expect(result.layouts["a"]?.size == CGSize(width: 600, height: 400))
     #expect(result.layouts["b"]?.size == CGSize(width: 800, height: 300))
   }
 
+  @Test func allCardsArePlaced() {
+    let cards = (0..<5).map { card("card\($0)") }
+    let result = packer.pack(cards: cards, targetRatio: 16.0 / 9.0)
+    #expect(result.layouts.count == 5)
+  }
+
+  // MARK: - No overlap
+
+  @Test func cardsDoNotOverlap() {
+    let cards = [
+      card("a", width: 600, height: 400),
+      card("b", width: 800, height: 300),
+      card("c", width: 500, height: 500),
+      card("d", width: 700, height: 350),
+    ]
+    let result = packer.pack(cards: cards, targetRatio: 1.5)
+
+    let rects = result.layouts.map { (key, layout) -> CGRect in
+      CGRect(
+        x: layout.position.x - layout.size.width / 2,
+        y: layout.position.y - (layout.size.height + 28) / 2,
+        width: layout.size.width,
+        height: layout.size.height + 28
+      )
+    }
+
+    for i in 0..<rects.count {
+      for j in (i + 1)..<rects.count {
+        // Allow 1pt tolerance for floating point.
+        let insetA = rects[i].insetBy(dx: 1, dy: 1)
+        let insetB = rects[j].insetBy(dx: 1, dy: 1)
+        #expect(!insetA.intersects(insetB), "Cards \(i) and \(j) overlap")
+      }
+    }
+  }
+
+  // MARK: - Aspect ratio targeting
+
+  @Test func resultRatioApproachesTarget() {
+    let cards = (0..<6).map { card("card\($0)", width: .random(in: 400...900), height: .random(in: 300...600)) }
+    let targetRatio: CGFloat = 16.0 / 9.0
+    let result = packer.pack(cards: cards, targetRatio: targetRatio)
+
+    guard result.boundingSize.height > 0 else { return }
+    let actualRatio = result.boundingSize.width / result.boundingSize.height
+    // Within 2x of target is reasonable for heuristic packing.
+    #expect(actualRatio > targetRatio / 2 && actualRatio < targetRatio * 2)
+  }
+
   // MARK: - Edge cases
 
-  @Test func emptyCardsReturnsSpacingHeight() {
-    let result = packer.pack(cards: [], columns: 1, columnWidth: 800)
+  @Test func emptyCardsReturnsEmptyResult() {
+    let result = packer.pack(cards: [], targetRatio: 1.5)
     #expect(result.layouts.isEmpty)
-    #expect(result.totalHeight == 20)
+    #expect(result.boundingSize == .zero)
   }
 
-  @Test func moreColumnsThanCards() {
-    let cards = [card("a")]
-    let result = packer.pack(cards: cards, columns: 5, columnWidth: 800)
+  @Test func uniformSizeCardsPackTightly() {
+    let cards = (0..<4).map { card("card\($0)", width: 600, height: 400) }
+    let result = packer.pack(cards: cards, targetRatio: 1.0)
 
-    #expect(result.layouts.count == 1)
-    // Card should be in the first column
-    #expect(result.layouts["a"]?.position.x == 420)
+    // For a square target with 4 equal cards, packing should be close to 2x2.
+    guard result.boundingSize.height > 0 else { return }
+    let area = result.boundingSize.width * result.boundingSize.height
+    let cardArea = cards.reduce(0.0) { $0 + ($1.size.width + 20) * ($1.size.height + 28 + 20) }
+    // Efficiency should be at least 60% (generous for heuristic packing).
+    #expect(cardArea / area > 0.6, "Packing efficiency too low: \(cardArea / area)")
   }
 
-  @Test func totalHeightIsMaxColumnHeight() {
+  // MARK: - Spacing
+
+  @Test func cardsHaveMinimumSpacingBetweenThem() {
     let cards = [
-      card("a", height: 600),
-      card("b", height: 200),
-      card("c", height: 400),
+      card("a", width: 600, height: 400),
+      card("b", width: 600, height: 400),
     ]
-    // 2 cols: a→col0, b→col1, c→col1 (shorter after b)
-    // col0 = 20 + 628 + 20 = 668
-    // col1 = 20 + 228 + 20 + 428 + 20 = 716
-    let result = packer.pack(cards: cards, columns: 2, columnWidth: 800)
-    #expect(result.totalHeight == 716)
+    let result = packer.pack(cards: cards, targetRatio: 2.0)
+
+    guard let a = result.layouts["a"], let b = result.layouts["b"] else { return }
+
+    // Compute edges (center-based → edge)
+    let aRight = a.position.x + a.size.width / 2
+    let bLeft = b.position.x - b.size.width / 2
+    let aBottom = a.position.y + (a.size.height + 28) / 2
+    let bTop = b.position.y - (b.size.height + 28) / 2
+
+    let horizontalGap = bLeft - aRight
+    let verticalGap = bTop - aBottom
+
+    // At least one gap direction should be >= spacing (they may be side by side or stacked).
+    let hasAdequateSpacing = horizontalGap >= 20 - 1 || verticalGap >= 20 - 1
+    #expect(hasAdequateSpacing, "Cards are too close: hGap=\(horizontalGap), vGap=\(verticalGap)")
   }
 }
