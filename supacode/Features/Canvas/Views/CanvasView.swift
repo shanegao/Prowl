@@ -95,7 +95,10 @@ struct CanvasView: View {
         viewportSize = newSize
         if !hasPerformedInitialFit {
           hasPerformedInitialFit = true
-          arrangeCards()
+          if !CanvasLayoutStore.hasAutoArrangedInSession {
+            CanvasLayoutStore.hasAutoArrangedInSession = true
+            arrangeCards()
+          }
           fitToView(canvasSize: newSize)
         }
       }
