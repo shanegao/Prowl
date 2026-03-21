@@ -30,6 +30,17 @@ final class TerminalTabManager {
     tabs[index].title = title
   }
 
+  func overrideTitle(_ id: TerminalTabID, title: String) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    tabs[index].title = title
+    tabs[index].isTitleLocked = true
+  }
+
+  func clearTitleOverride(_ id: TerminalTabID) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    tabs[index].isTitleLocked = false
+  }
+
   func updateDirty(_ id: TerminalTabID, isDirty: Bool) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
     tabs[index].isDirty = isDirty

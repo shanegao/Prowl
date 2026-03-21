@@ -656,6 +656,25 @@ final class WorktreeTerminalState {
       guard let self, let view else { return }
       self.handleCloseRequest(for: view, processAlive: processAlive)
     }
+    view.bridge.onPromptTitle = { [weak self, weak view] promptType in
+      guard let self, let view, let window = view.window else { return }
+      switch promptType {
+      case GHOSTTY_PROMPT_TITLE_SURFACE:
+        self.promptSurfaceTitle(for: view, in: window, tabId: tabId)
+      case GHOSTTY_PROMPT_TITLE_TAB:
+        self.promptTabTitle(for: tabId, in: window)
+      default:
+        break
+      }
+    }
+    view.bridge.onOpenConfig = {
+      let configStr = ghostty_config_open_path()
+      defer { ghostty_string_free(configStr) }
+      guard let ptr = configStr.ptr else { return }
+      let path = String(data: Data(bytes: ptr, count: Int(configStr.len)), encoding: .utf8) ?? ""
+      guard !path.isEmpty else { return }
+      NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
     view.onFocusChange = { [weak self, weak view] focused in
       guard let self, let view, focused else { return }
       self.focusedSurfaceIdByTab[tabId] = view.id
@@ -699,6 +718,69 @@ final class WorktreeTerminalState {
   private func currentFocusedSurfaceId() -> UUID? {
     guard let selectedTabId = tabManager.selectedTabId else { return nil }
     return focusedSurfaceIdByTab[selectedTabId]
+  }
+
+  private func promptSurfaceTitle(
+    for view: GhosttySurfaceView,
+    in window: NSWindow,
+    tabId: TerminalTabID
+  ) {
+    let alert = NSAlert()
+    alert.messageText = "Change Terminal Title"
+    alert.informativeText = "Leave blank to restore the default."
+    alert.alertStyle = .informational
+
+    let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
+    textField.stringValue = view.bridge.state.title ?? ""
+    alert.accessoryView = textField
+
+    alert.addButton(withTitle: "OK")
+    alert.addButton(withTitle: "Cancel")
+    alert.window.initialFirstResponder = textField
+
+    alert.beginSheetModal(for: window) { [weak self, weak view] response in
+      MainActor.assumeIsolated {
+        guard response == .alertFirstButtonReturn else { return }
+        guard let self, let view else { return }
+        let newTitle = textField.stringValue
+        guard !newTitle.isEmpty else { return }
+        view.bridge.state.title = newTitle
+        if self.focusedSurfaceIdByTab[tabId] == view.id {
+          self.tabManager.updateTitle(tabId, title: newTitle)
+        }
+      }
+    }
+  }
+
+  private func promptTabTitle(for tabId: TerminalTabID, in window: NSWindow) {
+    guard let tabIndex = tabManager.tabs.firstIndex(where: { $0.id == tabId }) else { return }
+
+    let alert = NSAlert()
+    alert.messageText = "Change Tab Title"
+    alert.informativeText = "Leave blank to restore the default."
+    alert.alertStyle = .informational
+
+    let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
+    textField.stringValue = tabManager.tabs[tabIndex].title
+    alert.accessoryView = textField
+
+    alert.addButton(withTitle: "OK")
+    alert.addButton(withTitle: "Cancel")
+    alert.window.initialFirstResponder = textField
+
+    alert.beginSheetModal(for: window) { [weak self] response in
+      MainActor.assumeIsolated {
+        guard response == .alertFirstButtonReturn else { return }
+        guard let self else { return }
+        let newTitle = textField.stringValue
+        if newTitle.isEmpty {
+          self.tabManager.clearTitleOverride(tabId)
+          self.updateTabTitle(for: tabId)
+        } else {
+          self.tabManager.overrideTitle(tabId, title: newTitle)
+        }
+      }
+    }
   }
 
   private func updateTabTitle(for tabId: TerminalTabID) {
