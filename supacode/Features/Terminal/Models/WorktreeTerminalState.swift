@@ -660,9 +660,6 @@ final class WorktreeTerminalState {
       guard let self else { return }
       self.handlePromptTitle(promptType, tabId: tabId)
     }
-    view.bridge.onOpenConfig = {
-      Self.openGhosttyConfig()
-    }
     view.onFocusChange = { [weak self, weak view] focused in
       guard let self, let view, focused else { return }
       self.focusedSurfaceIdByTab[tabId] = view.id
@@ -724,21 +721,6 @@ final class WorktreeTerminalState {
     default:
       break
     }
-  }
-
-  private static func openGhosttyConfig() {
-    let configStr = ghostty_config_open_path()
-    defer { ghostty_string_free(configStr) }
-    guard let ptr = configStr.ptr else {
-      SupaLogger("Terminal").warning("ghostty_config_open_path returned nil")
-      return
-    }
-    let path = String(data: Data(bytes: ptr, count: Int(configStr.len)), encoding: .utf8) ?? ""
-    guard !path.isEmpty else { return }
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    process.arguments = ["-t", path]
-    try? process.run()
   }
 
   private func promptTabTitle(for tabId: TerminalTabID, in window: NSWindow) {

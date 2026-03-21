@@ -369,10 +369,26 @@ final class GhosttyRuntime {
         runtime.reloadConfig(soft: soft, target: target)
       }
     }
+    if action.tag == GHOSTTY_ACTION_OPEN_CONFIG, target.tag == GHOSTTY_TARGET_APP {
+      openGhosttyConfig()
+      return true
+    }
     guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
     guard let surface = target.target.surface else { return false }
     guard let bridge = surfaceBridge(fromSurface: surface) else { return false }
     return bridge.handleAction(target: target, action: action)
+  }
+
+  private static func openGhosttyConfig() {
+    let configStr = ghostty_config_open_path()
+    defer { ghostty_string_free(configStr) }
+    guard let ptr = configStr.ptr else { return }
+    let path = String(data: Data(bytes: ptr, count: Int(configStr.len)), encoding: .utf8) ?? ""
+    guard !path.isEmpty else { return }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    process.arguments = ["-t", path]
+    try? process.run()
   }
 
   private static func readClipboard(
