@@ -668,10 +668,6 @@ final class WorktreeTerminalState {
       self.emitFocusChangedIfNeeded(view.id)
       self.emitTaskStatusIfChanged()
     }
-    view.onKeyInput = { [weak self, weak view] in
-      guard let self, let view else { return }
-      self.markNotificationsRead(forSurfaceID: view.id)
-    }
     surfaces[view.id] = view
     return view
   }
