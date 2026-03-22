@@ -153,6 +153,7 @@ struct SettingsFeature {
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:
+        state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
         let defaultWorktreeBaseDirectoryPath = state.globalSettings.defaultWorktreeBaseDirectoryPath
         state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
           defaultWorktreeBaseDirectoryPath
