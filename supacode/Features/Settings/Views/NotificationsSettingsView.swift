@@ -41,10 +41,13 @@ struct NotificationsSettingsView: View {
                 TextField(
                   "",
                   value: $store.commandFinishedNotificationThreshold,
-                  format: .number
+                  format: .number.grouping(.never)
                 )
                 .frame(width: 40)
                 .multilineTextAlignment(.trailing)
+                .onChange(of: store.commandFinishedNotificationThreshold) { _, newValue in
+                  store.commandFinishedNotificationThreshold = min(max(newValue, 0), 600)
+                }
                 Text("seconds")
                   .foregroundStyle(.secondary)
               }
