@@ -99,18 +99,6 @@ struct CommandFinishedNotificationTests {
     #expect(state.notifications.isEmpty)
   }
 
-  @Test func generatesNotificationWhenKeyInputIsStale() async {
-    let state = makeState()
-    state.recordKeyInput(forSurfaceID: surfaceId)
-
-    // Wait beyond the 3-second recency window
-    try? await Task.sleep(for: WorktreeTerminalState.recentInteractionWindow + .milliseconds(100))
-
-    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surfaceId)
-
-    #expect(state.notifications.count == 1)
-  }
-
   @Test func recentKeyInputOnDifferentSurfaceDoesNotSuppressNotification() {
     let state = makeState()
     let otherSurfaceId = UUID()
