@@ -89,6 +89,44 @@ struct CommandFinishedNotificationTests {
     #expect(state.notifications.count == 1)
   }
 
+  // MARK: - Recent Interaction Suppression
+
+  @Test func doesNotGenerateNotificationAfterRecentKeyInput() {
+    let state = makeState()
+    state.recordKeyInput(forSurfaceID: surfaceId)
+    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surfaceId)
+
+    #expect(state.notifications.isEmpty)
+  }
+
+  @Test func generatesNotificationWhenKeyInputIsStale() async {
+    let state = makeState()
+    state.recordKeyInput(forSurfaceID: surfaceId)
+
+    // Wait beyond the 3-second recency window
+    try? await Task.sleep(for: WorktreeTerminalState.recentInteractionWindow + .milliseconds(100))
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surfaceId)
+
+    #expect(state.notifications.count == 1)
+  }
+
+  @Test func recentKeyInputOnDifferentSurfaceDoesNotSuppressNotification() {
+    let state = makeState()
+    let otherSurfaceId = UUID()
+    state.recordKeyInput(forSurfaceID: otherSurfaceId)
+    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surfaceId)
+
+    #expect(state.notifications.count == 1)
+  }
+
+  @Test func generatesNotificationWithNoKeyInputHistory() {
+    let state = makeState()
+    state.handleCommandFinished(exitCode: 0, durationNs: 60_000_000_000, surfaceId: surfaceId)
+
+    #expect(state.notifications.count == 1)
+  }
+
   // MARK: - Duration Formatting
 
   @Test func formatDurationSeconds() {

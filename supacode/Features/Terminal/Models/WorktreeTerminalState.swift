@@ -687,7 +687,7 @@ final class WorktreeTerminalState {
     }
     view.onKeyInput = { [weak self, weak view] in
       guard let self, let view else { return }
-      self.lastKeyInputTimeBySurface[view.id] = .now
+      self.recordKeyInput(forSurfaceID: view.id)
       self.markNotificationsRead(forSurfaceID: view.id)
     }
     surfaces[view.id] = view
@@ -828,7 +828,11 @@ final class WorktreeTerminalState {
   }
 
   /// How recently the user must have typed for us to consider the exit user-initiated.
-  private static let recentInteractionWindow: Duration = .seconds(3)
+  static let recentInteractionWindow: Duration = .seconds(3)
+
+  func recordKeyInput(forSurfaceID surfaceId: UUID) {
+    lastKeyInputTimeBySurface[surfaceId] = .now
+  }
 
   func handleCommandFinished(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
     guard commandFinishedNotificationEnabled else { return }
