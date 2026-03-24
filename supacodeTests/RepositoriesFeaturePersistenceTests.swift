@@ -16,6 +16,8 @@ struct RepositoriesFeaturePersistenceTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.repositoryPersistence = RepositoryPersistenceClient(
+        loadRepositoryEntries: { [] },
+        saveRepositoryEntries: { _ in },
         loadRoots: {
           calls.withValue { $0.append("loadRoots") }
           return []

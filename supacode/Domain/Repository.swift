@@ -1,14 +1,73 @@
 import Foundation
 import IdentifiedCollections
 
-struct Repository: Identifiable, Hashable, Sendable {
+nonisolated struct Repository: Identifiable, Hashable, Sendable {
+  enum Kind: String, Codable, Hashable, Sendable {
+    case git
+    case plain
+  }
+
+  struct Capabilities: Equatable, Hashable, Sendable {
+    let supportsWorktrees: Bool
+    let supportsBranchOperations: Bool
+    let supportsPullRequests: Bool
+    let supportsDiff: Bool
+    let supportsGitStatus: Bool
+    let supportsRunnableFolderActions: Bool
+    let supportsRepositoryGitSettings: Bool
+
+    static let git = Capabilities(
+      supportsWorktrees: true,
+      supportsBranchOperations: true,
+      supportsPullRequests: true,
+      supportsDiff: true,
+      supportsGitStatus: true,
+      supportsRunnableFolderActions: true,
+      supportsRepositoryGitSettings: true
+    )
+
+    static let plain = Capabilities(
+      supportsWorktrees: false,
+      supportsBranchOperations: false,
+      supportsPullRequests: false,
+      supportsDiff: false,
+      supportsGitStatus: false,
+      supportsRunnableFolderActions: true,
+      supportsRepositoryGitSettings: false
+    )
+  }
+
   let id: String
   let rootURL: URL
   let name: String
+  let kind: Kind
   let worktrees: IdentifiedArrayOf<Worktree>
+
+  init(
+    id: String,
+    rootURL: URL,
+    name: String,
+    kind: Kind = .git,
+    worktrees: IdentifiedArrayOf<Worktree>
+  ) {
+    self.id = id
+    self.rootURL = rootURL
+    self.name = name
+    self.kind = kind
+    self.worktrees = worktrees
+  }
 
   var initials: String {
     Self.initials(from: name)
+  }
+
+  var capabilities: Capabilities {
+    switch kind {
+    case .git:
+      .git
+    case .plain:
+      .plain
+    }
   }
 
   static func name(for rootURL: URL) -> String {

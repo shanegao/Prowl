@@ -6,6 +6,7 @@ struct RepositorySettingsFeature {
   @ObservableState
   struct State: Equatable {
     var rootURL: URL
+    var repositoryKind: Repository.Kind
     var settings: RepositorySettings
     var onevcatSettings: OnevcatRepositorySettings
     var globalDefaultWorktreeBaseDirectoryPath: String?
@@ -13,6 +14,39 @@ struct RepositorySettingsFeature {
     var branchOptions: [String] = []
     var defaultWorktreeBaseRef = "origin/main"
     var isBranchDataLoaded = false
+
+    var capabilities: Repository.Capabilities {
+      switch repositoryKind {
+      case .git:
+        .git
+      case .plain:
+        .plain
+      }
+    }
+
+    var showsWorktreeSettings: Bool {
+      capabilities.supportsWorktrees
+    }
+
+    var showsPullRequestSettings: Bool {
+      capabilities.supportsPullRequests
+    }
+
+    var showsSetupScriptSettings: Bool {
+      capabilities.supportsWorktrees
+    }
+
+    var showsArchiveScriptSettings: Bool {
+      capabilities.supportsWorktrees
+    }
+
+    var showsRunScriptSettings: Bool {
+      capabilities.supportsRunnableFolderActions
+    }
+
+    var showsCustomCommandsSettings: Bool {
+      capabilities.supportsRunnableFolderActions
+    }
 
     var exampleWorktreePath: String {
       SupacodePaths.exampleWorktreePath(
@@ -56,6 +90,16 @@ struct RepositorySettingsFeature {
         let onevcatSettings = onevcatRepositorySettings
         let globalDefaultWorktreeBaseDirectoryPath =
           settingsFile.global.defaultWorktreeBaseDirectoryPath
+        guard state.capabilities.supportsRepositoryGitSettings else {
+          return .send(
+            .settingsLoaded(
+              settings,
+              onevcatSettings,
+              isBareRepository: false,
+              globalDefaultWorktreeBaseDirectoryPath: globalDefaultWorktreeBaseDirectoryPath
+            )
+          )
+        }
         let gitClient = gitClient
         return .run { send in
           let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false

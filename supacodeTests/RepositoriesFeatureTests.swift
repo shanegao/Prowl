@@ -145,6 +145,350 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func loadPersistedRepositoriesLoadsMixedGitAndPlainEntries() async {
+    let repoRoot = "/tmp/repo"
+    let plainRoot = "/tmp/folder"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let gitRepository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let plainRepository = makeRepository(
+      id: plainRoot,
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [
+          PersistedRepositoryEntry(path: repoRoot, kind: .git),
+          PersistedRepositoryEntry(path: plainRoot, kind: .plain),
+        ]
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { root in
+        let path = root.path(percentEncoded: false)
+        if path == repoRoot {
+          return [worktree]
+        }
+        Issue.record("worktrees should not load for plain repository: \(path)")
+        return []
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [gitRepository, plainRepository]
+      $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {
+    let root = "/tmp/folder"
+    let worktree = makeWorktree(id: root, name: "folder", repoRoot: root)
+    let upgradedRepository = makeRepository(
+      id: root,
+      name: "folder",
+      kind: .git,
+      worktrees: [worktree]
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: root, kind: .plain)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        #expect(url.path(percentEncoded: false) == root)
+        return URL(fileURLWithPath: root)
+      }
+      $0.gitClient.worktrees = { url in
+        #expect(url.path(percentEncoded: false) == root)
+        return [worktree]
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [upgradedRepository]
+      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    let expectedSavedEntries = [
+      [PersistedRepositoryEntry(path: root, kind: .git)],
+    ]
+    #expect(savedEntries.value == expectedSavedEntries)
+  }
+
+  @Test func loadPersistedRepositoriesDoesNotUpgradePlainFolderWhenOnlyAncestorIsGitRoot() async {
+    let root = "/tmp/folder"
+    let ancestorRoot = "/tmp"
+    let plainRepository = makeRepository(
+      id: root,
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: root, kind: .plain)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        #expect(url.path(percentEncoded: false) == root)
+        return URL(fileURLWithPath: ancestorRoot)
+      }
+      $0.gitClient.worktrees = { url in
+        Issue.record("plain folder should not load worktrees: \(url.path(percentEncoded: false))")
+        return []
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [plainRepository]
+      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedEntries.value.isEmpty)
+  }
+
+  @Test func loadPersistedRepositoriesAutoDowngradesGitRepoWhenItStopsBeingRepoRoot() async {
+    let root = "/tmp/repo"
+    let ancestorRoot = "/tmp"
+    let downgradedRepository = makeRepository(
+      id: root,
+      name: "repo",
+      kind: .plain,
+      worktrees: []
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: root, kind: .git)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        #expect(url.path(percentEncoded: false) == root)
+        return URL(fileURLWithPath: ancestorRoot)
+      }
+      $0.gitClient.worktrees = { url in
+        Issue.record("downgraded git entry should not load worktrees: \(url.path(percentEncoded: false))")
+        return []
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [downgradedRepository]
+      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    let expectedSavedEntries = [
+      [PersistedRepositoryEntry(path: root, kind: .plain)],
+    ]
+    #expect(savedEntries.value == expectedSavedEntries)
+  }
+
+  @Test func loadPersistedRepositoriesDoesNotDowngradeGitRepoOnUnexpectedProbeError() async {
+    let root = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(root)/main", name: "main", repoRoot: root)
+    let repository = makeRepository(id: root, name: "repo", kind: .git, worktrees: [worktree])
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: root, kind: .git)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { _ in
+        throw GitClientError.commandFailed(command: "wt root", message: "permission denied")
+      }
+      $0.gitClient.worktrees = { url in
+        #expect(url.path(percentEncoded: false) == root)
+        return [worktree]
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: root)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedEntries.value.isEmpty)
+  }
+
+  @Test func openRepositoriesAddsPlainFoldersInsteadOfRejectingThem() async {
+    let repoSelection = "/tmp/repo/subdir"
+    let repoRoot = "/tmp/repo"
+    let plainRoot = "/tmp/plain"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let gitRepository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let plainRepository = makeRepository(
+      id: plainRoot,
+      name: "plain",
+      kind: .plain,
+      worktrees: []
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = { [] }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        let path = url.path(percentEncoded: false)
+        if path == repoSelection {
+          return URL(fileURLWithPath: repoRoot)
+        }
+        if path == plainRoot {
+          throw GitClientError.commandFailed(command: "wt root", message: "not a git repository")
+        }
+        Issue.record("Unexpected repoRoot lookup: \(path)")
+        return URL(fileURLWithPath: repoRoot)
+      }
+      $0.gitClient.worktrees = { root in
+        let path = root.path(percentEncoded: false)
+        if path == repoRoot {
+          return [worktree]
+        }
+        Issue.record("worktrees should not load for plain repository: \(path)")
+        return []
+      }
+    }
+
+    await store.send(
+      .openRepositories([
+        URL(fileURLWithPath: repoSelection),
+        URL(fileURLWithPath: plainRoot),
+      ])
+    )
+    await store.receive(\.openRepositoriesFinished) {
+      $0.repositories = [gitRepository, plainRepository]
+      $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    let expectedSavedEntries = [
+      [
+        PersistedRepositoryEntry(path: repoRoot, kind: .git),
+        PersistedRepositoryEntry(path: plainRoot, kind: .plain),
+      ],
+    ]
+    #expect(savedEntries.value == expectedSavedEntries)
+  }
+
+  @Test func openRepositoriesDoesNotDowngradeFoldersOnUnexpectedProbeError() async {
+    let repoSelection = "/tmp/repo/subdir"
+    let repoRoot = "/tmp/repo"
+    let blockedRoot = "/tmp/blocked"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = { [] }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        let path = url.path(percentEncoded: false)
+        if path == repoSelection {
+          return URL(fileURLWithPath: repoRoot)
+        }
+        if path == blockedRoot {
+          throw GitClientError.commandFailed(command: "wt root", message: "permission denied")
+        }
+        Issue.record("Unexpected repoRoot lookup: \(path)")
+        return URL(fileURLWithPath: repoRoot)
+      }
+      $0.gitClient.worktrees = { url in
+        #expect(url.path(percentEncoded: false) == repoRoot)
+        return [worktree]
+      }
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Some folders couldn't be opened")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("\(blockedRoot): permission denied")
+    }
+
+    await store.send(
+      .openRepositories([
+        URL(fileURLWithPath: repoSelection),
+        URL(fileURLWithPath: blockedRoot),
+      ])
+    )
+    await store.receive(\.openRepositoriesFinished) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [repoRoot].map { URL(fileURLWithPath: $0) }
+      $0.isInitialLoadComplete = true
+      $0.alert = expectedAlert
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    let expectedSavedEntries = [
+      [PersistedRepositoryEntry(path: repoRoot, kind: .git)],
+    ]
+    #expect(savedEntries.value == expectedSavedEntries)
+  }
+
   @Test func repositoriesLoadedPersistsRepositorySnapshotOnSuccess() async {
     let repoRoot = "/tmp/repo"
     let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
@@ -243,6 +587,110 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func selectRepositoryClearsWorktreeSelectionAndSendsNilDelegate() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(repository.id)) {
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectPlainRepositorySendsPlainFolderTerminalTargetDelegate() async {
+    let repository = makeRepository(
+      id: "/tmp/folder",
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(repository.id)) {
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    #expect(
+      store.state.selectedTerminalWorktree
+        == Worktree(
+          id: repository.id,
+          name: repository.name,
+          detail: repository.rootURL.path(percentEncoded: false),
+          workingDirectory: repository.rootURL,
+          repositoryRootURL: repository.rootURL
+        )
+    )
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func toggleCanvasRestoresFocusedPlainRepositorySelection() async {
+    let repository = makeRepository(
+      id: "/tmp/folder",
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { repository.id }
+    }
+
+    await store.send(.toggleCanvas) {
+      $0.pendingTerminalFocusWorktreeIDs = [repository.id]
+    }
+    await store.receive(\.selectRepository) {
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func toggleCanvasFallsBackToPreCanvasPlainRepositorySelection() async {
+    let repository = makeRepository(
+      id: "/tmp/folder",
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas
+    initialState.preCanvasTerminalTargetID = repository.id
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { nil }
+    }
+
+    await store.send(.toggleCanvas) {
+      $0.pendingTerminalFocusWorktreeIDs = [repository.id]
+    }
+    await store.receive(\.selectRepository) {
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectRepositoryIgnoresUnknownRepository() async {
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository("/tmp/missing"))
+  }
+
   @Test func setSidebarSelectedWorktreeIDsKeepsSelectedAndPrunesUnknown() async {
     let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
     let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
@@ -293,6 +741,37 @@ struct RepositoriesFeatureTests {
       }
     } message: {
       TextState("Open a repository to create a worktree.")
+    }
+
+    await store.send(.createRandomWorktree) {
+      $0.alert = expectedAlert
+    }
+  }
+
+  @Test func canCreateWorktreeIsFalseForSelectedPlainRepository() {
+    let repository = makeRepository(id: "/tmp/folder", kind: .plain, worktrees: [])
+    var state = makeState(repositories: [repository])
+    state.selection = .repository(repository.id)
+
+    #expect(state.canCreateWorktree == false)
+  }
+
+  @Test func createRandomWorktreeInPlainRepositoryShowsAlert() async {
+    let repository = makeRepository(id: "/tmp/folder", kind: .plain, worktrees: [])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .repository(repository.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create worktree")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("This folder doesn't support worktrees.")
     }
 
     await store.send(.createRandomWorktree) {
@@ -2595,12 +3074,14 @@ struct RepositoriesFeatureTests {
   private func makeRepository(
     id: String,
     name: String = "repo",
+    kind: Repository.Kind = .git,
     worktrees: [Worktree]
   ) -> Repository {
     Repository(
       id: id,
       rootURL: URL(fileURLWithPath: id),
       name: name,
+      kind: kind,
       worktrees: IdentifiedArray(uniqueElements: worktrees)
     )
   }

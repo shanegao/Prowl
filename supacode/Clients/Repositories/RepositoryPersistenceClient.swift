@@ -3,6 +3,8 @@ import Foundation
 import Sharing
 
 struct RepositoryPersistenceClient {
+  var loadRepositoryEntries: @Sendable () async -> [PersistedRepositoryEntry]
+  var saveRepositoryEntries: @Sendable ([PersistedRepositoryEntry]) async -> Void
   var loadRoots: @Sendable () async -> [String]
   var saveRoots: @Sendable ([String]) async -> Void
   var loadPinnedWorktreeIDs: @Sendable () async -> [Worktree.ID]
@@ -22,14 +24,27 @@ struct RepositoryPersistenceClient {
 extension RepositoryPersistenceClient: DependencyKey {
   static let liveValue: RepositoryPersistenceClient = {
     return RepositoryPersistenceClient(
+      loadRepositoryEntries: {
+        @Shared(.repositoryEntries) var entries: [PersistedRepositoryEntry]
+        return entries
+      },
+      saveRepositoryEntries: { entries in
+        @Shared(.repositoryEntries) var sharedEntries: [PersistedRepositoryEntry]
+        $sharedEntries.withLock {
+          $0 = entries
+        }
+      },
       loadRoots: {
-        @Shared(.repositoryRoots) var roots: [String]
-        return roots
+        @Shared(.repositoryEntries) var entries: [PersistedRepositoryEntry]
+        return entries.map(\.path)
       },
       saveRoots: { roots in
-        @Shared(.repositoryRoots) var sharedRoots: [String]
-        $sharedRoots.withLock {
-          $0 = roots
+        @Shared(.repositoryEntries) var sharedEntries: [PersistedRepositoryEntry]
+        let entries = RepositoryPathNormalizer.normalize(roots).map {
+          PersistedRepositoryEntry(path: $0, kind: .git)
+        }
+        $sharedEntries.withLock {
+          $0 = entries
         }
       },
       loadPinnedWorktreeIDs: {
@@ -150,6 +165,8 @@ extension RepositoryPersistenceClient: DependencyKey {
     )
   }()
   static let testValue = RepositoryPersistenceClient(
+    loadRepositoryEntries: { [] },
+    saveRepositoryEntries: { _ in },
     loadRoots: { [] },
     saveRoots: { _ in },
     loadPinnedWorktreeIDs: { [] },
@@ -190,7 +207,7 @@ private nonisolated func discardRepositorySnapshot(at url: URL) {
 }
 
 struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
-  static let currentVersion = 1
+  static let currentVersion = 2
 
   let version: Int
   let repositories: [SnapshotRepository]
@@ -225,11 +242,13 @@ extension RepositorySnapshotCachePayload {
   struct SnapshotRepository: Codable, Equatable, Sendable {
     let rootPath: String
     let name: String
+    let kind: Repository.Kind
     let worktrees: [SnapshotWorktree]
 
     init(repository: Repository) {
       rootPath = repository.rootURL.path(percentEncoded: false)
       name = repository.name
+      kind = repository.kind
       worktrees = repository.worktrees.map { SnapshotWorktree(worktree: $0) }
     }
 
@@ -261,6 +280,7 @@ extension RepositorySnapshotCachePayload {
         id: normalizedRootPath,
         rootURL: rootURL,
         name: repositoryName.isEmpty ? Repository.name(for: rootURL) : repositoryName,
+        kind: kind,
         worktrees: IdentifiedArray(uniqueElements: restoredWorktrees)
       )
     }

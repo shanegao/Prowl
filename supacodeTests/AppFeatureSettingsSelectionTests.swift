@@ -26,6 +26,7 @@ struct AppFeatureSettingsSelectionTests {
       $0.settings.selection = .repository(repository.id)
       $0.settings.repositorySettings = RepositorySettingsFeature.State(
         rootURL: repository.rootURL,
+        repositoryKind: repository.kind,
         settings: .default,
         onevcatSettings: .default
       )
@@ -48,6 +49,34 @@ struct AppFeatureSettingsSelectionTests {
     }
   }
 
+  @Test func selectingPlainRepositoryCreatesPlainRepositorySettingsState() async {
+    let repository = Repository(
+      id: "folder-id",
+      rootURL: URL(fileURLWithPath: "/tmp/folder"),
+      name: "Folder",
+      kind: .plain,
+      worktrees: []
+    )
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: RepositoriesFeature.State(repositories: [repository]),
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.settings(.setSelection(.repository(repository.id)))) {
+      $0.settings.selection = .repository(repository.id)
+      $0.settings.repositorySettings = RepositorySettingsFeature.State(
+        rootURL: repository.rootURL,
+        repositoryKind: .plain,
+        settings: .default,
+        onevcatSettings: .default
+      )
+    }
+  }
+
   @Test func selectingNonRepositoryClearsRepositorySettingsState() async {
     let repository = Repository(
       id: "repo-id",
@@ -62,6 +91,7 @@ struct AppFeatureSettingsSelectionTests {
     state.settings.selection = .repository(repository.id)
     state.settings.repositorySettings = RepositorySettingsFeature.State(
       rootURL: repository.rootURL,
+      repositoryKind: repository.kind,
       settings: .default,
       onevcatSettings: .default
     )

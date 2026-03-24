@@ -148,6 +148,7 @@ struct SettingsFeatureTests {
     state.selection = selection
     state.repositorySettings = RepositorySettingsFeature.State(
       rootURL: rootURL,
+      repositoryKind: .git,
       settings: .default,
       onevcatSettings: .default
     )
@@ -194,6 +195,7 @@ struct SettingsFeatureTests {
       $0.selection = selection
       $0.repositorySettings = RepositorySettingsFeature.State(
         rootURL: rootURL,
+        repositoryKind: .git,
         settings: .default,
         onevcatSettings: .default
       )
@@ -235,6 +237,7 @@ struct SettingsFeatureTests {
     var state = SettingsFeature.State()
     state.repositorySettings = RepositorySettingsFeature.State(
       rootURL: rootURL,
+      repositoryKind: .git,
       settings: .default,
       onevcatSettings: .default
     )

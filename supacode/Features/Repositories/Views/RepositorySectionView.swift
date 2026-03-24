@@ -2,6 +2,7 @@ import ComposableArchitecture
 import SwiftUI
 
 struct RepositorySectionView: View {
+  private static let debugHeaderLayers = false
   let repository: Repository
   let showsTopSeparator: Bool
   let isDragActive: Bool
@@ -17,6 +18,9 @@ struct RepositorySectionView: View {
     let state = store.state
     let isExpanded = expandedRepoIDs.contains(repository.id)
     let isRemovingRepository = state.isRemovingRepository(repository)
+    let isPlainFolderSelected =
+      repository.kind == .plain
+      && state.selectedRepositoryID == repository.id
     let openRepoSettings = {
       _ = store.send(.openRepositorySettings(repository.id))
     }
@@ -32,38 +36,68 @@ struct RepositorySectionView: View {
     }
     let isDragging = isDragActive
 
-    Group {
-      HStack {
-        RepoHeaderRow(
-          name: repository.name,
-          isRemoving: isRemovingRepository
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
-        if isRemovingRepository && !isDragging {
-          ProgressView()
-            .controlSize(.small)
+    let header = HStack {
+      RepoHeaderRow(
+        name: repository.name,
+        isRemoving: isRemovingRepository
+      )
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background {
+        if Self.debugHeaderLayers {
+          Rectangle()
+            .fill(.green.opacity(0.18))
+            .overlay {
+              Rectangle()
+                .stroke(.green, lineWidth: 1)
+            }
         }
-        if isHovering && !isDragging {
-          Menu {
-            Button("Repo Settings") {
-              openRepoSettings()
+      }
+      if isRemovingRepository && !isDragging {
+        ProgressView()
+          .controlSize(.small)
+          .background {
+            if Self.debugHeaderLayers {
+              Rectangle()
+                .fill(.yellow.opacity(0.18))
+                .overlay {
+                  Rectangle()
+                    .stroke(.yellow, lineWidth: 1)
+                }
             }
-            .help("Repo Settings ")
-            Button("Remove Repository") {
-              store.send(.requestRemoveRepository(repository.id))
-            }
-            .help("Remove repository ")
-            .disabled(isRemovingRepository)
-          } label: {
-            Label("Repository options", systemImage: "ellipsis")
-              .labelStyle(.iconOnly)
-              .frame(maxHeight: .infinity)
-              .contentShape(Rectangle())
           }
-          .buttonStyle(.plain)
-          .foregroundStyle(.secondary)
-          .help("Repository options ")
+      }
+      if isHovering && !isDragging {
+        Menu {
+          Button("Repo Settings") {
+            openRepoSettings()
+          }
+          .help("Repo Settings ")
+          Button("Remove Repository") {
+            store.send(.requestRemoveRepository(repository.id))
+          }
+          .help("Remove repository ")
           .disabled(isRemovingRepository)
+        } label: {
+          Label("Repository options", systemImage: "ellipsis")
+            .labelStyle(.iconOnly)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .background {
+              if Self.debugHeaderLayers {
+                Rectangle()
+                  .fill(.purple.opacity(0.18))
+                  .overlay {
+                    Rectangle()
+                      .stroke(.purple, lineWidth: 1)
+                  }
+              }
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help("Repository options ")
+        .disabled(isRemovingRepository)
+        if repository.capabilities.supportsWorktrees {
           Button {
             store.send(.createRandomWorktreeInRepository(repository.id))
           } label: {
@@ -71,11 +105,23 @@ struct RepositorySectionView: View {
               .labelStyle(.iconOnly)
               .frame(maxHeight: .infinity)
               .contentShape(Rectangle())
+              .background {
+                if Self.debugHeaderLayers {
+                  Rectangle()
+                    .fill(.mint.opacity(0.18))
+                    .overlay {
+                      Rectangle()
+                        .stroke(.mint, lineWidth: 1)
+                    }
+                }
+              }
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
           .help("New Worktree (\(AppShortcuts.newWorktree.display))")
           .disabled(isRemovingRepository)
+        }
+        if repository.capabilities.supportsWorktrees {
           Button {
             toggleExpanded()
           } label: {
@@ -84,42 +130,71 @@ struct RepositorySectionView: View {
               .frame(maxHeight: .infinity)
               .contentShape(Rectangle())
               .accessibilityLabel(isExpanded ? "Collapse" : "Expand")
+              .background {
+                if Self.debugHeaderLayers {
+                  Rectangle()
+                    .fill(.orange.opacity(0.18))
+                    .overlay {
+                      Rectangle()
+                        .stroke(.orange, lineWidth: 1)
+                    }
+                }
+              }
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
           .help(isExpanded ? "Collapse" : "Expand")
         }
       }
-      .frame(maxWidth: .infinity)
-      .frame(height: headerCellHeight, alignment: .center)
-      .overlay(alignment: .top) {
-        if showsTopSeparator {
-          Rectangle()
-            .fill(.secondary)
-            .frame(height: 1)
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-        }
+    }
+    .frame(maxWidth: .infinity)
+    .frame(height: headerCellHeight, alignment: .center)
+    .contentShape(.interaction, .rect)
+    .background {
+      if Self.debugHeaderLayers {
+        Rectangle()
+          .fill(.red.opacity(0.12))
+          .overlay {
+            Rectangle()
+              .stroke(.red, lineWidth: 1)
+          }
       }
-      .onHover { isHovering = $0 }
-      .contentShape(.rect)
-      .contextMenu {
-        Button("Repo Settings") {
-          openRepoSettings()
-        }
-        .help("Repo Settings ")
-        Button("Remove Repository") {
-          store.send(.requestRemoveRepository(repository.id))
-        }
-        .help("Remove repository ")
-        .disabled(isRemovingRepository)
+    }
+    .overlay(alignment: .top) {
+      if showsTopSeparator && !isPlainFolderSelected {
+        Rectangle()
+          .fill(Self.debugHeaderLayers ? .blue : .secondary)
+          .frame(height: 1)
+          .frame(maxWidth: .infinity)
+          .accessibilityHidden(true)
       }
-      .contentShape(.dragPreview, .rect)
-      .tag(SidebarSelection.repository(repository.id))
-      .listRowBackground(Color.clear)
-      .environment(\.colorScheme, colorScheme)
-      .preferredColorScheme(colorScheme)
+    }
+    .onHover { isHovering = $0 }
+    .contentShape(.rect)
+    .help(
+      repository.capabilities.supportsWorktrees
+        ? (isExpanded ? "Collapse" : "Expand")
+        : "Open folder terminal"
+    )
+    .contextMenu {
+      Button("Repo Settings") {
+        openRepoSettings()
+      }
+      .help("Repo Settings ")
+      Button("Remove Repository") {
+        store.send(.requestRemoveRepository(repository.id))
+      }
+      .help("Remove repository ")
+      .disabled(isRemovingRepository)
+    }
+    .contentShape(.dragPreview, .rect)
+    .listRowBackground(Color.clear)
+    .environment(\.colorScheme, colorScheme)
+    .preferredColorScheme(colorScheme)
 
+    Group {
+      header
+        .tag(SidebarSelection.repository(repository.id))
       if isExpanded {
         WorktreeRowsView(
           repository: repository,

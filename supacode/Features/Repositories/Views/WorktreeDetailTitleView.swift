@@ -1,33 +1,28 @@
 import SwiftUI
 
 struct WorktreeDetailTitleView: View {
-  let branchName: String
-  let onSubmit: (String) -> Void
+  let title: DetailToolbarTitle
+  let onSubmit: ((String) -> Void)?
 
   @State private var isPresented = false
   @State private var isHovered = false
   @State private var draftName = ""
 
   var body: some View {
-    Button {
-      draftName = branchName
-      isPresented = true
-    } label: {
-      HStack(spacing: 6) {
-        Image(systemName: "arrow.trianglehead.branch")
-          .foregroundStyle(.secondary)
-          .accessibilityHidden(true)
-        Text(branchName)
-        if isHovered {
-          Image(systemName: "pencil")
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
+    Group {
+      if title.supportsRename {
+        Button {
+          draftName = title.text
+          isPresented = true
+        } label: {
+          labelContent
         }
+        .help(title.helpText ?? "")
+        .keyboardShortcut("m", modifiers: .command)
+      } else {
+        labelContent
       }
-      .font(.headline)
     }
-    .help("Rename branch (⌘M)")
-    .keyboardShortcut("m", modifiers: .command)
     .onHover { hovering in
       isHovered = hovering
     }
@@ -37,12 +32,41 @@ struct WorktreeDetailTitleView: View {
         onCancel: { isPresented = false },
         onSubmit: { newName in
           isPresented = false
-          if newName != branchName {
-            onSubmit(newName)
+          if newName != title.text {
+            onSubmit?(newName)
           }
         }
       )
     }
+  }
+
+  private var labelContent: some View {
+    HStack(spacing: horizontalSpacing) {
+      Image(systemName: title.systemImage)
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+        .frame(width: iconWidth, alignment: .center)
+      Text(title.text)
+      if title.supportsRename && isHovered {
+        Image(systemName: "pencil")
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+      }
+    }
+    .font(.headline)
+    .padding(.horizontal, horizontalPadding)
+  }
+
+  private var iconWidth: CGFloat {
+    16
+  }
+
+  private var horizontalSpacing: CGFloat {
+    6
+  }
+
+  private var horizontalPadding: CGFloat {
+    title.supportsRename ? 0 : 6
   }
 }
 

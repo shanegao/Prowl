@@ -51,6 +51,66 @@ struct RepositoryPersistenceClientTests {
     #expect(finalSettings.global.appearanceMode == .dark)
   }
 
+  @Test(.dependencies) func savesAndLoadsRepositoryEntries() async throws {
+    let storage = SettingsTestStorage()
+    let client = RepositoryPersistenceClient.liveValue
+
+    let result = await withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      await client.saveRepositoryEntries([
+        PersistedRepositoryEntry(path: "/tmp/repo-a", kind: .git),
+        PersistedRepositoryEntry(path: "/tmp/repo-a", kind: .git),
+        PersistedRepositoryEntry(path: "/tmp/folder/../folder", kind: .plain),
+      ])
+      return await client.loadRepositoryEntries()
+    }
+
+    #expect(
+      result == [
+        PersistedRepositoryEntry(path: "/tmp/repo-a", kind: .git),
+        PersistedRepositoryEntry(path: "/tmp/folder", kind: .plain),
+      ]
+    )
+
+    let finalSettings: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      return settings
+    }
+
+    #expect(finalSettings.repositoryRoots == result.map(\.path))
+  }
+
+  @Test(.dependencies) func loadsLegacyRepositoryRootsAsGitEntries() async throws {
+    let storage = SettingsTestStorage()
+    let legacySettings = SettingsFile(
+      repositoryRoots: ["/tmp/repo-a", "/tmp/repo-b/../repo-b"]
+    )
+
+    try withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      $settings.withLock { $0 = legacySettings }
+    }
+
+    let client = RepositoryPersistenceClient.liveValue
+    let result = await withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      await client.loadRepositoryEntries()
+    }
+
+    #expect(
+      result == [
+        PersistedRepositoryEntry(path: "/tmp/repo-a", kind: .git),
+        PersistedRepositoryEntry(path: "/tmp/repo-b", kind: .git),
+      ]
+    )
+  }
+
   @Test func repositorySnapshotPayloadRoundTripsRepositories() {
     let repoRoot = "/tmp/repo"
     let worktree = Worktree(
@@ -98,5 +158,22 @@ struct RepositoryPersistenceClientTests {
     }
 
     #expect(restored == nil)
+  }
+
+  @Test func repositorySnapshotPayloadRoundTripsPlainRepositories() {
+    let repository = Repository(
+      id: "/tmp/folder",
+      rootURL: URL(fileURLWithPath: "/tmp/folder"),
+      name: "folder",
+      kind: .plain,
+      worktrees: IdentifiedArray()
+    )
+
+    let payload = RepositorySnapshotCachePayload(repositories: [repository])
+    let restored = payload.restoreRepositories { path in
+      path == "/tmp/folder"
+    }
+
+    #expect(restored == [repository])
   }
 }

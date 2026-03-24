@@ -84,6 +84,7 @@ struct RepositoriesFeature {
     var moveNotifiedWorktreeToTop = true
     var lastFocusedWorktreeID: Worktree.ID?
     var preCanvasWorktreeID: Worktree.ID?
+    var preCanvasTerminalTargetID: Worktree.ID?
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
     var isRefreshingWorktrees = false
@@ -143,8 +144,10 @@ struct RepositoriesFeature {
       [Repository],
       failures: [LoadFailure],
       invalidRoots: [String],
+      openFailures: [String],
       roots: [URL]
     )
+    case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
     case selectNextWorktree
     case selectPreviousWorktree
@@ -390,10 +393,9 @@ struct RepositoriesFeature {
         state.alert = nil
         state.isRefreshingWorktrees = false
         return .run { send in
-          let loadedPaths = await repositoryPersistence.loadRoots()
-          let rootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
-          let roots = rootPaths.map { URL(fileURLWithPath: $0) }
-          let (repositories, failures) = await loadRepositoriesData(roots)
+          let entries = await loadPersistedRepositoryEntries()
+          let roots = entries.map { URL(fileURLWithPath: $0.path) }
+          let (repositories, failures) = await loadRepositoriesData(entries)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -416,7 +418,7 @@ struct RepositoriesFeature {
           state.isRefreshingWorktrees = false
           return .none
         }
-        return loadRepositories(roots, animated: animated)
+        return loadRepositories(fallbackRoots: roots, animated: animated)
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
         state.isRefreshingWorktrees = false
@@ -493,37 +495,63 @@ struct RepositoriesFeature {
         analyticsClient.capture("repository_added", ["count": urls.count])
         state.alert = nil
         return .run { send in
-          let loadedPaths = await repositoryPersistence.loadRoots()
-          let existingRootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
-          var resolvedRoots: [URL] = []
+          let existingEntries = await loadPersistedRepositoryEntries()
+          var resolvedEntries: [PersistedRepositoryEntry] = []
           var invalidRoots: [String] = []
+          var openFailures: [String] = []
           for url in urls {
             do {
               let root = try await gitClient.repoRoot(url)
-              resolvedRoots.append(root)
+              resolvedEntries.append(
+                PersistedRepositoryEntry(
+                  path: root.path(percentEncoded: false),
+                  kind: .git
+                )
+              )
             } catch {
-              invalidRoots.append(url.path(percentEncoded: false))
+              let normalizedPath = url.standardizedFileURL.path(percentEncoded: false)
+              if normalizedPath.isEmpty {
+                invalidRoots.append(url.path(percentEncoded: false))
+              } else if Self.isNotGitRepositoryError(error) {
+                resolvedEntries.append(
+                  PersistedRepositoryEntry(
+                    path: normalizedPath,
+                    kind: .plain
+                  )
+                )
+              } else {
+                openFailures.append(
+                  Self.openRepositoryFailureMessage(
+                    path: normalizedPath,
+                    error: error
+                  )
+                )
+              }
             }
           }
-          let resolvedRootPaths = RepositoryPathNormalizer.normalize(
-            resolvedRoots.map { $0.path(percentEncoded: false) }
-          )
-          let mergedPaths = RepositoryPathNormalizer.normalize(existingRootPaths + resolvedRootPaths)
-          let mergedRoots = mergedPaths.map { URL(fileURLWithPath: $0) }
-          await repositoryPersistence.saveRoots(mergedPaths)
-          let (repositories, failures) = await loadRepositoriesData(mergedRoots)
+          let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
+          let mergedRoots = mergedEntries.map { URL(fileURLWithPath: $0.path) }
+          await repositoryPersistence.saveRepositoryEntries(mergedEntries)
+          let (repositories, failures) = await loadRepositoriesData(mergedEntries)
           await send(
             .openRepositoriesFinished(
               repositories,
               failures: failures,
               invalidRoots: invalidRoots,
+              openFailures: openFailures,
               roots: mergedRoots
             )
           )
         }
         .cancellable(id: CancelID.load, cancelInFlight: true)
 
-      case .openRepositoriesFinished(let repositories, let failures, let invalidRoots, let roots):
+      case .openRepositoriesFinished(
+        let repositories,
+        let failures,
+        let invalidRoots,
+        let openFailures,
+        let roots
+      ):
         state.isRefreshingWorktrees = false
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
@@ -539,11 +567,11 @@ struct RepositoriesFeature {
         state.loadFailuresByID = Dictionary(
           uniqueKeysWithValues: failures.map { ($0.rootID, $0.message) }
         )
-        if !invalidRoots.isEmpty {
-          let message = invalidRoots.map { "\($0) is not a Git repository." }.joined(separator: "\n")
+        let openFailureMessages = invalidRoots.map { "\($0) is not a Git repository." } + openFailures
+        if !openFailureMessages.isEmpty {
           state.alert = messageAlert(
             title: "Some folders couldn't be opened",
-            message: message
+            message: openFailureMessages.joined(separator: "\n")
           )
         }
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
@@ -606,6 +634,7 @@ struct RepositoriesFeature {
       case .selectCanvas:
         // Remember the current worktree so toggleCanvas can restore it.
         state.preCanvasWorktreeID = state.selectedWorktreeID
+        state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
         state.selection = .canvas
         state.sidebarSelectedWorktreeIDs = []
         return .run { _ in
@@ -618,10 +647,18 @@ struct RepositoriesFeature {
           // we came from, then the first available worktree.
           let targetID =
             terminalClient.canvasFocusedWorktreeID()
+            ?? state.preCanvasTerminalTargetID
             ?? state.preCanvasWorktreeID
             ?? state.lastFocusedWorktreeID
             ?? state.orderedWorktreeRows().first?.id
           guard let targetID else { return .none }
+          if state.worktree(for: targetID) == nil,
+            let repository = state.repositories[id: targetID],
+            repository.kind == .plain
+          {
+            state.pendingTerminalFocusWorktreeIDs.insert(targetID)
+            return .send(.selectRepository(targetID))
+          }
           return .send(.selectWorktree(targetID, focusTerminal: true))
         } else {
           // Enter canvas if there are any open worktrees.
@@ -637,6 +674,12 @@ struct RepositoriesFeature {
         }
         state.sidebarSelectedWorktreeIDs = nextWorktreeIDs
         return .none
+
+      case .selectRepository(let repositoryID):
+        guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
+        state.selection = .repository(repositoryID)
+        state.sidebarSelectedWorktreeIDs = []
+        return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
 
       case .selectWorktree(let worktreeID, let focusTerminal):
         setSingleWorktreeSelection(worktreeID, state: &state)
@@ -690,6 +733,15 @@ struct RepositoriesFeature {
         }
 
       case .createRandomWorktree:
+        if let selectedRepository = state.selectedRepository,
+          !selectedRepository.capabilities.supportsWorktrees
+        {
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "This folder doesn't support worktrees."
+          )
+          return .none
+        }
         guard let repository = repositoryForWorktreeCreation(state) else {
           let message: String
           if state.repositories.isEmpty {
@@ -709,6 +761,13 @@ struct RepositoriesFeature {
           state.alert = messageAlert(
             title: "Unable to create worktree",
             message: "Unable to resolve a repository for the new worktree."
+          )
+          return .none
+        }
+        guard repository.capabilities.supportsWorktrees else {
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "This folder doesn't support worktrees."
           )
           return .none
         }
@@ -1792,14 +1851,13 @@ struct RepositoriesFeature {
         state.repositoryRoots.removeAll {
           $0.standardizedFileURL.path(percentEncoded: false) == repositoryID
         }
+        let remainingRoots = state.repositoryRoots
         return .run { send in
-          let loadedPaths = await repositoryPersistence.loadRoots()
-          var seen: Set<String> = []
-          let rootPaths = loadedPaths.filter { seen.insert($0).inserted }
-          let remaining = rootPaths.filter { $0 != repositoryID }
-          await repositoryPersistence.saveRoots(remaining)
-          let roots = remaining.map { URL(fileURLWithPath: $0) }
-          let (repositories, failures) = await loadRepositoriesData(roots)
+          let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
+          let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+          await repositoryPersistence.saveRepositoryEntries(remainingEntries)
+          let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
+          let (repositories, failures) = await loadRepositoriesData(remainingEntries)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -1834,16 +1892,15 @@ struct RepositoriesFeature {
           state.shouldSelectFirstAfterReload = true
         }
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
+        let remainingRoots = state.repositoryRoots
         return .merge(
           .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
           .run { send in
-            let loadedPaths = await repositoryPersistence.loadRoots()
-            var seen: Set<String> = []
-            let rootPaths = loadedPaths.filter { seen.insert($0).inserted }
-            let remaining = rootPaths.filter { $0 != repositoryID }
-            await repositoryPersistence.saveRoots(remaining)
-            let roots = remaining.map { URL(fileURLWithPath: $0) }
-            let (repositories, failures) = await loadRepositoriesData(roots)
+            let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
+            let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+            await repositoryPersistence.saveRepositoryEntries(remainingEntries)
+            let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
+            let (repositories, failures) = await loadRepositoriesData(remainingEntries)
             await send(
               .repositoriesLoaded(
                 repositories,
@@ -2641,13 +2698,110 @@ struct RepositoriesFeature {
     }
   }
 
-  private func loadRepositories(_ roots: [URL], animated: Bool = false) -> Effect<Action> {
-    let gitClient = gitClient
-    return .run { [animated, roots] send in
-      for root in roots {
-        _ = try? await gitClient.pruneWorktrees(root)
+  private func loadPersistedRepositoryEntries(
+    fallbackRoots: [URL] = []
+  ) async -> [PersistedRepositoryEntry] {
+    let entries = await repositoryPersistence.loadRepositoryEntries()
+    let resolvedEntries: [PersistedRepositoryEntry]
+    if !entries.isEmpty {
+      resolvedEntries = entries
+    } else {
+      let loadedPaths = await repositoryPersistence.loadRoots()
+      let pathSource =
+        if !loadedPaths.isEmpty {
+          loadedPaths
+        } else {
+          fallbackRoots.map { $0.path(percentEncoded: false) }
+        }
+      resolvedEntries = RepositoryEntryNormalizer.normalize(
+        pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
+      )
+    }
+    return await upgradedRepositoryEntriesIfNeeded(resolvedEntries)
+  }
+
+  private func upgradedRepositoryEntriesIfNeeded(
+    _ entries: [PersistedRepositoryEntry]
+  ) async -> [PersistedRepositoryEntry] {
+    let upgradedEntries = await withTaskGroup(of: (Int, PersistedRepositoryEntry).self) { group in
+      for (index, entry) in entries.enumerated() {
+        let gitClient = self.gitClient
+        group.addTask {
+          let normalizedPath = URL(fileURLWithPath: entry.path)
+            .standardizedFileURL
+            .path(percentEncoded: false)
+          do {
+            let repoRoot = try await gitClient.repoRoot(URL(fileURLWithPath: normalizedPath))
+            let normalizedRepoRoot = repoRoot.standardizedFileURL.path(percentEncoded: false)
+            switch entry.kind {
+            case .plain:
+              if normalizedRepoRoot == normalizedPath {
+                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
+              }
+              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+            case .git:
+              if normalizedRepoRoot == normalizedPath {
+                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
+              }
+              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+            }
+          } catch {
+            if entry.kind == .git,
+              Self.isNotGitRepositoryError(error),
+              FileManager.default.fileExists(atPath: normalizedPath)
+            {
+              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+            }
+          }
+          return (index, PersistedRepositoryEntry(path: normalizedPath, kind: entry.kind))
+        }
       }
-      let (repositories, failures) = await loadRepositoriesData(roots)
+
+      var results = [PersistedRepositoryEntry?](repeating: nil, count: entries.count)
+      for await (index, entry) in group {
+        results[index] = entry
+      }
+      return results.compactMap { $0 }
+    }
+
+    let normalizedEntries = RepositoryEntryNormalizer.normalize(upgradedEntries)
+    if normalizedEntries != entries {
+      await repositoryPersistence.saveRepositoryEntries(normalizedEntries)
+    }
+    return normalizedEntries
+  }
+
+  private nonisolated static func isNotGitRepositoryError(_ error: any Error) -> Bool {
+    guard case let GitClientError.commandFailed(_, message) = error else {
+      return false
+    }
+    return message.localizedCaseInsensitiveContains("not a git repository")
+  }
+
+  private nonisolated static func openRepositoryFailureMessage(path: String, error: any Error) -> String {
+    let detail: String
+    if case let GitClientError.commandFailed(_, message) = error,
+      !message.isEmpty
+    {
+      detail = message
+    } else {
+      detail = error.localizedDescription
+    }
+    return "\(path): \(detail)"
+  }
+
+  private func loadRepositories(
+    fallbackRoots: [URL] = [],
+    animated: Bool = false
+  ) -> Effect<Action> {
+    let gitClient = gitClient
+    return .run { [animated, fallbackRoots] send in
+      let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
+      let roots = entries.map { URL(fileURLWithPath: $0.path) }
+      for entry in entries where entry.kind == .git {
+        _ = try? await gitClient.pruneWorktrees(URL(fileURLWithPath: entry.path))
+      }
+      let (repositories, failures) = await loadRepositoriesData(entries)
       await send(
         .repositoriesLoaded(
           repositories,
@@ -2661,32 +2815,58 @@ struct RepositoriesFeature {
   }
 
   private struct WorktreesFetchResult: Sendable {
-    let root: URL
-    let worktrees: [Worktree]?
+    let entry: PersistedRepositoryEntry
+    let repository: Repository?
     let errorMessage: String?
   }
 
-  private func loadRepositoriesData(_ roots: [URL]) async -> ([Repository], [LoadFailure]) {
+  private func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
-      for root in roots {
+      for entry in entries {
         let gitClient = self.gitClient
         group.addTask {
-          do {
-            let worktrees = try await gitClient.worktrees(root)
-            return WorktreesFetchResult(root: root, worktrees: worktrees, errorMessage: nil)
-          } catch {
+          let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
+          switch entry.kind {
+          case .git:
+            do {
+              let worktrees = try await gitClient.worktrees(rootURL)
+              return WorktreesFetchResult(
+                entry: entry,
+                repository: Repository(
+                  id: rootURL.path(percentEncoded: false),
+                  rootURL: rootURL,
+                  name: Repository.name(for: rootURL),
+                  kind: .git,
+                  worktrees: IdentifiedArray(uniqueElements: worktrees)
+                ),
+                errorMessage: nil
+              )
+            } catch {
+              return WorktreesFetchResult(
+                entry: entry,
+                repository: nil,
+                errorMessage: error.localizedDescription
+              )
+            }
+          case .plain:
             return WorktreesFetchResult(
-              root: root,
-              worktrees: nil,
-              errorMessage: error.localizedDescription
-            )
+              entry: entry,
+              repository: Repository(
+                  id: rootURL.path(percentEncoded: false),
+                  rootURL: rootURL,
+                  name: Repository.name(for: rootURL),
+                  kind: .plain,
+                  worktrees: IdentifiedArray()
+                ),
+                errorMessage: nil
+              )
           }
         }
       }
 
       var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
       for await result in group {
-        let rootID = result.root.standardizedFileURL.path(percentEncoded: false)
+        let rootID = URL(fileURLWithPath: result.entry.path).standardizedFileURL.path(percentEncoded: false)
         resultsByRootID[rootID] = result
       }
       return resultsByRootID
@@ -2694,18 +2874,11 @@ struct RepositoriesFeature {
 
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
-    for root in roots {
-      let normalizedRoot = root.standardizedFileURL
+    for entry in entries {
+      let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
       let rootID = normalizedRoot.path(percentEncoded: false)
       guard let result = fetchResults[rootID] else { continue }
-      if let worktrees = result.worktrees {
-        let name = Repository.name(for: normalizedRoot)
-        let repository = Repository(
-          id: rootID,
-          rootURL: normalizedRoot,
-          name: name,
-          worktrees: IdentifiedArray(uniqueElements: worktrees)
-        )
+      if let repository = result.repository {
         loaded.append(repository)
       } else {
         failures.append(
@@ -2792,7 +2965,7 @@ struct RepositoriesFeature {
       ? pruneArchivedWorktreeIDs(availableWorktreeIDs: availableWorktreeIDs, state: &state)
       : false
     if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
-      !isSelectionValid(state.selectedWorktreeID, state: state)
+      !isSidebarSelectionValid(state.selection, state: state)
     {
       state.selection = nil
     }
@@ -2847,7 +3020,7 @@ struct RepositoriesFeature {
       }
     } message: {
       TextState(
-        "This removes the repository from Supacode. "
+        "This removes the repository from Prowl. "
           + "Worktrees and the main repository folder stay on disk."
       )
     }
@@ -2875,6 +3048,49 @@ struct RepositoriesFeature {
 extension RepositoriesFeature.State {
   var selectedWorktreeID: Worktree.ID? {
     selection?.worktreeID
+  }
+
+  var selectedRepositoryID: Repository.ID? {
+    guard case .repository(let repositoryID) = selection else { return nil }
+    return repositoryID
+  }
+
+  var selectedRepository: Repository? {
+    guard let selectedRepositoryID else { return nil }
+    return repositories[id: selectedRepositoryID]
+  }
+
+  var selectedTerminalWorktree: Worktree? {
+    if let selectedWorktreeID {
+      return worktree(for: selectedWorktreeID)
+    }
+    guard let selectedRepository,
+      selectedRepository.capabilities.supportsRunnableFolderActions,
+      !selectedRepository.capabilities.supportsWorktrees
+    else {
+      return nil
+    }
+    return Worktree(
+      id: selectedRepository.id,
+      name: selectedRepository.name,
+      detail: selectedRepository.rootURL.path(percentEncoded: false),
+      workingDirectory: selectedRepository.rootURL,
+      repositoryRootURL: selectedRepository.rootURL
+    )
+  }
+
+  var terminalStateIDs: Set<Worktree.ID> {
+    Set(
+      repositories.flatMap { repository -> [Worktree.ID] in
+        if repository.capabilities.supportsWorktrees {
+          repository.worktrees.map(\.id)
+        } else if repository.capabilities.supportsRunnableFolderActions {
+          [repository.id]
+        } else {
+          []
+        }
+      }
+    )
   }
 
   var expandedRepositoryIDs: Set<Repository.ID> {
@@ -3603,6 +3819,22 @@ private func isSelectionValid(
   state.selectedRow(for: id) != nil
 }
 
+private func isSidebarSelectionValid(
+  _ selection: SidebarSelection?,
+  state: RepositoriesFeature.State
+) -> Bool {
+  switch selection {
+  case .worktree(let id):
+    return isSelectionValid(id, state: state)
+  case .repository(let id):
+    return state.repositories[id: id] != nil
+  case .archivedWorktrees, .canvas:
+    return true
+  case nil:
+    return false
+  }
+}
+
 private func setSingleWorktreeSelection(
   _ worktreeID: Worktree.ID?,
   state: inout RepositoriesFeature.State
@@ -3618,17 +3850,33 @@ private func setSingleWorktreeSelection(
 private func repositoryForWorktreeCreation(
   _ state: RepositoriesFeature.State
 ) -> Repository? {
+  if let selectedRepository = state.selectedRepository,
+    selectedRepository.capabilities.supportsWorktrees
+  {
+    return selectedRepository
+  }
   if let selectedWorktreeID = state.selectedWorktreeID {
     if let pending = state.pendingWorktree(for: selectedWorktreeID) {
-      return state.repositories[id: pending.repositoryID]
+      if let repository = state.repositories[id: pending.repositoryID],
+        repository.capabilities.supportsWorktrees
+      {
+        return repository
+      }
+      return nil
     }
     for repository in state.repositories
     where repository.worktrees[id: selectedWorktreeID] != nil {
-      return repository
+      if repository.capabilities.supportsWorktrees {
+        return repository
+      }
+      return nil
     }
   }
-  if state.repositories.count == 1 {
-    return state.repositories.first
+  if state.repositories.count == 1,
+    let repository = state.repositories.first,
+    repository.capabilities.supportsWorktrees
+  {
+    return repository
   }
   return nil
 }

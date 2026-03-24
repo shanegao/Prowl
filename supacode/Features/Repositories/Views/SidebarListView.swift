@@ -23,7 +23,9 @@ struct SidebarListView: View {
         } else {
           nextSelections.remove(.archivedWorktrees)
           nextSelections.remove(.canvas)
-          if let selectedWorktreeID = state.selectedWorktreeID {
+          if let selectedRepository = state.selectedRepository, selectedRepository.kind == .plain {
+            nextSelections = [.repository(selectedRepository.id)]
+          } else if let selectedWorktreeID = state.selectedWorktreeID {
             nextSelections.insert(.worktree(selectedWorktreeID))
           }
         }
@@ -34,29 +36,6 @@ struct SidebarListView: View {
         let repositorySelections: [Repository.ID] = nextSelections.compactMap { selection in
           guard case .repository(let repositoryID) = selection else { return nil }
           return repositoryID
-        }
-        if !repositorySelections.isEmpty {
-          withAnimation(.easeOut(duration: 0.2)) {
-            for repositoryID in repositorySelections {
-              guard let repository = store.state.repositories[id: repositoryID],
-                !store.state.isRemovingRepository(repository)
-              else {
-                continue
-              }
-              if expandedRepoIDs.contains(repositoryID) {
-                expandedRepoIDs.remove(repositoryID)
-              } else {
-                expandedRepoIDs.insert(repositoryID)
-              }
-            }
-          }
-          nextSelections = Set(
-            nextSelections.filter {
-              if case .repository = $0 {
-                return false
-              }
-              return true
-            })
         }
 
         if nextSelections.contains(.canvas) {
@@ -71,11 +50,28 @@ struct SidebarListView: View {
           return
         }
 
-        let worktreeIDs = Set(nextSelections.compactMap(\.worktreeID))
-        guard !worktreeIDs.isEmpty else {
-          if !repositorySelections.isEmpty {
+        if let repositoryID = repositorySelections.first {
+          guard let repository = state.repositories[id: repositoryID] else {
             return
           }
+          if repository.capabilities.supportsWorktrees {
+            withAnimation(.easeOut(duration: 0.2)) {
+              if expandedRepoIDs.contains(repositoryID) {
+                expandedRepoIDs.remove(repositoryID)
+              } else {
+                expandedRepoIDs.insert(repositoryID)
+              }
+            }
+            sidebarSelections = []
+          } else {
+            sidebarSelections = [.repository(repositoryID)]
+            store.send(.selectRepository(repositoryID))
+          }
+          return
+        }
+
+        let worktreeIDs = Set(nextSelections.compactMap(\.worktreeID))
+        guard !worktreeIDs.isEmpty else {
           sidebarSelections = []
           store.send(.selectWorktree(nil))
           return
