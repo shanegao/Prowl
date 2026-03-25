@@ -255,6 +255,40 @@ final class WorktreeTerminalManager {
     states[worktreeID]
   }
 
+  func stateContaining(tabId: TerminalTabID) -> WorktreeTerminalState? {
+    activeWorktreeStates.first { $0.surfaceView(for: tabId) != nil }
+  }
+
+  @discardableResult
+  func broadcastCommittedText(
+    _ text: String,
+    from primaryTabID: TerminalTabID,
+    to selectedTabIDs: Set<TerminalTabID>
+  ) -> Int {
+    var mirrored = 0
+    for tabId in selectedTabIDs where tabId != primaryTabID {
+      if stateContaining(tabId: tabId)?.insertCommittedText(text, in: tabId) == true {
+        mirrored += 1
+      }
+    }
+    return mirrored
+  }
+
+  @discardableResult
+  func broadcastMirroredKey(
+    _ key: MirroredTerminalKey,
+    from primaryTabID: TerminalTabID,
+    to selectedTabIDs: Set<TerminalTabID>
+  ) -> Int {
+    var mirrored = 0
+    for tabId in selectedTabIDs where tabId != primaryTabID {
+      if stateContaining(tabId: tabId)?.applyMirroredKey(key, in: tabId) == true {
+        mirrored += 1
+      }
+    }
+    return mirrored
+  }
+
   func taskStatus(for worktreeID: Worktree.ID) -> WorktreeTaskStatus? {
     states[worktreeID]?.taskStatus
   }

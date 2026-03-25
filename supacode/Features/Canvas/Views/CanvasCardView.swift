@@ -6,10 +6,13 @@ struct CanvasCardView: View {
   let worktreeName: String
   let tree: SplitTree<GhosttySurfaceView>
   let isFocused: Bool
+  let isSelected: Bool
   let hasUnseenNotification: Bool
   let cardSize: CGSize
   let canvasScale: CGFloat
+  let showsSelectionShield: Bool
   let onTap: () -> Void
+  let onSelectionTap: () -> Void
   let onDragCommit: (CGSize) -> Void
   let onResize: (CardResizeEdge, CGSize) -> Void
   let onResizeEnd: () -> Void
@@ -48,10 +51,19 @@ struct CanvasCardView: View {
       terminalContent
     }
     .frame(width: cardSize.width, height: cardSize.height + titleBarHeight)
+    .background(cardBackground)
     .clipShape(.rect(cornerRadius: cornerRadius))
     .overlay {
-      RoundedRectangle(cornerRadius: cornerRadius)
-        .stroke(isFocused ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isFocused ? 2 : 1)
+      ZStack {
+        RoundedRectangle(cornerRadius: cornerRadius)
+          .stroke(borderColor, lineWidth: borderLineWidth)
+        if !showsSelectionShield {
+          resizeHandles
+        }
+        if showsSelectionShield {
+          selectionShield
+        }
+      }
     }
     .compositingGroup()
     .contentShape(.rect)
@@ -61,7 +73,35 @@ struct CanvasCardView: View {
       x: dragTranslation.width / canvasScale,
       y: dragTranslation.height / canvasScale
     )
-    .overlay { resizeHandles }
+  }
+
+  private var borderColor: Color {
+    if isFocused {
+      .accentColor
+    } else if isSelected {
+      .accentColor.opacity(0.65)
+    } else {
+      .secondary.opacity(0.3)
+    }
+  }
+
+  private var borderLineWidth: CGFloat {
+    if isFocused {
+      2
+    } else if isSelected {
+      1.5
+    } else {
+      1
+    }
+  }
+
+  @ViewBuilder
+  private var cardBackground: some View {
+    if isSelected && !isFocused {
+      Color.accentColor.opacity(0.08)
+    } else {
+      Color.clear
+    }
   }
 
   private var titleBar: some View {
@@ -78,12 +118,7 @@ struct CanvasCardView: View {
     .padding(.horizontal, 8)
     .frame(height: titleBarHeight)
     .frame(maxWidth: .infinity)
-    .background {
-      if hasUnseenNotification {
-        Color.orange.opacity(0.3)
-      }
-    }
-    .background(.bar)
+    .background(titleBarBackground)
     .accessibilityAddTraits(.isButton)
     .onTapGesture { onTitleBarTap() }
     .gesture(
@@ -101,10 +136,32 @@ struct CanvasCardView: View {
     )
   }
 
+  @ViewBuilder
+  private var titleBarBackground: some View {
+    ZStack {
+      if hasUnseenNotification {
+        Color.orange.opacity(0.3)
+      }
+      if isSelected && !isFocused {
+        Color.accentColor.opacity(0.12)
+      }
+      Rectangle()
+        .fill(.bar)
+        .opacity(0.9)
+    }
+  }
+
   private var terminalContent: some View {
     TerminalSplitTreeView(tree: tree, pinnedSize: cardSize, action: onSplitOperation)
       .frame(width: cardSize.width, height: cardSize.height)
-      .allowsHitTesting(isFocused)
+      .allowsHitTesting(isFocused && !showsSelectionShield)
+  }
+
+  private var selectionShield: some View {
+    Color.clear
+      .contentShape(.rect)
+      .accessibilityAddTraits(.isButton)
+      .onTapGesture { onSelectionTap() }
   }
 
   // MARK: - Resize Handles
@@ -242,12 +299,6 @@ private struct ResizeCursorView<Content: View>: View {
         if hovering {
           cursor.push()
         } else {
-          NSCursor.pop()
-        }
-      }
-      .onDisappear {
-        if isHovered {
-          isHovered = false
           NSCursor.pop()
         }
       }

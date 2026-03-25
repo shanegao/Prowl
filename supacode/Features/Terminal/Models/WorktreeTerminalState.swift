@@ -80,6 +80,19 @@ final class WorktreeTerminalState {
     return surfaces[surfaceId]
   }
 
+  @discardableResult
+  func insertCommittedText(_ text: String, in tabId: TerminalTabID) -> Bool {
+    guard let surface = surfaceView(for: tabId) else { return false }
+    surface.insertCommittedTextForBroadcast(text)
+    return true
+  }
+
+  @discardableResult
+  func applyMirroredKey(_ key: MirroredTerminalKey, in tabId: TerminalTabID) -> Bool {
+    guard let surface = surfaceView(for: tabId) else { return false }
+    return surface.applyMirroredKeyForBroadcast(key)
+  }
+
   var taskStatus: WorktreeTaskStatus {
     tabIsRunningById.values.contains(true) ? .running : .idle
   }
