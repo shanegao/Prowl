@@ -69,6 +69,31 @@ struct CanvasSelectionStateTests {
     #expect(state.selectedTabIDs == [tab1, tab2])
   }
 
+  @Test func setPrimaryPromotesFollowerWithoutClearingSelection() {
+    var state = CanvasSelectionState()
+    state.toggleSelection(tab1)
+    state.toggleSelection(tab2)
+    state.toggleSelection(tab3)
+    state.beginBroadcastInteractionIfNeeded()
+
+    state.setPrimary(tab1)
+
+    #expect(state.primaryTabID == tab1)
+    #expect(state.selectedTabIDs == [tab1, tab2, tab3])
+    #expect(state.selectionOrder == [tab2, tab3, tab1])
+  }
+
+  @Test func setPrimaryIgnoresUnselectedTab() {
+    var state = CanvasSelectionState()
+    state.toggleSelection(tab1)
+    state.toggleSelection(tab2)
+
+    state.setPrimary(tab3)
+
+    #expect(state.primaryTabID == tab2)
+    #expect(state.selectedTabIDs == [tab1, tab2])
+  }
+
   @Test func pruneDropsMissingTabsAndPreservesNewestVisiblePrimary() {
     var state = CanvasSelectionState()
     state.toggleSelection(tab1)

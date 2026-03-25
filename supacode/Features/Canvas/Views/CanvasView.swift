@@ -76,9 +76,13 @@ struct CanvasView: View {
                 hasUnseenNotification: state.hasUnseenNotification(for: tab.id),
                 cardSize: resized.size,
                 canvasScale: canvasScale,
-                showsSelectionShield: showsSelectionShield,
+                showsSelectionShield: showsSelectionShield(for: tab.id),
                 onTap: {
-                  focusSingleCard(tab.id, surfaceState: state, states: activeStates)
+                  if commandKeyObserver.isPressed {
+                    handleSelectionShieldTap(tab.id, surfaceState: state, states: activeStates)
+                  } else {
+                    focusSingleCard(tab.id, surfaceState: state, states: activeStates)
+                  }
                 },
                 onSelectionTap: {
                   handleSelectionShieldTap(tab.id, surfaceState: state, states: activeStates)
@@ -152,8 +156,11 @@ struct CanvasView: View {
     .onDisappear { deactivateCanvas() }
   }
 
-  private var showsSelectionShield: Bool {
-    commandKeyObserver.isPressed || selectionState.isSelecting
+  private func showsSelectionShield(for tabID: TerminalTabID) -> Bool {
+    if commandKeyObserver.isPressed { return true }
+    if selectionState.isSelecting { return true }
+    if selectionState.isBroadcasting, selectionState.primaryTabID != tabID { return true }
+    return false
   }
 
   // MARK: - Canvas Gestures
@@ -485,6 +492,8 @@ struct CanvasView: View {
     mutateSelection(states: states) { state in
       if commandKeyObserver.isPressed {
         state.toggleSelection(tabID)
+      } else if state.isBroadcasting, state.selectedTabIDs.contains(tabID) {
+        state.setPrimary(tabID)
       } else {
         state.focusSingle(tabID)
       }

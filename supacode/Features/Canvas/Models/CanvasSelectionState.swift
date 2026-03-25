@@ -47,6 +47,13 @@ struct CanvasSelectionState: Equatable {
     primaryTabID = tabID
   }
 
+  mutating func setPrimary(_ tabID: TerminalTabID) {
+    guard selectedTabIDs.contains(tabID) else { return }
+    primaryTabID = tabID
+    selectionOrder.removeAll { $0 == tabID }
+    selectionOrder.append(tabID)
+  }
+
   mutating func beginBroadcastInteractionIfNeeded() {
     guard isSelecting, selectedTabIDs.count > 1 else { return }
     mode = .idle
