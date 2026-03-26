@@ -1,0 +1,142 @@
+name: Update Homebrew cask
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to sync (e.g. v2026.3.25)"
+        required: true
+        type: string
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-22.04
+    environment: homebrew-release
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+
+          if [[ -z "$TAG" ]]; then
+            echo "Tag is required."
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/Prowl.dmg"
+          SHA=$(curl -fL -s "$URL" | shasum -a 256 | awk '{print $1}')
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: onevcat/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: tap
+
+      - name: Update cask
+        env:
+          TAP_VERSION: ${{ steps.metadata.outputs.version }}
+          TAP_SHA: ${{ steps.metadata.outputs.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import textwrap
+
+          path = pathlib.Path("tap/Casks/prowl.rb")
+          version = os.environ["TAP_VERSION"]
+          sha = os.environ["TAP_SHA"]
+
+          template = textwrap.dedent(
+              f"""
+              cask \"prowl\" do
+                version \"{version}\"
+                sha256 \"{sha}\"
+
+                url \"https://github.com/onevcat/Prowl/releases/download/v#{{version}}/Prowl.dmg\"
+                name \"Prowl\"
+                desc \"Native macOS coding agent orchestrator\"
+                homepage \"https://github.com/onevcat/Prowl\"
+
+                auto_updates true
+                app \"Prowl.app\"
+
+                zap trash: [
+                  \"~/Library/Application Support/com.onevcat.prowl\",
+                  \"~/Library/Caches/com.onevcat.prowl\",
+                  \"~/Library/Preferences/com.onevcat.prowl.plist\",
+                  \"~/Library/Saved Application State/com.onevcat.prowl.savedState\",
+                ]
+              end
+              """
+          ).lstrip()
+
+          if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(template)
+            print("Created tap/Casks/prowl.rb")
+          else:
+            text = path.read_text()
+            text = re.sub(r'^\s*version\s+\".*\"\s*$', f'  version \"{version}\"', text, flags=re.M)
+            text = re.sub(r'^\s*sha256\s+\".*\"\s*$', f'  sha256 \"{sha}\"', text, flags=re.M)
+            path.write_text(text)
+            print("Updated tap/Casks/prowl.rb")
+          PY
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd tap
+
+          BRANCH="prowl-${TAG#v}"
+
+          if gh pr view --repo onevcat/homebrew-tap --head "onevcat:${BRANCH}" >/dev/null 2>&1; then
+            echo "PR already exists for ${BRANCH}."
+            exit 0
+          fi
+
+          git checkout -b "$BRANCH"
+          git add Casks/prowl.rb
+
+          if git diff --cached --quiet; then
+            echo "No cask changes detected."
+            exit 0
+          fi
+
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Update prowl cask to ${TAG}"
+
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --repo onevcat/homebrew-tap \
+            --title "Update prowl cask to ${TAG}" \
+            --body-file - <<EOF
+          Automated update from Prowl release ${TAG}.
+
+          - Updated \
+            - version
+            - sha256
+          - Target cask: Casks/prowl.rb
+          EOF
