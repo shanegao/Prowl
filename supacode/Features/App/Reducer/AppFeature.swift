@@ -624,14 +624,22 @@ struct AppFeature {
         guard state.repositories.selectedTerminalWorktree?.id == worktreeID else {
           return .none
         }
-        let customCommands = OnevcatRepositorySettings.normalizedCommands(settings.customCommands)
+        state.selectedCustomCommands = OnevcatRepositorySettings.normalizedCommands(settings.customCommands)
           .filter(\.hasRunnableCommand)
-        state.selectedCustomCommands = AppShortcuts.sanitizeCustomCommands(customCommands)
+        let userOverrideConflicts = AppShortcuts.userOverrideConflicts(in: state.selectedCustomCommands)
         let shortcuts: [OnevcatCustomShortcut] = state.selectedCustomCommands.compactMap { command in
           guard let shortcut = command.shortcut, shortcut.isValid else { return nil }
           return shortcut.normalized()
         }
         return .run { _ in
+          let logger = SupaLogger("Shortcuts")
+          for conflict in userOverrideConflicts {
+            logger.warning(
+              "shortcut_conflict reason=userOverride app_action=\"\(conflict.appActionTitle)\" "
+                + "app_shortcut=\(conflict.appShortcutDisplay) custom_command=\"\(conflict.commandTitle)\" "
+                + "custom_shortcut=\(conflict.commandShortcutDisplay) result=customOverride"
+            )
+          }
           await MainActor.run {
             OnevcatCustomShortcutRegistry.shared.setShortcuts(shortcuts)
           }

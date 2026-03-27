@@ -64,11 +64,16 @@ struct AppShortcut {
 }
 
 enum AppShortcuts {
-  struct ReservedCustomCommandShortcut: Equatable {
+  struct CustomCommandOverrideConflict: Equatable {
+    let commandTitle: String
+    let commandShortcutDisplay: String
+    let appActionTitle: String
+    let appShortcutDisplay: String
+  }
+
+  private struct ReservedCustomCommandBinding {
     let actionTitle: String
-    let display: String
-    let key: String
-    let modifiers: EventModifiers
+    let shortcut: AppShortcut
   }
 
   private struct TabSelectionBinding {
@@ -96,12 +101,12 @@ enum AppShortcuts {
   static let copyPath = AppShortcut(key: "c", modifiers: [.command, .shift])
   static let openRepository = AppShortcut(key: "o", modifiers: [.command, .shift])
   static let openPullRequest = AppShortcut(key: "g", modifiers: [.command, .control])
-  static let toggleLeftSidebar = AppShortcut(key: "b", modifiers: .command)
-  static let refreshWorktrees = AppShortcut(key: "r", modifiers: [.command, .option])
+  static let toggleLeftSidebar = AppShortcut(key: "s", modifiers: [.command, .control])
+  static let refreshWorktrees = AppShortcut(key: "r", modifiers: [.command, .shift])
   static let runScript = AppShortcut(key: "r", modifiers: .command)
-  static let stopRunScript = AppShortcut(key: "r", modifiers: [.command, .shift])
-  static let checkForUpdates = AppShortcut(key: ",", modifiers: [.command, .shift])
-  static let showDiff = AppShortcut(key: "]", modifiers: [.command, .shift])
+  static let stopRunScript = AppShortcut(key: ".", modifiers: .command)
+  static let checkForUpdates = AppShortcut(key: "u", modifiers: [.command, .shift])
+  static let showDiff = AppShortcut(key: "y", modifiers: [.command, .shift])
   static let toggleCanvas = AppShortcut(
     keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .option]
   )
@@ -135,45 +140,45 @@ enum AppShortcuts {
     selectWorktree0,
   ]
 
-  private static let reservedCustomCommandBindings: [(title: String, shortcut: AppShortcut)] = [
-    ("Open Settings", openSettings),
-    ("Toggle Left Sidebar", toggleLeftSidebar),
-    ("Run Script", runScript),
-    ("Stop Script", stopRunScript),
-    ("Check for Updates", checkForUpdates),
-    ("Show Diff", showDiff),
-    ("Open Worktree", openFinder),
-    ("Open Repository", openRepository),
+  private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
+    .init(actionTitle: "Open Settings", shortcut: openSettings),
+    .init(actionTitle: "Toggle Left Sidebar", shortcut: toggleLeftSidebar),
+    .init(actionTitle: "Run Script", shortcut: runScript),
+    .init(actionTitle: "Stop Script", shortcut: stopRunScript),
+    .init(actionTitle: "Check for Updates", shortcut: checkForUpdates),
+    .init(actionTitle: "Show Diff", shortcut: showDiff),
+    .init(actionTitle: "Open Worktree", shortcut: openFinder),
+    .init(actionTitle: "Open Repository", shortcut: openRepository),
   ]
 
-  static var reservedCustomCommandShortcuts: [ReservedCustomCommandShortcut] {
-    reservedCustomCommandBindings.compactMap { binding in
-      guard let key = binding.shortcut.normalizedConflictKey else { return nil }
-      return ReservedCustomCommandShortcut(
-        actionTitle: binding.title,
-        display: binding.shortcut.display,
-        key: key,
-        modifiers: binding.shortcut.modifiers
+  static func userOverrideConflicts(
+    in commands: [OnevcatCustomCommand]
+  ) -> [CustomCommandOverrideConflict] {
+    var seen = Set<String>()
+    return commands.compactMap { command in
+      guard let shortcut = command.shortcut?.normalized(), shortcut.isValid else { return nil }
+      guard let appBinding = matchingReservedBinding(for: shortcut) else { return nil }
+
+      let signature =
+        "\(command.id)|\(shortcut.display)|\(appBinding.actionTitle)|\(appBinding.shortcut.display)"
+      guard seen.insert(signature).inserted else { return nil }
+
+      return CustomCommandOverrideConflict(
+        commandTitle: command.resolvedTitle,
+        commandShortcutDisplay: shortcut.display,
+        appActionTitle: appBinding.actionTitle,
+        appShortcutDisplay: appBinding.shortcut.display
       )
     }
   }
 
-  static func customCommandConflict(for shortcut: OnevcatCustomShortcut) -> ReservedCustomCommandShortcut? {
+  private static func matchingReservedBinding(
+    for shortcut: OnevcatCustomShortcut
+  ) -> ReservedCustomCommandBinding? {
     guard let key = shortcut.normalizedConflictKey else { return nil }
     let modifiers = shortcut.modifiers.eventModifiers
-    return reservedCustomCommandShortcuts.first {
-      $0.key == key && $0.modifiers == modifiers
-    }
-  }
-
-  static func sanitizeCustomCommands(_ commands: [OnevcatCustomCommand]) -> [OnevcatCustomCommand] {
-    commands.map { command in
-      var normalized = command.normalized()
-      guard let shortcut = normalized.shortcut else { return normalized }
-      if customCommandConflict(for: shortcut) != nil {
-        normalized.shortcut = nil
-      }
-      return normalized
+    return reservedCustomCommandBindings.first {
+      $0.shortcut.normalizedConflictKey == key && $0.shortcut.modifiers == modifiers
     }
   }
 

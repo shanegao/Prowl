@@ -43,40 +43,14 @@ struct AppShortcutsTests {
       ],
       [
         "openSettings=⌘,",
-        "toggleLeftSidebar=⌘B",
+        "toggleLeftSidebar=⌘⌃S",
         "runScript=⌘R",
-        "stopRunScript=⌘⇧R",
-        "checkForUpdates=⌘⇧,",
-        "showDiff=⌘⇧]",
+        "stopRunScript=⌘.",
+        "checkForUpdates=⌘⇧U",
+        "showDiff=⌘⇧Y",
         "openFinder=⌘O",
         "openRepository=⌘⇧O",
       ]
-    )
-  }
-
-  @Test func customCommandConflictDetectionMatchesReservedList() {
-    for reserved in AppShortcuts.reservedCustomCommandShortcuts {
-      let customShortcut = OnevcatCustomShortcut(
-        key: reserved.key,
-        modifiers: OnevcatCustomShortcutModifiers(
-          command: reserved.modifiers.contains(.command),
-          shift: reserved.modifiers.contains(.shift),
-          option: reserved.modifiers.contains(.option),
-          control: reserved.modifiers.contains(.control)
-        )
-      )
-
-      let conflict = AppShortcuts.customCommandConflict(for: customShortcut)
-      #expect(conflict == reserved)
-    }
-
-    #expect(
-      AppShortcuts.customCommandConflict(
-        for: OnevcatCustomShortcut(
-          key: "k",
-          modifiers: OnevcatCustomShortcutModifiers(command: true)
-        )
-      ) == nil
     )
   }
 
@@ -108,6 +82,40 @@ struct AppShortcutsTests {
     )
   }
 
+  @Test func userOverrideConflictsDetectsReservedAppShortcuts() {
+    let commands = [
+      OnevcatCustomCommand(
+        title: "Build",
+        systemImage: "hammer",
+        command: "swift build",
+        execution: .shellScript,
+        shortcut: OnevcatCustomShortcut(
+          key: "s",
+          modifiers: OnevcatCustomShortcutModifiers(command: true, control: true)
+        )
+      ),
+      OnevcatCustomCommand(
+        title: "Deploy",
+        systemImage: "rocket",
+        command: "make release",
+        execution: .shellScript,
+        shortcut: OnevcatCustomShortcut(
+          key: "k",
+          modifiers: OnevcatCustomShortcutModifiers(command: true)
+        )
+      ),
+    ]
+
+    expectNoDifference(
+      AppShortcuts.userOverrideConflicts(in: commands).map {
+        "\($0.commandTitle)|\($0.commandShortcutDisplay)|\($0.appActionTitle)|\($0.appShortcutDisplay)"
+      },
+      [
+        "Build|⌘⌃S|Toggle Left Sidebar|⌘⌃S",
+      ]
+    )
+  }
+
   @Test func ghosttyCLIArgumentsKeepWorktreeUnbindsAndTabBinds() {
     let arguments = AppShortcuts.ghosttyCLIKeybindArguments
 
@@ -120,6 +128,17 @@ struct AppShortcutsTests {
     }
 
     for argument in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map({ "--keybind=ctrl+digit_\($0)=unbind" }) {
+      #expect(arguments.contains(argument) == false)
+    }
+
+    for argument in [
+      "--keybind=super+[=unbind",
+      "--keybind=super+]=unbind",
+      "--keybind=super+shift+[=unbind",
+      "--keybind=super+shift+]=unbind",
+      "--keybind=super+d=unbind",
+      "--keybind=super+shift+d=unbind",
+    ] {
       #expect(arguments.contains(argument) == false)
     }
   }

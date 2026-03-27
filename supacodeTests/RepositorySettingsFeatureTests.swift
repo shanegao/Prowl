@@ -103,7 +103,7 @@ struct RepositorySettingsFeatureTests {
     #expect(state.showsCustomCommandsSettings == true)
   }
 
-  @Test(.dependencies) func conflictingCustomShortcutIsBlockedFromPersistence() async throws {
+  @Test(.dependencies) func conflictingCustomShortcutPersistsAsUserOverride() async throws {
     let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
@@ -146,6 +146,6 @@ struct RepositorySettingsFeatureTests {
 
     let savedData = try #require(localStorage.data(at: SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)))
     let decoded = try JSONDecoder().decode(OnevcatRepositorySettings.self, from: savedData)
-    #expect(decoded.customCommands.first?.shortcut == nil)
+    #expect(decoded.customCommands.first?.shortcut == conflicted.customCommands.first?.shortcut)
   }
 }

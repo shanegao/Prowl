@@ -173,13 +173,21 @@ struct RepositorySettingsFeature {
           normalizedSettings.worktreeBaseDirectoryPath,
           repositoryRootURL: rootURL
         )
-        let persistedOnevcatSettings = OnevcatRepositorySettings(
-          customCommands: AppShortcuts.sanitizeCustomCommands(state.onevcatSettings.customCommands)
-        )
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
+        let previousOnevcatSettings = onevcatRepositorySettings
         $repositorySettings.withLock { $0 = normalizedSettings }
-        $onevcatRepositorySettings.withLock { $0 = persistedOnevcatSettings }
+        $onevcatRepositorySettings.withLock { $0 = state.onevcatSettings }
+        if previousOnevcatSettings != state.onevcatSettings {
+          let logger = SupaLogger("Settings")
+          for conflict in AppShortcuts.userOverrideConflicts(in: state.onevcatSettings.customCommands) {
+            logger.warning(
+              "shortcut_conflict reason=userOverride app_action=\"\(conflict.appActionTitle)\" "
+                + "app_shortcut=\(conflict.appShortcutDisplay) custom_command=\"\(conflict.commandTitle)\" "
+                + "custom_shortcut=\(conflict.commandShortcutDisplay) result=customOverride"
+            )
+          }
+        }
         return .send(.delegate(.settingsChanged(rootURL)))
 
       case .delegate:

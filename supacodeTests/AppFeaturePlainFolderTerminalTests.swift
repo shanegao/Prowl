@@ -117,7 +117,7 @@ struct AppFeaturePlainFolderTerminalTests {
     )
   }
 
-  @Test(.dependencies) func loadingConflictingShortcutDisablesRegistration() async {
+  @Test(.dependencies) func loadingConflictingShortcutKeepsRegistration() async {
     let repository = makePlainRepository()
     var state = AppFeature.State(
       repositories: makeRepositoriesState(repository: repository, selected: true),
@@ -149,21 +149,14 @@ struct AppFeaturePlainFolderTerminalTests {
     )
 
     await store.send(.worktreeOnevcatSettingsLoaded(conflicted, worktreeID: repository.id)) {
-      $0.selectedCustomCommands = [
-        OnevcatCustomCommand(
-          id: conflicted.customCommands[0].id,
-          title: "Build",
-          systemImage: "hammer",
-          command: "swift build",
-          execution: .shellScript,
-          shortcut: nil
-        ),
-      ]
+      $0.selectedCustomCommands = conflicted.customCommands
     }
     await store.finish()
 
+    let expectedShortcut = conflicted.customCommands[0].shortcut?.normalized()
     await MainActor.run {
-      #expect(OnevcatCustomShortcutRegistry.shared.registeredShortcutsForTesting.isEmpty)
+      #expect(
+        OnevcatCustomShortcutRegistry.shared.registeredShortcutsForTesting == [expectedShortcut].compactMap { $0 })
     }
   }
 
