@@ -334,6 +334,18 @@ final class WorktreeTerminalManager {
     runtime.backgroundOpacity()
   }
 
+  func resetFontSizeAcrossStates() {
+    let shouldEmit = preferredFontSize != nil
+    preferredFontSize = nil
+    for state in states.values {
+      state.setDefaultFontSize(nil)
+      _ = state.performBindingActionOnFocusedSurface("reset_font_size")
+    }
+    if shouldEmit {
+      emit(.fontSizeChanged(nil))
+    }
+  }
+
   private func applyFontSize(_ fontSize: Float32?) {
     let normalized = normalizedFontSize(fontSize)
     guard preferredFontSize != normalized else { return }

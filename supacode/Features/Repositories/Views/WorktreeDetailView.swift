@@ -271,6 +271,12 @@ struct WorktreeDetailView: View {
     }
 
     func fontSizeAction(_ bindingAction: String) -> (() -> Void)? {
+      if bindingAction == "reset_font_size" {
+        guard hasActiveWorktree else { return nil }
+        return {
+          terminalManager.resetFontSizeAcrossStates()
+        }
+      }
       if let action = canvasAction({ $0.performBindingActionOnFocusedSurface(bindingAction) }) {
         return action
       }
