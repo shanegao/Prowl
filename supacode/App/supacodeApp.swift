@@ -206,19 +206,6 @@ struct SupacodeApp: App {
           }
         }
         .help("Show main window")
-        Divider()
-        Button("Minimize") {
-          NSApp.keyWindow?.miniaturize(nil)
-        }
-        .keyboardShortcut(
-          AppShortcuts.minimizeWindow.keyEquivalent,
-          modifiers: AppShortcuts.minimizeWindow.modifiers
-        )
-        .help("Minimize (\(AppShortcuts.minimizeWindow.display))")
-        Button("Zoom") {
-          NSApp.keyWindow?.zoom(nil)
-        }
-        .help("Zoom (no shortcut)")
       }
       CommandGroup(replacing: .appSettings) {
         Button("Settings...") {

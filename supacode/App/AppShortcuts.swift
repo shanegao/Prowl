@@ -110,7 +110,6 @@ enum AppShortcuts {
 
   static let newWorktree = AppShortcut(key: "n", modifiers: .command)
   static let commandPalette = AppShortcut(key: "p", modifiers: .command)
-  static let minimizeWindow = AppShortcut(key: "m", modifiers: .command)
   static let quitApplication = AppShortcut(key: "q", modifiers: .command)
   static let openSettings = AppShortcut(key: ",", modifiers: .command)
   static let openFinder = AppShortcut(key: "o", modifiers: .command)
@@ -331,12 +330,6 @@ enum AppShortcuts {
       title: "Command Palette",
       scope: .systemFixedAppAction,
       shortcut: commandPalette
-    ),
-    .init(
-      id: "minimize_window",
-      title: "Minimize Window",
-      scope: .systemFixedAppAction,
-      shortcut: minimizeWindow
     ),
     .init(
       id: "quit_application",
