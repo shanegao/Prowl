@@ -29,6 +29,57 @@ struct AppShortcutsTests {
     }
   }
 
+  @Test func defaultGlobalShortcutTableMatchesPlan() {
+    expectNoDifference(
+      [
+        "openSettings=\(AppShortcuts.openSettings.display)",
+        "toggleLeftSidebar=\(AppShortcuts.toggleLeftSidebar.display)",
+        "runScript=\(AppShortcuts.runScript.display)",
+        "stopRunScript=\(AppShortcuts.stopRunScript.display)",
+        "checkForUpdates=\(AppShortcuts.checkForUpdates.display)",
+        "showDiff=\(AppShortcuts.showDiff.display)",
+        "openFinder=\(AppShortcuts.openFinder.display)",
+        "openRepository=\(AppShortcuts.openRepository.display)",
+      ],
+      [
+        "openSettings=⌘,",
+        "toggleLeftSidebar=⌘B",
+        "runScript=⌘R",
+        "stopRunScript=⌘⇧R",
+        "checkForUpdates=⌘⇧,",
+        "showDiff=⌘⇧]",
+        "openFinder=⌘O",
+        "openRepository=⌘⇧O",
+      ]
+    )
+  }
+
+  @Test func customCommandConflictDetectionMatchesReservedList() {
+    for reserved in AppShortcuts.reservedCustomCommandShortcuts {
+      let customShortcut = OnevcatCustomShortcut(
+        key: reserved.key,
+        modifiers: OnevcatCustomShortcutModifiers(
+          command: reserved.modifiers.contains(.command),
+          shift: reserved.modifiers.contains(.shift),
+          option: reserved.modifiers.contains(.option),
+          control: reserved.modifiers.contains(.control)
+        )
+      )
+
+      let conflict = AppShortcuts.customCommandConflict(for: customShortcut)
+      #expect(conflict == reserved)
+    }
+
+    #expect(
+      AppShortcuts.customCommandConflict(
+        for: OnevcatCustomShortcut(
+          key: "k",
+          modifiers: OnevcatCustomShortcutModifiers(command: true)
+        )
+      ) == nil
+    )
+  }
+
   @Test func tabSelectionGhosttyKeybindArgumentsMatchExpected() {
     expectNoDifference(
       AppShortcuts.tabSelectionGhosttyKeybindArguments,

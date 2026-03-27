@@ -117,6 +117,56 @@ struct AppFeaturePlainFolderTerminalTests {
     )
   }
 
+  @Test(.dependencies) func loadingConflictingShortcutDisablesRegistration() async {
+    let repository = makePlainRepository()
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(repository: repository, selected: true),
+      settings: SettingsFeature.State()
+    )
+    state.repositories.selection = .repository(repository.id)
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await MainActor.run {
+      OnevcatCustomShortcutRegistry.shared.setShortcuts([])
+    }
+
+    let conflicted = OnevcatRepositorySettings(
+      customCommands: [
+        OnevcatCustomCommand(
+          title: "Build",
+          systemImage: "hammer",
+          command: "swift build",
+          execution: .shellScript,
+          shortcut: OnevcatCustomShortcut(
+            key: "b",
+            modifiers: OnevcatCustomShortcutModifiers(command: true)
+          )
+        ),
+      ]
+    )
+
+    await store.send(.worktreeOnevcatSettingsLoaded(conflicted, worktreeID: repository.id)) {
+      $0.selectedCustomCommands = [
+        OnevcatCustomCommand(
+          id: conflicted.customCommands[0].id,
+          title: "Build",
+          systemImage: "hammer",
+          command: "swift build",
+          execution: .shellScript,
+          shortcut: nil
+        ),
+      ]
+    }
+    await store.finish()
+
+    await MainActor.run {
+      #expect(OnevcatCustomShortcutRegistry.shared.registeredShortcutsForTesting.isEmpty)
+    }
+  }
+
   @Test(.dependencies) func customCommandUsesPlainRepositoryTerminalTarget() async {
     let repository = makePlainRepository()
     let sent = LockIsolated<[TerminalClient.Command]>([])

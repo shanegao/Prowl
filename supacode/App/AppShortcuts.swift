@@ -39,6 +39,11 @@ struct AppShortcut {
     display.map { String($0) }
   }
 
+  fileprivate var normalizedConflictKey: String? {
+    guard ghosttyKeyName.count == 1 else { return nil }
+    return ghosttyKeyName
+  }
+
   private var ghosttyModifierParts: [String] {
     var parts: [String] = []
     if modifiers.contains(.control) { parts.append("ctrl") }
@@ -59,6 +64,13 @@ struct AppShortcut {
 }
 
 enum AppShortcuts {
+  struct ReservedCustomCommandShortcut: Equatable {
+    let actionTitle: String
+    let display: String
+    let key: String
+    let modifiers: EventModifiers
+  }
+
   private struct TabSelectionBinding {
     let unicode: String
     let physical: String
@@ -84,12 +96,12 @@ enum AppShortcuts {
   static let copyPath = AppShortcut(key: "c", modifiers: [.command, .shift])
   static let openRepository = AppShortcut(key: "o", modifiers: [.command, .shift])
   static let openPullRequest = AppShortcut(key: "g", modifiers: [.command, .control])
-  static let toggleLeftSidebar = AppShortcut(key: "[", modifiers: .command)
-  static let refreshWorktrees = AppShortcut(key: "r", modifiers: [.command, .shift])
+  static let toggleLeftSidebar = AppShortcut(key: "b", modifiers: .command)
+  static let refreshWorktrees = AppShortcut(key: "r", modifiers: [.command, .option])
   static let runScript = AppShortcut(key: "r", modifiers: .command)
-  static let stopRunScript = AppShortcut(key: ".", modifiers: .command)
-  static let checkForUpdates = AppShortcut(key: "u", modifiers: .command)
-  static let showDiff = AppShortcut(key: "]", modifiers: .command)
+  static let stopRunScript = AppShortcut(key: "r", modifiers: [.command, .shift])
+  static let checkForUpdates = AppShortcut(key: ",", modifiers: [.command, .shift])
+  static let showDiff = AppShortcut(key: "]", modifiers: [.command, .shift])
   static let toggleCanvas = AppShortcut(
     keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .option]
   )
@@ -122,6 +134,48 @@ enum AppShortcuts {
     selectWorktree9,
     selectWorktree0,
   ]
+
+  private static let reservedCustomCommandBindings: [(title: String, shortcut: AppShortcut)] = [
+    ("Open Settings", openSettings),
+    ("Toggle Left Sidebar", toggleLeftSidebar),
+    ("Run Script", runScript),
+    ("Stop Script", stopRunScript),
+    ("Check for Updates", checkForUpdates),
+    ("Show Diff", showDiff),
+    ("Open Worktree", openFinder),
+    ("Open Repository", openRepository),
+  ]
+
+  static var reservedCustomCommandShortcuts: [ReservedCustomCommandShortcut] {
+    reservedCustomCommandBindings.compactMap { binding in
+      guard let key = binding.shortcut.normalizedConflictKey else { return nil }
+      return ReservedCustomCommandShortcut(
+        actionTitle: binding.title,
+        display: binding.shortcut.display,
+        key: key,
+        modifiers: binding.shortcut.modifiers
+      )
+    }
+  }
+
+  static func customCommandConflict(for shortcut: OnevcatCustomShortcut) -> ReservedCustomCommandShortcut? {
+    guard let key = shortcut.normalizedConflictKey else { return nil }
+    let modifiers = shortcut.modifiers.eventModifiers
+    return reservedCustomCommandShortcuts.first {
+      $0.key == key && $0.modifiers == modifiers
+    }
+  }
+
+  static func sanitizeCustomCommands(_ commands: [OnevcatCustomCommand]) -> [OnevcatCustomCommand] {
+    commands.map { command in
+      var normalized = command.normalized()
+      guard let shortcut = normalized.shortcut else { return normalized }
+      if customCommandConflict(for: shortcut) != nil {
+        normalized.shortcut = nil
+      }
+      return normalized
+    }
+  }
 
   static let tabSelectionGhosttyKeybindArguments: [String] = tabSelectionBindings.flatMap { binding in
     [
@@ -162,4 +216,12 @@ enum AppShortcuts {
     selectWorktree9,
     selectWorktree0,
   ]
+}
+
+private extension OnevcatCustomShortcut {
+  var normalizedConflictKey: String? {
+    let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard normalized.count == 1 else { return nil }
+    return normalized
+  }
 }

@@ -173,10 +173,13 @@ struct RepositorySettingsFeature {
           normalizedSettings.worktreeBaseDirectoryPath,
           repositoryRootURL: rootURL
         )
+        let persistedOnevcatSettings = OnevcatRepositorySettings(
+          customCommands: AppShortcuts.sanitizeCustomCommands(state.onevcatSettings.customCommands)
+        )
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
         $repositorySettings.withLock { $0 = normalizedSettings }
-        $onevcatRepositorySettings.withLock { $0 = state.onevcatSettings }
+        $onevcatRepositorySettings.withLock { $0 = persistedOnevcatSettings }
         return .send(.delegate(.settingsChanged(rootURL)))
 
       case .delegate:

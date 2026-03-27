@@ -18,4 +18,10 @@ final class OnevcatCustomShortcutRegistry {
   func matches(event: NSEvent) -> Bool {
     shortcuts.contains { $0.matches(event: event) }
   }
+
+  #if DEBUG
+    var registeredShortcutsForTesting: [OnevcatCustomShortcut] {
+      shortcuts
+    }
+  #endif
 }

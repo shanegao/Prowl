@@ -102,4 +102,50 @@ struct RepositorySettingsFeatureTests {
     #expect(state.showsRunScriptSettings == true)
     #expect(state.showsCustomCommandsSettings == true)
   }
+
+  @Test(.dependencies) func conflictingCustomShortcutIsBlockedFromPersistence() async throws {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
+    let settingsStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        rootURL: rootURL,
+        repositoryKind: .plain,
+        settings: .default,
+        onevcatSettings: .default
+      )
+    ) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    }
+
+    let conflicted = OnevcatRepositorySettings(
+      customCommands: [
+        OnevcatCustomCommand(
+          title: "Run tests",
+          systemImage: "terminal",
+          command: "swift test",
+          execution: .shellScript,
+          shortcut: OnevcatCustomShortcut(
+            key: "b",
+            modifiers: OnevcatCustomShortcutModifiers(command: true)
+          )
+        ),
+      ]
+    )
+
+    await store.send(.binding(.set(\.onevcatSettings, conflicted))) {
+      $0.onevcatSettings = conflicted
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    let savedData = try #require(localStorage.data(at: SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)))
+    let decoded = try JSONDecoder().decode(OnevcatRepositorySettings.self, from: savedData)
+    #expect(decoded.customCommands.first?.shortcut == nil)
+  }
 }

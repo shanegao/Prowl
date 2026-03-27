@@ -360,6 +360,15 @@ private struct OnevcatCustomCommandCard: View {
             .foregroundStyle(.secondary)
         }
         .font(.caption)
+
+        if let conflict = shortcutConflict {
+          Label(
+            "Disabled: conflicts with \(conflict.actionTitle) (\(conflict.display)). Adjust to save and re-enable.",
+            systemImage: "exclamationmark.triangle.fill"
+          )
+          .font(.caption)
+          .foregroundStyle(.orange)
+        }
       }
     }
   }
@@ -380,6 +389,11 @@ private struct OnevcatCustomCommandCard: View {
         }
       }
     )
+  }
+
+  private var shortcutConflict: AppShortcuts.ReservedCustomCommandShortcut? {
+    guard let shortcut = command.shortcut else { return nil }
+    return AppShortcuts.customCommandConflict(for: shortcut)
   }
 
   private func shortcutKeyBinding(_ shortcut: Binding<OnevcatCustomShortcut>) -> Binding<String> {

@@ -624,8 +624,9 @@ struct AppFeature {
         guard state.repositories.selectedTerminalWorktree?.id == worktreeID else {
           return .none
         }
-        state.selectedCustomCommands = OnevcatRepositorySettings.normalizedCommands(settings.customCommands)
+        let customCommands = OnevcatRepositorySettings.normalizedCommands(settings.customCommands)
           .filter(\.hasRunnableCommand)
+        state.selectedCustomCommands = AppShortcuts.sanitizeCustomCommands(customCommands)
         let shortcuts: [OnevcatCustomShortcut] = state.selectedCustomCommands.compactMap { command in
           guard let shortcut = command.shortcut, shortcut.isValid else { return nil }
           return shortcut.normalized()
