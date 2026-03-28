@@ -21,6 +21,10 @@ struct AppShortcut: Equatable {
     KeyboardShortcut(keyEquivalent, modifiers: modifiers)
   }
 
+  var keyToken: String {
+    ghosttyKeyName
+  }
+
   var ghosttyKeybind: String {
     let parts = ghosttyModifierParts + [ghosttyKeyName]
     return parts.joined(separator: "+")
