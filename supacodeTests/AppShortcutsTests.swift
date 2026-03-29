@@ -258,4 +258,36 @@ struct AppShortcutsTests {
     let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
     #expect(arguments.contains("--keybind=super+,=unbind") == false)
   }
+
+  @Test func physicalDigitOverrideBehavesLikeNumberShortcut() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
+          binding: Keybinding(key: "digit_1", modifiers: .init(command: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    expectNoDifference(
+      AppShortcuts.resolvedShortcut(for: AppShortcuts.CommandID.openSettings, in: resolved)?.display,
+      "⌘1"
+    )
+
+    let paletteItem = CommandPaletteItem(
+      id: "settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    expectNoDifference(paletteItem.appShortcutLabel(in: resolved), "⌘1")
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+1=unbind"))
+    #expect(arguments.contains("--keybind=super+,=unbind") == false)
+  }
 }
+

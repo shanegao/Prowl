@@ -152,14 +152,16 @@ struct WorktreeCommands: Commands {
     return title
   }
 
+  private func customCommandID(for command: UserCustomCommand) -> String {
+    LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
+  }
+
   private func customCommandShortcut(for command: UserCustomCommand) -> KeyboardShortcut? {
-    let commandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
-    return store.resolvedKeybindings.keyboardShortcut(for: commandID)
+    store.resolvedKeybindings.keyboardShortcut(for: customCommandID(for: command))
   }
 
   private func customCommandShortcutDisplay(for command: UserCustomCommand) -> String? {
-    let commandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
-    return store.resolvedKeybindings.display(for: commandID)
+    store.resolvedKeybindings.display(for: customCommandID(for: command))
   }
 
   private func worktreeShortcutButton(

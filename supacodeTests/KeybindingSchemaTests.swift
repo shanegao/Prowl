@@ -125,6 +125,17 @@ struct KeybindingSchemaTests {
     #expect(resolved.binding(for: "command.gamma")?.source == .userOverride)
   }
 
+  @Test func physicalDigitBindingsResolveToNumberShortcuts() {
+    let binding = Keybinding(
+      key: "digit_1",
+      modifiers: KeybindingModifiers(command: true, control: true)
+    )
+
+    expectNoDifference(binding.display, "⌘⌃1")
+    expectNoDifference(binding.keyboardShortcut?.display, "⌘⌃1")
+    #expect(binding.userCustomShortcut?.key == "1")
+  }
+
   @Test func migrationMigratesLegacyCustomShortcutsAndCollectsUnmappedIssues() throws {
     let fixture = #"""
     {

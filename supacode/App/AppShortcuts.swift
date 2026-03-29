@@ -235,181 +235,181 @@ enum AppShortcuts {
 
   static let bindings: [Binding] = [
     .init(
-      id: "new_worktree",
+      id: CommandID.newWorktree,
       title: "New Worktree",
       scope: .configurableAppAction,
       shortcut: newWorktree
     ),
     .init(
-      id: "open_settings",
+      id: CommandID.openSettings,
       title: "Open Settings",
       scope: .configurableAppAction,
       shortcut: openSettings
     ),
     .init(
-      id: "open_worktree",
+      id: CommandID.openWorktree,
       title: "Open Worktree",
       scope: .configurableAppAction,
       shortcut: openFinder
     ),
     .init(
-      id: "copy_path",
+      id: CommandID.copyPath,
       title: "Copy Path",
       scope: .configurableAppAction,
       shortcut: copyPath
     ),
     .init(
-      id: "open_repository",
+      id: CommandID.openRepository,
       title: "Open Repository",
       scope: .configurableAppAction,
       shortcut: openRepository
     ),
     .init(
-      id: "open_pull_request",
+      id: CommandID.openPullRequest,
       title: "Open Pull Request",
       scope: .configurableAppAction,
       shortcut: openPullRequest
     ),
     .init(
-      id: "toggle_left_sidebar",
+      id: CommandID.toggleLeftSidebar,
       title: "Toggle Left Sidebar",
       scope: .configurableAppAction,
       shortcut: toggleLeftSidebar
     ),
     .init(
-      id: "refresh_worktrees",
+      id: CommandID.refreshWorktrees,
       title: "Refresh Worktrees",
       scope: .configurableAppAction,
       shortcut: refreshWorktrees
     ),
     .init(
-      id: "run_script",
+      id: CommandID.runScript,
       title: "Run Script",
       scope: .configurableAppAction,
       shortcut: runScript
     ),
     .init(
-      id: "stop_script",
+      id: CommandID.stopScript,
       title: "Stop Script",
       scope: .configurableAppAction,
       shortcut: stopRunScript
     ),
     .init(
-      id: "check_for_updates",
+      id: CommandID.checkForUpdates,
       title: "Check for Updates",
       scope: .configurableAppAction,
       shortcut: checkForUpdates
     ),
     .init(
-      id: "show_diff",
+      id: CommandID.showDiff,
       title: "Show Diff",
       scope: .configurableAppAction,
       shortcut: showDiff
     ),
     .init(
-      id: "toggle_canvas",
+      id: CommandID.toggleCanvas,
       title: "Toggle Canvas",
       scope: .configurableAppAction,
       shortcut: toggleCanvas
     ),
     .init(
-      id: "archived_worktrees",
+      id: CommandID.archivedWorktrees,
       title: "Archived Worktrees",
       scope: .configurableAppAction,
       shortcut: archivedWorktrees
     ),
     .init(
-      id: "select_next_worktree",
+      id: CommandID.selectNextWorktree,
       title: "Select Next Worktree",
       scope: .configurableAppAction,
       shortcut: selectNextWorktree
     ),
     .init(
-      id: "select_previous_worktree",
+      id: CommandID.selectPreviousWorktree,
       title: "Select Previous Worktree",
       scope: .configurableAppAction,
       shortcut: selectPreviousWorktree
     ),
     .init(
-      id: "select_worktree_1",
+      id: CommandID.selectWorktree1,
       title: "Select Worktree 1",
       scope: .configurableAppAction,
       shortcut: selectWorktree1
     ),
     .init(
-      id: "select_worktree_2",
+      id: CommandID.selectWorktree2,
       title: "Select Worktree 2",
       scope: .configurableAppAction,
       shortcut: selectWorktree2
     ),
     .init(
-      id: "select_worktree_3",
+      id: CommandID.selectWorktree3,
       title: "Select Worktree 3",
       scope: .configurableAppAction,
       shortcut: selectWorktree3
     ),
     .init(
-      id: "select_worktree_4",
+      id: CommandID.selectWorktree4,
       title: "Select Worktree 4",
       scope: .configurableAppAction,
       shortcut: selectWorktree4
     ),
     .init(
-      id: "select_worktree_5",
+      id: CommandID.selectWorktree5,
       title: "Select Worktree 5",
       scope: .configurableAppAction,
       shortcut: selectWorktree5
     ),
     .init(
-      id: "select_worktree_6",
+      id: CommandID.selectWorktree6,
       title: "Select Worktree 6",
       scope: .configurableAppAction,
       shortcut: selectWorktree6
     ),
     .init(
-      id: "select_worktree_7",
+      id: CommandID.selectWorktree7,
       title: "Select Worktree 7",
       scope: .configurableAppAction,
       shortcut: selectWorktree7
     ),
     .init(
-      id: "select_worktree_8",
+      id: CommandID.selectWorktree8,
       title: "Select Worktree 8",
       scope: .configurableAppAction,
       shortcut: selectWorktree8
     ),
     .init(
-      id: "select_worktree_9",
+      id: CommandID.selectWorktree9,
       title: "Select Worktree 9",
       scope: .configurableAppAction,
       shortcut: selectWorktree9
     ),
     .init(
-      id: "select_worktree_0",
+      id: CommandID.selectWorktree0,
       title: "Select Worktree 0",
       scope: .configurableAppAction,
       shortcut: selectWorktree0
     ),
     .init(
-      id: "command_palette",
+      id: CommandID.commandPalette,
       title: "Command Palette",
       scope: .systemFixedAppAction,
       shortcut: commandPalette
     ),
     .init(
-      id: "quit_application",
+      id: CommandID.quitApplication,
       title: "Quit Application",
       scope: .systemFixedAppAction,
       shortcut: quitApplication
     ),
     .init(
-      id: "rename_branch",
+      id: CommandID.renameBranch,
       title: "Rename Branch",
       scope: .localInteraction,
       shortcut: renameBranch
     ),
     .init(
-      id: "select_all_canvas_cards",
+      id: CommandID.selectAllCanvasCards,
       title: "Select All Canvas Cards",
       scope: .localInteraction,
       shortcut: selectAllCanvasCards

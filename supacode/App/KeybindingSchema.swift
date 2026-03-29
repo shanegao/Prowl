@@ -104,8 +104,18 @@ nonisolated struct Keybinding: Codable, Equatable, Sendable {
     case "arrow_right":
       return "→"
     default:
+      if let digitCharacter = physicalDigitCharacter(for: key) {
+        return String(digitCharacter)
+      }
       return key.uppercased()
     }
+  }
+
+  private static func physicalDigitCharacter(for key: String) -> Character? {
+    guard key.hasPrefix("digit_") else { return nil }
+    let value = key.dropFirst("digit_".count)
+    guard value.count == 1, let character = value.first, character.isNumber else { return nil }
+    return character
   }
 }
 
@@ -416,6 +426,51 @@ extension UserCustomCommand {
 
 extension Keybinding {
   var keyEquivalent: KeyEquivalent? {
+    if let specialKeyEquivalent {
+      return specialKeyEquivalent
+    }
+    if let singleCharacter {
+      return KeyEquivalent(singleCharacter)
+    }
+    if let physicalDigitCharacter {
+      return KeyEquivalent(physicalDigitCharacter)
+    }
+    return nil
+  }
+
+  var keyboardShortcut: KeyboardShortcut? {
+    guard let keyEquivalent else { return nil }
+    return KeyboardShortcut(keyEquivalent, modifiers: modifiers.eventModifiers)
+  }
+
+  var appShortcut: AppShortcut? {
+    if let specialKeyEquivalent {
+      return AppShortcut(
+        keyEquivalent: specialKeyEquivalent,
+        ghosttyKeyName: key,
+        modifiers: modifiers.eventModifiers
+      )
+    }
+    if let singleCharacter {
+      return AppShortcut(key: singleCharacter, modifiers: modifiers.eventModifiers)
+    }
+    if let physicalDigitCharacter {
+      return AppShortcut(key: physicalDigitCharacter, modifiers: modifiers.eventModifiers)
+    }
+    return nil
+  }
+
+  var userCustomShortcut: UserCustomShortcut? {
+    if key.count == 1 {
+      return UserCustomShortcut(key: key, modifiers: .init(modifiers))
+    }
+    if let physicalDigitCharacter {
+      return UserCustomShortcut(key: String(physicalDigitCharacter), modifiers: .init(modifiers))
+    }
+    return nil
+  }
+
+  private var specialKeyEquivalent: KeyEquivalent? {
     switch key {
     case "return":
       return .return
@@ -428,34 +483,20 @@ extension Keybinding {
     case "arrow_right":
       return .rightArrow
     default:
-      guard key.count == 1, let character = key.first else { return nil }
-      return KeyEquivalent(character)
+      return nil
     }
   }
 
-  var keyboardShortcut: KeyboardShortcut? {
-    guard let keyEquivalent else { return nil }
-    return KeyboardShortcut(keyEquivalent, modifiers: modifiers.eventModifiers)
-  }
-
-  var appShortcut: AppShortcut? {
-    guard let keyEquivalent else { return nil }
-    switch key {
-    case "return", "arrow_up", "arrow_down", "arrow_left", "arrow_right":
-      return AppShortcut(
-        keyEquivalent: keyEquivalent,
-        ghosttyKeyName: key,
-        modifiers: modifiers.eventModifiers
-      )
-    default:
-      guard let character = key.first else { return nil }
-      return AppShortcut(key: character, modifiers: modifiers.eventModifiers)
-    }
-  }
-
-  var userCustomShortcut: UserCustomShortcut? {
+  private var singleCharacter: Character? {
     guard key.count == 1 else { return nil }
-    return UserCustomShortcut(key: key, modifiers: .init(modifiers))
+    return key.first
+  }
+
+  private var physicalDigitCharacter: Character? {
+    guard key.hasPrefix("digit_") else { return nil }
+    let value = key.dropFirst("digit_".count)
+    guard value.count == 1, let character = value.first, character.isNumber else { return nil }
+    return character
   }
 }
 
