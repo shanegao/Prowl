@@ -34,6 +34,15 @@ struct AppShortcut: Equatable {
     "--keybind=\(ghosttyKeybind)=unbind"
   }
 
+  func ghosttyBindArguments(action: String) -> [String] {
+    var arguments = ["--keybind=\(ghosttyKeybind)=\(action)"]
+    if let physicalKeyAlias {
+      let parts = ghosttyModifierParts + [physicalKeyAlias]
+      arguments.append("--keybind=\(parts.joined(separator: "+"))=\(action)")
+    }
+    return arguments
+  }
+
   var display: String {
     let parts = displayModifierParts + [keyEquivalent.display]
     return parts.joined()
@@ -65,9 +74,48 @@ struct AppShortcut: Equatable {
     if modifiers.contains(.control) { parts.append("⌃") }
     return parts
   }
+
+  private var physicalKeyAlias: String? {
+    let value = String(keyEquivalent.character).lowercased()
+    guard value.count == 1, let character = value.first, character.isNumber else { return nil }
+    return "digit_\(value)"
+  }
 }
 
 enum AppShortcuts {
+  enum CommandID {
+    static let newWorktree = "new_worktree"
+    static let commandPalette = "command_palette"
+    static let quitApplication = "quit_application"
+    static let openSettings = "open_settings"
+    static let openWorktree = "open_worktree"
+    static let copyPath = "copy_path"
+    static let openRepository = "open_repository"
+    static let openPullRequest = "open_pull_request"
+    static let toggleLeftSidebar = "toggle_left_sidebar"
+    static let refreshWorktrees = "refresh_worktrees"
+    static let runScript = "run_script"
+    static let stopScript = "stop_script"
+    static let checkForUpdates = "check_for_updates"
+    static let showDiff = "show_diff"
+    static let toggleCanvas = "toggle_canvas"
+    static let archivedWorktrees = "archived_worktrees"
+    static let selectNextWorktree = "select_next_worktree"
+    static let selectPreviousWorktree = "select_previous_worktree"
+    static let selectWorktree1 = "select_worktree_1"
+    static let selectWorktree2 = "select_worktree_2"
+    static let selectWorktree3 = "select_worktree_3"
+    static let selectWorktree4 = "select_worktree_4"
+    static let selectWorktree5 = "select_worktree_5"
+    static let selectWorktree6 = "select_worktree_6"
+    static let selectWorktree7 = "select_worktree_7"
+    static let selectWorktree8 = "select_worktree_8"
+    static let selectWorktree9 = "select_worktree_9"
+    static let selectWorktree0 = "select_worktree_0"
+    static let renameBranch = "rename_branch"
+    static let selectAllCanvasCards = "select_all_canvas_cards"
+  }
+
   enum Scope: String {
     case configurableAppAction
     case systemFixedAppAction
@@ -161,6 +209,19 @@ enum AppShortcuts {
     selectWorktree0,
   ]
 
+  static let worktreeSelectionCommandIDs: [String] = [
+    CommandID.selectWorktree1,
+    CommandID.selectWorktree2,
+    CommandID.selectWorktree3,
+    CommandID.selectWorktree4,
+    CommandID.selectWorktree5,
+    CommandID.selectWorktree6,
+    CommandID.selectWorktree7,
+    CommandID.selectWorktree8,
+    CommandID.selectWorktree9,
+    CommandID.selectWorktree0,
+  ]
+
   private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
     .init(actionTitle: "Open Settings", shortcut: openSettings),
     .init(actionTitle: "Toggle Left Sidebar", shortcut: toggleLeftSidebar),
@@ -174,181 +235,181 @@ enum AppShortcuts {
 
   static let bindings: [Binding] = [
     .init(
-      id: "new_worktree",
+      id: CommandID.newWorktree,
       title: "New Worktree",
       scope: .configurableAppAction,
       shortcut: newWorktree
     ),
     .init(
-      id: "open_settings",
+      id: CommandID.openSettings,
       title: "Open Settings",
       scope: .configurableAppAction,
       shortcut: openSettings
     ),
     .init(
-      id: "open_worktree",
+      id: CommandID.openWorktree,
       title: "Open Worktree",
       scope: .configurableAppAction,
       shortcut: openFinder
     ),
     .init(
-      id: "copy_path",
+      id: CommandID.copyPath,
       title: "Copy Path",
       scope: .configurableAppAction,
       shortcut: copyPath
     ),
     .init(
-      id: "open_repository",
+      id: CommandID.openRepository,
       title: "Open Repository",
       scope: .configurableAppAction,
       shortcut: openRepository
     ),
     .init(
-      id: "open_pull_request",
+      id: CommandID.openPullRequest,
       title: "Open Pull Request",
       scope: .configurableAppAction,
       shortcut: openPullRequest
     ),
     .init(
-      id: "toggle_left_sidebar",
+      id: CommandID.toggleLeftSidebar,
       title: "Toggle Left Sidebar",
       scope: .configurableAppAction,
       shortcut: toggleLeftSidebar
     ),
     .init(
-      id: "refresh_worktrees",
+      id: CommandID.refreshWorktrees,
       title: "Refresh Worktrees",
       scope: .configurableAppAction,
       shortcut: refreshWorktrees
     ),
     .init(
-      id: "run_script",
+      id: CommandID.runScript,
       title: "Run Script",
       scope: .configurableAppAction,
       shortcut: runScript
     ),
     .init(
-      id: "stop_script",
+      id: CommandID.stopScript,
       title: "Stop Script",
       scope: .configurableAppAction,
       shortcut: stopRunScript
     ),
     .init(
-      id: "check_for_updates",
+      id: CommandID.checkForUpdates,
       title: "Check for Updates",
       scope: .configurableAppAction,
       shortcut: checkForUpdates
     ),
     .init(
-      id: "show_diff",
+      id: CommandID.showDiff,
       title: "Show Diff",
       scope: .configurableAppAction,
       shortcut: showDiff
     ),
     .init(
-      id: "toggle_canvas",
+      id: CommandID.toggleCanvas,
       title: "Toggle Canvas",
       scope: .configurableAppAction,
       shortcut: toggleCanvas
     ),
     .init(
-      id: "archived_worktrees",
+      id: CommandID.archivedWorktrees,
       title: "Archived Worktrees",
       scope: .configurableAppAction,
       shortcut: archivedWorktrees
     ),
     .init(
-      id: "select_next_worktree",
+      id: CommandID.selectNextWorktree,
       title: "Select Next Worktree",
       scope: .configurableAppAction,
       shortcut: selectNextWorktree
     ),
     .init(
-      id: "select_previous_worktree",
+      id: CommandID.selectPreviousWorktree,
       title: "Select Previous Worktree",
       scope: .configurableAppAction,
       shortcut: selectPreviousWorktree
     ),
     .init(
-      id: "select_worktree_1",
+      id: CommandID.selectWorktree1,
       title: "Select Worktree 1",
       scope: .configurableAppAction,
       shortcut: selectWorktree1
     ),
     .init(
-      id: "select_worktree_2",
+      id: CommandID.selectWorktree2,
       title: "Select Worktree 2",
       scope: .configurableAppAction,
       shortcut: selectWorktree2
     ),
     .init(
-      id: "select_worktree_3",
+      id: CommandID.selectWorktree3,
       title: "Select Worktree 3",
       scope: .configurableAppAction,
       shortcut: selectWorktree3
     ),
     .init(
-      id: "select_worktree_4",
+      id: CommandID.selectWorktree4,
       title: "Select Worktree 4",
       scope: .configurableAppAction,
       shortcut: selectWorktree4
     ),
     .init(
-      id: "select_worktree_5",
+      id: CommandID.selectWorktree5,
       title: "Select Worktree 5",
       scope: .configurableAppAction,
       shortcut: selectWorktree5
     ),
     .init(
-      id: "select_worktree_6",
+      id: CommandID.selectWorktree6,
       title: "Select Worktree 6",
       scope: .configurableAppAction,
       shortcut: selectWorktree6
     ),
     .init(
-      id: "select_worktree_7",
+      id: CommandID.selectWorktree7,
       title: "Select Worktree 7",
       scope: .configurableAppAction,
       shortcut: selectWorktree7
     ),
     .init(
-      id: "select_worktree_8",
+      id: CommandID.selectWorktree8,
       title: "Select Worktree 8",
       scope: .configurableAppAction,
       shortcut: selectWorktree8
     ),
     .init(
-      id: "select_worktree_9",
+      id: CommandID.selectWorktree9,
       title: "Select Worktree 9",
       scope: .configurableAppAction,
       shortcut: selectWorktree9
     ),
     .init(
-      id: "select_worktree_0",
+      id: CommandID.selectWorktree0,
       title: "Select Worktree 0",
       scope: .configurableAppAction,
       shortcut: selectWorktree0
     ),
     .init(
-      id: "command_palette",
+      id: CommandID.commandPalette,
       title: "Command Palette",
       scope: .systemFixedAppAction,
       shortcut: commandPalette
     ),
     .init(
-      id: "quit_application",
+      id: CommandID.quitApplication,
       title: "Quit Application",
       scope: .systemFixedAppAction,
       shortcut: quitApplication
     ),
     .init(
-      id: "rename_branch",
+      id: CommandID.renameBranch,
       title: "Rename Branch",
       scope: .localInteraction,
       shortcut: renameBranch
     ),
     .init(
-      id: "select_all_canvas_cards",
+      id: CommandID.selectAllCanvasCards,
       title: "Select All Canvas Cards",
       scope: .localInteraction,
       shortcut: selectAllCanvasCards
@@ -386,15 +447,49 @@ enum AppShortcuts {
     }
   }
 
-  static let tabSelectionGhosttyKeybindArguments: [String] = tabSelectionBindings.flatMap { binding in
-    [
-      "--keybind=ctrl+\(binding.unicode)=goto_tab:\(binding.tabIndex)",
-      "--keybind=ctrl+\(binding.physical)=goto_tab:\(binding.tabIndex)",
-    ]
+  static func binding(for id: String) -> Binding? {
+    bindings.first { $0.id == id }
+  }
+
+  static func defaultShortcut(for id: String) -> AppShortcut? {
+    binding(for: id)?.shortcut
+  }
+
+  static func resolvedShortcut(for id: String, in resolvedKeybindings: ResolvedKeybindingMap) -> AppShortcut? {
+    guard let resolvedBinding = resolvedKeybindings.binding(for: id) else {
+      return defaultShortcut(for: id)
+    }
+    return resolvedBinding.binding?.appShortcut
+  }
+
+  static var tabSelectionGhosttyKeybindArguments: [String] {
+    var result: [String] = []
+    for binding in tabSelectionBindings {
+      result.append("--keybind=ctrl+\(binding.unicode)=goto_tab:\(binding.tabIndex)")
+      result.append("--keybind=ctrl+\(binding.physical)=goto_tab:\(binding.tabIndex)")
+    }
+    return result
+  }
+
+  static func ghosttyCLIKeybindArguments(from resolvedKeybindings: ResolvedKeybindingMap) -> [String] {
+    var unbindArguments: [String] = []
+    for binding in bindings where binding.scope == .configurableAppAction {
+      if let argument = resolvedShortcut(for: binding.id, in: resolvedKeybindings)?.ghosttyUnbindArgument {
+        unbindArguments.append(argument)
+      }
+    }
+
+    var tabArguments: [String] = []
+    for (commandID, binding) in zip(worktreeSelectionCommandIDs, tabSelectionBindings) {
+      guard let shortcut = resolvedShortcut(for: commandID, in: resolvedKeybindings) else { continue }
+      tabArguments.append(contentsOf: shortcut.ghosttyBindArguments(action: "goto_tab:\(binding.tabIndex)"))
+    }
+
+    return unbindArguments + tabArguments
   }
 
   static var ghosttyCLIKeybindArguments: [String] {
-    all.map(\.ghosttyUnbindArgument) + tabSelectionGhosttyKeybindArguments
+    ghosttyCLIKeybindArguments(from: .appDefaults)
   }
 
   static let all: [AppShortcut] = [
