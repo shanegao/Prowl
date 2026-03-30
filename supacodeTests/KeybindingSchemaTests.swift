@@ -136,6 +136,89 @@ struct KeybindingSchemaTests {
     #expect(binding.userCustomShortcut?.key == "1")
   }
 
+  @Test func resolverDisableOverrideUnassignsConflictingCommand() {
+    let conflictBinding = Keybinding(
+      key: "w",
+      modifiers: KeybindingModifiers(command: true)
+    )
+    let schema = KeybindingSchemaDocument(
+      version: 1,
+      commands: [
+        KeybindingCommandSchema(
+          id: "command.first",
+          title: "First",
+          scope: .configurableAppAction,
+          platform: .macOS,
+          allowUserOverride: true,
+          conflictPolicy: .warnAndPreferUserOverride,
+          defaultBinding: Keybinding(
+            key: "f",
+            modifiers: KeybindingModifiers(command: true)
+          )
+        ),
+        KeybindingCommandSchema(
+          id: "command.second",
+          title: "Second",
+          scope: .configurableAppAction,
+          platform: .macOS,
+          allowUserOverride: true,
+          conflictPolicy: .warnAndPreferUserOverride,
+          defaultBinding: conflictBinding
+        ),
+      ]
+    )
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        "command.first": KeybindingUserOverride(binding: conflictBinding),
+        "command.second": KeybindingUserOverride(binding: nil, isEnabled: false),
+      ]
+    )
+
+    let resolved = KeybindingResolver.resolve(
+      schema: schema,
+      userOverrides: overrides
+    )
+
+    #expect(resolved.binding(for: "command.first")?.binding == conflictBinding)
+    #expect(resolved.binding(for: "command.first")?.source == .userOverride)
+    #expect(resolved.binding(for: "command.second")?.binding == nil)
+    #expect(resolved.binding(for: "command.second")?.source == .userOverride)
+  }
+
+  @Test func resolverNilEnabledOverrideDoesNotChangeDefaultBinding() {
+    let defaultBinding = Keybinding(
+      key: "n",
+      modifiers: KeybindingModifiers(command: true, shift: true)
+    )
+    let schema = KeybindingSchemaDocument(
+      version: 1,
+      commands: [
+        KeybindingCommandSchema(
+          id: "command.nil-enabled",
+          title: "Nil Enabled",
+          scope: .configurableAppAction,
+          platform: .macOS,
+          allowUserOverride: true,
+          conflictPolicy: .warnAndPreferUserOverride,
+          defaultBinding: defaultBinding
+        )
+      ]
+    )
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        "command.nil-enabled": KeybindingUserOverride(binding: nil, isEnabled: true)
+      ]
+    )
+
+    let resolved = KeybindingResolver.resolve(
+      schema: schema,
+      userOverrides: overrides
+    )
+
+    #expect(resolved.binding(for: "command.nil-enabled")?.binding == defaultBinding)
+    #expect(resolved.binding(for: "command.nil-enabled")?.source == .appDefault)
+  }
+
   @Test func migrationMigratesLegacyCustomShortcutsAndCollectsUnmappedIssues() throws {
     let fixture = #"""
       {

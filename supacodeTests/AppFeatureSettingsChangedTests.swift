@@ -86,6 +86,14 @@ struct AppFeatureSettingsChangedTests {
     await store.receive(\.updates.applySettings) {
       $0.updates.didConfigureUpdates = true
     }
+    await store.receive(\.repositories.refreshGithubIntegrationAvailability) {
+      $0.repositories.githubIntegrationAvailability = .checking
+    }
+    await store.receive(\.repositories.githubIntegrationAvailabilityUpdated) {
+      $0.repositories.githubIntegrationAvailability = .available
+      $0.repositories.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.repositories.inFlightPullRequestRefreshRepositoryIDs = []
+    }
 
     expectNoDifference(
       store.state.resolvedKeybindings.display(for: AppShortcuts.CommandID.openSettings),
