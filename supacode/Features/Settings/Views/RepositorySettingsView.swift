@@ -527,10 +527,15 @@ struct RepositorySettingsView: View {
     @ViewBuilder content: () -> Content
   ) -> some View {
     content()
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
       .background {
         if selectedCustomCommandID == commandID {
           rowSelectionBackground(role: role)
         }
+      }
+      .contentShape(Rectangle())
+      .onTapGesture {
+        selectCustomCommand(commandID)
       }
   }
 
@@ -1034,6 +1039,7 @@ private struct InlineEditableCellButton<Label: View>: View {
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .onHover { hovering in
       isHovering = hovering
     }
@@ -1079,6 +1085,7 @@ private struct InlineEditableFieldContainer<Content: View>: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 8)
       .padding(.vertical, 4)
+      .frame(maxWidth: .infinity, alignment: .leading)
       .onHover { hovering in
         isHovering = hovering
       }
