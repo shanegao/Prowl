@@ -307,20 +307,28 @@ struct RepositorySettingsView: View {
     VStack(alignment: .leading, spacing: 10) {
       Table(store.userSettings.customCommands) {
         TableColumn("") { command in
-          customCommandIconCell(command)
+          customCommandRowCell(commandID: command.id, role: .leading) {
+            customCommandIconCell(command)
+          }
         }
         .width(32)
 
         TableColumn("Name") { command in
-          customCommandNameCell(command)
+          customCommandRowCell(commandID: command.id, role: .middle) {
+            customCommandNameCell(command)
+          }
         }
 
         TableColumn("Command") { command in
-          customCommandCell(command)
+          customCommandRowCell(commandID: command.id, role: .middle) {
+            customCommandCell(command)
+          }
         }
 
         TableColumn("Shortcut") { command in
-          customCommandShortcutCell(command)
+          customCommandRowCell(commandID: command.id, role: .trailing) {
+            customCommandShortcutCell(command)
+          }
         }
       }
       .frame(minHeight: 220, maxHeight: 300)
@@ -367,10 +375,8 @@ struct RepositorySettingsView: View {
 
   @ViewBuilder
   private func customCommandIconCell(_ command: UserCustomCommand) -> some View {
-    let isSelected = selectedCustomCommandID == command.id
     if let binding = bindingForCustomCommand(id: command.id) {
       InlineEditableCellButton(
-        isSelected: isSelected,
         isActive: iconPickerCommandID == command.id
       ) {
         selectCustomCommand(command.id)
@@ -395,7 +401,7 @@ struct RepositorySettingsView: View {
         iconEditorPopover(for: binding)
       }
     } else {
-      InlineEditableCellButton(isSelected: isSelected) {
+      InlineEditableCellButton {
         selectCustomCommand(command.id)
       } label: {
         Image(systemName: command.resolvedSystemImage)
@@ -413,7 +419,7 @@ struct RepositorySettingsView: View {
       editingNameCommandID == command.id,
       let binding = bindingForCustomCommand(id: command.id)
     {
-      InlineEditableFieldContainer(isSelected: isSelected, isActive: true) {
+      InlineEditableFieldContainer(isActive: true) {
         TextField("", text: binding.title)
           .textFieldStyle(.plain)
           .focused($focusedNameEditorCommandID, equals: command.id)
@@ -425,7 +431,7 @@ struct RepositorySettingsView: View {
         focusedNameEditorCommandID = command.id
       }
     } else {
-      InlineEditableCellButton(isSelected: isSelected) {
+      InlineEditableCellButton {
         selectCustomCommand(command.id)
         beginNameEditing(for: command.id)
       } label: {
@@ -437,10 +443,8 @@ struct RepositorySettingsView: View {
 
   @ViewBuilder
   private func customCommandCell(_ command: UserCustomCommand) -> some View {
-    let isSelected = selectedCustomCommandID == command.id
     if let binding = bindingForCustomCommand(id: command.id) {
       InlineEditableCellButton(
-        isSelected: isSelected,
         isActive: commandEditorCommandID == command.id
       ) {
         selectCustomCommand(command.id)
@@ -469,7 +473,7 @@ struct RepositorySettingsView: View {
       }
       .help("Shell runs in a new tab. Terminal sends input to the focused terminal.")
     } else {
-      InlineEditableCellButton(isSelected: isSelected) {
+      InlineEditableCellButton {
         selectCustomCommand(command.id)
       } label: {
         VStack(alignment: .leading, spacing: 2) {
@@ -488,10 +492,8 @@ struct RepositorySettingsView: View {
     let resolvedBinding = resolvedCustomCommandBindings.keybinding(for: customCommandBindingID(for: command.id))
     let shortcutDisplay = resolvedBinding?.display ?? "Unassigned"
     let isRecording = recordingCustomCommandID == command.id
-    let isSelected = selectedCustomCommandID == command.id
 
     InlineEditableCellButton(
-      isSelected: isSelected,
       isActive: isRecording,
       activeColor: .orange
     ) {
@@ -516,6 +518,51 @@ struct RepositorySettingsView: View {
   private var effectiveSelectedCommandID: UserCustomCommand.ID? {
     selectedCustomCommandID ?? editingNameCommandID ?? commandEditorCommandID ?? iconPickerCommandID
       ?? recordingCustomCommandID
+  }
+
+  @ViewBuilder
+  private func customCommandRowCell<Content: View>(
+    commandID: UserCustomCommand.ID,
+    role: CustomCommandRowRole,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    content()
+      .background {
+        if selectedCustomCommandID == commandID {
+          rowSelectionBackground(role: role)
+        }
+      }
+  }
+
+  @ViewBuilder
+  private func rowSelectionBackground(role: CustomCommandRowRole) -> some View {
+    switch role {
+    case .leading:
+      UnevenRoundedRectangle(
+        cornerRadii: .init(
+          topLeading: 8,
+          bottomLeading: 8,
+          bottomTrailing: 0,
+          topTrailing: 0
+        ),
+        style: .continuous
+      )
+      .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.22))
+    case .middle:
+      Rectangle()
+        .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.22))
+    case .trailing:
+      UnevenRoundedRectangle(
+        cornerRadii: .init(
+          topLeading: 0,
+          bottomLeading: 0,
+          bottomTrailing: 8,
+          topTrailing: 8
+        ),
+        style: .continuous
+      )
+      .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.22))
+    }
   }
 
   private func selectCustomCommand(_ commandID: UserCustomCommand.ID) {
@@ -959,7 +1006,6 @@ struct RepositorySettingsView: View {
 }
 
 private struct InlineEditableCellButton<Label: View>: View {
-  let isSelected: Bool
   let isActive: Bool
   let activeColor: Color
   let action: () -> Void
@@ -968,13 +1014,11 @@ private struct InlineEditableCellButton<Label: View>: View {
   @State private var isHovering = false
 
   init(
-    isSelected: Bool = false,
     isActive: Bool = false,
     activeColor: Color = .accentColor,
     action: @escaping () -> Void,
     @ViewBuilder label: @escaping () -> Label
   ) {
-    self.isSelected = isSelected
     self.isActive = isActive
     self.activeColor = activeColor
     self.action = action
@@ -993,10 +1037,6 @@ private struct InlineEditableCellButton<Label: View>: View {
     .onHover { hovering in
       isHovering = hovering
     }
-    .background(
-      RoundedRectangle(cornerRadius: 6)
-        .fill(fillColor)
-    )
     .overlay {
       RoundedRectangle(cornerRadius: 6)
         .strokeBorder(borderColor, lineWidth: borderWidth)
@@ -1016,29 +1056,19 @@ private struct InlineEditableCellButton<Label: View>: View {
   private var borderWidth: CGFloat {
     (isActive || isHovering) ? 1 : 0
   }
-
-  private var fillColor: Color {
-    if isSelected {
-      return Color(nsColor: .selectedContentBackgroundColor).opacity(0.2)
-    }
-    return .clear
-  }
 }
 
 private struct InlineEditableFieldContainer<Content: View>: View {
-  let isSelected: Bool
   let isActive: Bool
   let activeColor: Color
   @ViewBuilder let content: () -> Content
   @State private var isHovering = false
 
   init(
-    isSelected: Bool = false,
     isActive: Bool = false,
     activeColor: Color = .accentColor,
     @ViewBuilder content: @escaping () -> Content
   ) {
-    self.isSelected = isSelected
     self.isActive = isActive
     self.activeColor = activeColor
     self.content = content
@@ -1052,10 +1082,6 @@ private struct InlineEditableFieldContainer<Content: View>: View {
       .onHover { hovering in
         isHovering = hovering
       }
-      .background(
-        RoundedRectangle(cornerRadius: 6)
-          .fill(fillColor)
-      )
       .overlay {
         RoundedRectangle(cornerRadius: 6)
           .strokeBorder(borderColor, lineWidth: borderWidth)
@@ -1075,13 +1101,12 @@ private struct InlineEditableFieldContainer<Content: View>: View {
   private var borderWidth: CGFloat {
     (isActive || isHovering) ? 1 : 0
   }
+}
 
-  private var fillColor: Color {
-    if isSelected {
-      return Color(nsColor: .selectedContentBackgroundColor).opacity(0.2)
-    }
-    return .clear
-  }
+private enum CustomCommandRowRole {
+  case leading
+  case middle
+  case trailing
 }
 
 private struct BranchPickerPopover: View {
