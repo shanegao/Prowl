@@ -4,7 +4,9 @@ import SwiftUI
 
 struct ShortcutsSettingsView: View {
   private enum ShortcutTableLayout {
-    static let statusColumnWidth: CGFloat = 72
+    static let statusChipWidth: CGFloat = 108
+    static let statusChipHeight: CGFloat = 24
+    static let statusColumnWidth: CGFloat = statusChipWidth
     static let shortcutColumnWidth: CGFloat = 220
     static let actionColumnWidth: CGFloat = 16
   }
@@ -279,23 +281,20 @@ struct ShortcutsSettingsView: View {
     let isDefault = source == .appDefault
     let label = isDefault ? "Default" : "Defined"
 
-    return ZStack {
-      Capsule()
-        .fill(isDefault ? Color(nsColor: .quaternaryLabelColor).opacity(0.25) : Color.accentColor.opacity(0.2))
-
-      Text(label)
-        .font(.caption2.monospaced())
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-        .padding(.horizontal, 6)
-    }
-    .frame(maxWidth: .infinity)
-    .frame(height: 24)
-    .foregroundStyle(isDefault ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
-    .overlay(
-      Capsule()
-        .strokeBorder(isDefault ? Color(nsColor: .separatorColor) : Color.accentColor.opacity(0.35), lineWidth: 1)
-    )
+    return Text(label)
+      .font(.caption2.monospaced())
+      .lineLimit(1)
+      .minimumScaleFactor(0.8)
+      .frame(width: ShortcutTableLayout.statusChipWidth, height: ShortcutTableLayout.statusChipHeight)
+      .foregroundStyle(isDefault ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
+      .background(
+        Capsule()
+          .fill(isDefault ? Color(nsColor: .quaternaryLabelColor).opacity(0.25) : Color.accentColor.opacity(0.2))
+      )
+      .overlay(
+        Capsule()
+          .strokeBorder(isDefault ? Color(nsColor: .separatorColor) : Color.accentColor.opacity(0.35), lineWidth: 1)
+      )
   }
 
   private func commands(for group: ShortcutGroup) -> [KeybindingCommandSchema] {
