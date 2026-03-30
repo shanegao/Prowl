@@ -780,10 +780,32 @@ struct RepositorySettingsView: View {
   }
 
   private func bindingForCustomCommand(id commandID: UserCustomCommand.ID) -> Binding<UserCustomCommand>? {
-    guard let index = store.userSettings.customCommands.firstIndex(where: { $0.id == commandID }) else {
+    guard store.userSettings.customCommands.contains(where: { $0.id == commandID }) else {
       return nil
     }
-    return $store.userSettings.customCommands[index]
+
+    return Binding(
+      get: {
+        store.userSettings.customCommands.first(where: { $0.id == commandID })
+          ?? UserCustomCommand(
+            id: commandID,
+            title: "",
+            systemImage: "terminal",
+            command: "",
+            execution: .shellScript,
+            shortcut: nil
+          )
+      },
+      set: { updatedCommand in
+        updateCustomCommand(id: commandID) { command in
+          command.title = updatedCommand.title
+          command.systemImage = updatedCommand.systemImage
+          command.command = updatedCommand.command
+          command.execution = updatedCommand.execution
+          command.shortcut = updatedCommand.shortcut
+        }
+      }
+    )
   }
 
   private func syncSelectedCommandID(with commands: [UserCustomCommand]) {
@@ -904,6 +926,10 @@ struct RepositorySettingsView: View {
     let commandsBinding = $store.userSettings.customCommands
     var commands = commandsBinding.wrappedValue
     guard let index = commands.firstIndex(where: { $0.id == id }) else {
+      settingsLogger.warning(
+        "custom command update skipped repo=\(repositoryPathForLog) reason=missing-id id=\(id) "
+          + "count=\(commands.count)"
+      )
       return
     }
 
