@@ -361,6 +361,11 @@ struct RepositorySettingsView: View {
         } label: {
           Image(systemName: "minus")
             .frame(width: 16, height: 16)
+            .padding(6)
+            .background {
+              RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.secondary.opacity(0.45), lineWidth: 1)
+            }
             .accessibilityLabel("Remove selected command")
         }
         .buttonStyle(.plain)
