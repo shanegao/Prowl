@@ -648,7 +648,6 @@ struct AppFeature {
           return .none
         }
         state.selectedCustomCommands = UserRepositorySettings.normalizedCommands(settings.customCommands)
-          .filter(\.hasRunnableCommand)
         state.resolvedKeybindings = resolvedKeybindings(
           settings: state.settings,
           customCommands: state.selectedCustomCommands

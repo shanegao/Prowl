@@ -555,6 +555,7 @@ struct WorktreeDetailView: View {
         title: command.resolvedTitle,
         systemImage: command.resolvedSystemImage,
         shortcut: customCommandShortcutDisplay(for: command),
+        isEnabled: command.hasRunnableCommand,
         action: {
           onRunCustomCommand(index)
         }
@@ -741,6 +742,7 @@ private struct UserCustomCommandToolbarButton: View {
   let title: String
   let systemImage: String
   let shortcut: String?
+  let isEnabled: Bool
   let action: () -> Void
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
@@ -761,9 +763,13 @@ private struct UserCustomCommandToolbarButton: View {
     }
     .font(.caption)
     .help(helpText)
+    .disabled(!isEnabled)
   }
 
   private var helpText: String {
+    guard isEnabled else {
+      return "\(title) (Set command script in Repository Settings)"
+    }
     if let shortcut {
       return "\(title) (\(shortcut))"
     }
@@ -816,6 +822,7 @@ private struct CustomCommandOverflowButton: View {
               .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!entry.command.hasRunnableCommand)
           }
         }
         .padding(8)

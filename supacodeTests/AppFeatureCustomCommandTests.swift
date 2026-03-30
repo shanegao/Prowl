@@ -162,6 +162,47 @@ struct AppFeatureCustomCommandTests {
     )
   }
 
+  @Test(.dependencies) func loadingUserSettingsKeepsCustomCommandsWithoutScript() async {
+    let worktree = makeWorktree()
+    let settings = UserRepositorySettings(
+      customCommands: [
+        UserCustomCommand(
+          title: "Empty",
+          systemImage: "sparkles",
+          command: "",
+          execution: .shellScript,
+          shortcut: nil
+        ),
+        UserCustomCommand(
+          title: "Runnable",
+          systemImage: "terminal",
+          command: "echo hello",
+          execution: .shellScript,
+          shortcut: nil
+        ),
+      ]
+    )
+
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: makeRepositoriesState(worktree: worktree),
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.worktreeUserSettingsLoaded(settings, worktreeID: worktree.id)) {
+      $0.selectedCustomCommands = settings.customCommands
+      $0.resolvedKeybindings = KeybindingResolver.resolve(
+        schema: .appResolverSchema(customCommands: settings.customCommands),
+        migratedOverrides: LegacyCustomCommandShortcutMigration
+          .migrate(commands: settings.customCommands)
+          .overrides
+      )
+    }
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",

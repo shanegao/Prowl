@@ -352,7 +352,7 @@ struct RepositorySettingsView: View {
             .accessibilityLabel("Remove selected command")
         }
         .buttonStyle(.plain)
-        .disabled(effectiveSelectedCommandID == nil)
+        .disabled(store.userSettings.customCommands.isEmpty)
         .help("Remove selected command")
 
         Spacer(minLength: 0)
@@ -422,6 +422,7 @@ struct RepositorySettingsView: View {
       InlineEditableFieldContainer(isActive: true) {
         TextField("", text: binding.title)
           .textFieldStyle(.plain)
+          .padding(.leading, -4)
           .focused($focusedNameEditorCommandID, equals: command.id)
           .onSubmit {
             endNameEditing()
@@ -518,6 +519,10 @@ struct RepositorySettingsView: View {
   private var effectiveSelectedCommandID: UserCustomCommand.ID? {
     selectedCustomCommandID ?? editingNameCommandID ?? commandEditorCommandID ?? iconPickerCommandID
       ?? recordingCustomCommandID
+  }
+
+  private var removableCommandID: UserCustomCommand.ID? {
+    effectiveSelectedCommandID ?? store.userSettings.customCommands.last?.id
   }
 
   @ViewBuilder
@@ -805,7 +810,7 @@ struct RepositorySettingsView: View {
   }
 
   private func removeSelectedCustomCommand() {
-    guard let selectedCommandID = effectiveSelectedCommandID else {
+    guard let selectedCommandID = removableCommandID else {
       return
     }
 
