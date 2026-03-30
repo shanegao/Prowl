@@ -85,35 +85,35 @@ struct RepositorySettingsFeature {
       switch action {
       case .task:
         let rootURL = state.rootURL
-        @Shared(.repositorySettings(rootURL)) var repositorySettings
-        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
-        @Shared(.settingsFile) var settingsFile
-        let settings = repositorySettings
-        let userSettings = userRepositorySettings
-        let globalDefaultWorktreeBaseDirectoryPath =
-          settingsFile.global.defaultWorktreeBaseDirectoryPath
-        let keybindingUserOverrides = settingsFile.global.keybindingUserOverrides
         guard state.capabilities.supportsRepositoryGitSettings else {
-          return .send(
-            .settingsLoaded(
-              settings,
-              userSettings,
-              isBareRepository: false,
-              globalDefaultWorktreeBaseDirectoryPath: globalDefaultWorktreeBaseDirectoryPath,
-              keybindingUserOverrides: keybindingUserOverrides
+          return .run { send in
+            @Shared(.repositorySettings(rootURL)) var repositorySettings
+            @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+            @Shared(.settingsFile) var settingsFile
+            await send(
+              .settingsLoaded(
+                repositorySettings,
+                userRepositorySettings,
+                isBareRepository: false,
+                globalDefaultWorktreeBaseDirectoryPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
+                keybindingUserOverrides: settingsFile.global.keybindingUserOverrides
+              )
             )
-          )
+          }
         }
         let gitClient = gitClient
         return .run { send in
           let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false
+          @Shared(.repositorySettings(rootURL)) var repositorySettings
+          @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+          @Shared(.settingsFile) var settingsFile
           await send(
             .settingsLoaded(
-              settings,
-              userSettings,
+              repositorySettings,
+              userRepositorySettings,
               isBareRepository: isBareRepository,
-              globalDefaultWorktreeBaseDirectoryPath: globalDefaultWorktreeBaseDirectoryPath,
-              keybindingUserOverrides: keybindingUserOverrides
+              globalDefaultWorktreeBaseDirectoryPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
+              keybindingUserOverrides: settingsFile.global.keybindingUserOverrides
             )
           )
           let branches: [String]

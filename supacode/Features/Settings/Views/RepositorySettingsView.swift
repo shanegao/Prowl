@@ -814,10 +814,11 @@ struct RepositorySettingsView: View {
   }
 
   private func addCustomCommand() {
-    let current = store.userSettings.customCommands
-    let next = current + [.default(index: current.count)]
-    store.userSettings.customCommands = UserRepositorySettings.normalizedCommands(next)
-    selectedCustomCommandID = store.userSettings.customCommands.last?.id
+    let commandsBinding = $store.userSettings.customCommands
+    let current = commandsBinding.wrappedValue
+    let next = UserRepositorySettings.normalizedCommands(current + [.default(index: current.count)])
+    commandsBinding.wrappedValue = next
+    selectedCustomCommandID = next.last?.id
   }
 
   private func removeSelectedCustomCommand() {
@@ -825,13 +826,16 @@ struct RepositorySettingsView: View {
       return
     }
 
-    if let removalIndex = store.userSettings.customCommands.firstIndex(where: { $0.id == selectedCommandID }) {
-      store.userSettings.customCommands.remove(at: removalIndex)
-    } else if !store.userSettings.customCommands.isEmpty {
-      store.userSettings.customCommands.removeLast()
+    let commandsBinding = $store.userSettings.customCommands
+    var commands = commandsBinding.wrappedValue
+    if let removalIndex = commands.firstIndex(where: { $0.id == selectedCommandID }) {
+      commands.remove(at: removalIndex)
+    } else if !commands.isEmpty {
+      commands.removeLast()
     }
-    syncSelectedCommandID(with: store.userSettings.customCommands)
-    clearRemovedCommandState(using: store.userSettings.customCommands)
+    commandsBinding.wrappedValue = UserRepositorySettings.normalizedCommands(commands)
+    syncSelectedCommandID(with: commandsBinding.wrappedValue)
+    clearRemovedCommandState(using: commandsBinding.wrappedValue)
   }
 
   private func clearShortcut(for commandID: UserCustomCommand.ID) {
@@ -848,11 +852,14 @@ struct RepositorySettingsView: View {
     id: UserCustomCommand.ID,
     update: (inout UserCustomCommand) -> Void
   ) {
-    guard let index = store.userSettings.customCommands.firstIndex(where: { $0.id == id }) else {
+    let commandsBinding = $store.userSettings.customCommands
+    var commands = commandsBinding.wrappedValue
+    guard let index = commands.firstIndex(where: { $0.id == id }) else {
       return
     }
 
-    update(&store.userSettings.customCommands[index])
+    update(&commands[index])
+    commandsBinding.wrappedValue = UserRepositorySettings.normalizedCommands(commands)
   }
 
   private func toggleRecording(for commandID: UserCustomCommand.ID) {
