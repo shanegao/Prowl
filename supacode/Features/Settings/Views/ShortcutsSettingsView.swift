@@ -24,6 +24,7 @@ struct ShortcutsSettingsView: View {
   @State private var pendingOverride: PendingOverride?
   @State private var focusedConflictCommandID: String?
   @State private var hoveredRecorderCommandID: String?
+  private let keyTokenResolver = ShortcutKeyTokenResolver()
 
   private var schema: KeybindingSchemaDocument {
     .appDefaultsV1
@@ -496,57 +497,10 @@ struct ShortcutsSettingsView: View {
   }
 
   private func keyToken(for event: NSEvent) -> String? {
-    switch event.keyCode {
-    case 36, 76:
-      return "return"
-    case 123:
-      return "arrow_left"
-    case 124:
-      return "arrow_right"
-    case 125:
-      return "arrow_down"
-    case 126:
-      return "arrow_up"
-    default:
-      break
-    }
-
-    if let physicalDigit = physicalDigitToken(for: event.keyCode) {
-      return physicalDigit
-    }
-
-    guard let scalar = event.charactersIgnoringModifiers?.trimmingCharacters(in: .whitespacesAndNewlines).first else {
-      return nil
-    }
-
-    return String(scalar).lowercased()
-  }
-
-  private func physicalDigitToken(for keyCode: UInt16) -> String? {
-    switch keyCode {
-    case 29, 82:
-      return "digit_0"
-    case 18, 83:
-      return "digit_1"
-    case 19, 84:
-      return "digit_2"
-    case 20, 85:
-      return "digit_3"
-    case 21, 86:
-      return "digit_4"
-    case 23, 87:
-      return "digit_5"
-    case 22, 88:
-      return "digit_6"
-    case 26, 89:
-      return "digit_7"
-    case 28, 91:
-      return "digit_8"
-    case 25, 92:
-      return "digit_9"
-    default:
-      return nil
-    }
+    keyTokenResolver.resolveKeyToken(
+      keyCode: event.keyCode,
+      charactersIgnoringModifiers: event.charactersIgnoringModifiers
+    )
   }
 
   private func applyRecordedBinding(_ binding: Keybinding, to commandID: String) {
