@@ -25,6 +25,19 @@ This file defines the **JSON output contract** for:
 - stdin text
 - `--no-enter`
 
+### Input source semantics
+
+`data.input.source` is **inferred from where the accepted payload came from**. It is not a separate `--source` flag.
+
+- `"argv"`
+  - means the payload came from the positional text argument of `prowl send`
+  - typical trigger: `prowl send "echo hello"`
+  - planned use: short, explicit, human-authored inline sends
+- `"stdin"`
+  - means the payload came from process stdin, usually via a pipe or redirection
+  - typical trigger: `printf 'echo hello\n' | prowl send`
+  - planned use: multiline text, generated text, file/pipe input, or payloads you do not want to expose inline in shell history
+
 ## Success payload
 
 ```json
@@ -97,6 +110,9 @@ This file defines the **JSON output contract** for:
 ## `data.input` fields
 
 - `source`: `"argv"` | `"stdin"`
+  - `"argv"`: accepted payload came from the positional command argument
+  - `"stdin"`: accepted payload came from stdin
+  - the reported value must match the actual accepted payload source
 - `characters`: integer, count of Unicode scalar content accepted for delivery
 - `bytes`: integer, UTF-8 byte count of content accepted for delivery
 - `trailing_enter_sent`: boolean
