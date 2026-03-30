@@ -307,26 +307,26 @@ struct RepositorySettingsView: View {
     VStack(alignment: .leading, spacing: 10) {
       Table(store.userSettings.customCommands, selection: $selectedCustomCommandID) {
         TableColumn("") { command in
-          customCommandRowCell(commandID: command.id, role: .leading) {
+          customCommandRowCell(commandID: command.id) {
             customCommandIconCell(command)
           }
         }
         .width(32)
 
         TableColumn("Name") { command in
-          customCommandRowCell(commandID: command.id, role: .middle) {
+          customCommandRowCell(commandID: command.id) {
             customCommandNameCell(command)
           }
         }
 
         TableColumn("Command") { command in
-          customCommandRowCell(commandID: command.id, role: .middle) {
+          customCommandRowCell(commandID: command.id) {
             customCommandCell(command)
           }
         }
 
         TableColumn("Shortcut") { command in
-          customCommandRowCell(commandID: command.id, role: .trailing) {
+          customCommandRowCell(commandID: command.id) {
             customCommandShortcutCell(command)
           }
         }
@@ -523,64 +523,14 @@ struct RepositorySettingsView: View {
   @ViewBuilder
   private func customCommandRowCell<Content: View>(
     commandID: UserCustomCommand.ID,
-    role: CustomCommandRowRole,
     @ViewBuilder content: () -> Content
   ) -> some View {
     content()
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-      .background {
-        if selectedCustomCommandID == commandID {
-          rowSelectionBackground(role: role)
-            .padding(selectionBackgroundInsets(for: role))
-        }
-      }
       .contentShape(Rectangle())
       .onTapGesture {
         selectCustomCommand(commandID)
       }
-  }
-
-  @ViewBuilder
-  private func rowSelectionBackground(role: CustomCommandRowRole) -> some View {
-    switch role {
-    case .leading:
-      UnevenRoundedRectangle(
-        cornerRadii: .init(
-          topLeading: 8,
-          bottomLeading: 8,
-          bottomTrailing: 0,
-          topTrailing: 0
-        ),
-        style: .continuous
-      )
-      .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.22))
-    case .middle:
-      Rectangle()
-        .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.22))
-    case .trailing:
-      UnevenRoundedRectangle(
-        cornerRadii: .init(
-          topLeading: 0,
-          bottomLeading: 0,
-          bottomTrailing: 8,
-          topTrailing: 8
-        ),
-        style: .continuous
-      )
-      .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.22))
-    }
-  }
-
-  private func selectionBackgroundInsets(for role: CustomCommandRowRole) -> EdgeInsets {
-    let bridge: CGFloat = 8
-    switch role {
-    case .leading:
-      return EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: -bridge)
-    case .middle:
-      return EdgeInsets(top: 0, leading: -bridge, bottom: 0, trailing: -bridge)
-    case .trailing:
-      return EdgeInsets(top: 0, leading: -bridge, bottom: 0, trailing: 0)
-    }
   }
 
   private func selectCustomCommand(_ commandID: UserCustomCommand.ID) {
@@ -1123,11 +1073,6 @@ private struct InlineEditableFieldContainer<Content: View>: View {
   }
 }
 
-private enum CustomCommandRowRole {
-  case leading
-  case middle
-  case trailing
-}
 
 private struct BranchPickerPopover: View {
   @Binding var searchText: String
