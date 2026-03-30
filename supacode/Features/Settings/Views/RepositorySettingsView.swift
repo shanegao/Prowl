@@ -384,7 +384,8 @@ struct RepositorySettingsView: View {
   private func customCommandIconCell(_ command: UserCustomCommand) -> some View {
     if let binding = bindingForCustomCommand(id: command.id) {
       InlineEditableCellButton(
-        isActive: iconPickerCommandID == command.id
+        isActive: iconPickerCommandID == command.id,
+        contentAlignment: .center
       ) {
         selectCustomCommand(command.id)
         toggleIconEditor(for: command.id)
@@ -408,7 +409,9 @@ struct RepositorySettingsView: View {
         iconEditorPopover(for: binding)
       }
     } else {
-      InlineEditableCellButton {
+      InlineEditableCellButton(
+        contentAlignment: .center
+      ) {
         selectCustomCommand(command.id)
       } label: {
         Image(systemName: command.resolvedSystemImage)
@@ -546,7 +549,7 @@ struct RepositorySettingsView: View {
   private var customCommandsHeaderRow: some View {
     HStack(spacing: 8) {
       customCommandHeaderCell("", width: customCommandsIconColumnWidth, alignment: .center)
-      customCommandHeaderCell("Name")
+      customCommandHeaderCell("Name", width: customCommandsNameColumnWidth)
       customCommandHeaderCell("Command")
       customCommandHeaderCell("Shortcut", width: customCommandsShortcutColumnWidth)
     }
@@ -563,7 +566,7 @@ struct RepositorySettingsView: View {
       customCommandRowCell(width: customCommandsIconColumnWidth, alignment: .center) {
         customCommandIconCell(command)
       }
-      customCommandRowCell {
+      customCommandRowCell(width: customCommandsNameColumnWidth) {
         customCommandNameCell(command)
       }
       customCommandRowCell {
@@ -1139,12 +1142,15 @@ struct RepositorySettingsView: View {
 
   private var customCommandsIconColumnWidth: CGFloat { 48 }
 
-  private var customCommandsShortcutColumnWidth: CGFloat { 180 }
+  private var customCommandsNameColumnWidth: CGFloat { 190 }
+
+  private var customCommandsShortcutColumnWidth: CGFloat { 140 }
 }
 
 private struct InlineEditableCellButton<Label: View>: View {
   let isActive: Bool
   let activeColor: Color
+  let contentAlignment: Alignment
   let action: () -> Void
   @ViewBuilder let label: () -> Label
 
@@ -1153,11 +1159,13 @@ private struct InlineEditableCellButton<Label: View>: View {
   init(
     isActive: Bool = false,
     activeColor: Color = .accentColor,
+    contentAlignment: Alignment = .leading,
     action: @escaping () -> Void,
     @ViewBuilder label: @escaping () -> Label
   ) {
     self.isActive = isActive
     self.activeColor = activeColor
+    self.contentAlignment = contentAlignment
     self.action = action
     self.label = label
   }
@@ -1165,13 +1173,13 @@ private struct InlineEditableCellButton<Label: View>: View {
   var body: some View {
     Button(action: action) {
       label()
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: contentAlignment)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(maxWidth: .infinity, alignment: contentAlignment)
     .onHover { hovering in
       isHovering = hovering
     }
