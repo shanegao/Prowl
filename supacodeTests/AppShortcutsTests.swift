@@ -40,6 +40,14 @@ struct AppShortcutsTests {
         "showDiff=\(AppShortcuts.showDiff.display)",
         "openFinder=\(AppShortcuts.openFinder.display)",
         "openRepository=\(AppShortcuts.openRepository.display)",
+        "selectPreviousTerminalTab=\(AppShortcuts.selectPreviousTerminalTab.display)",
+        "selectNextTerminalTab=\(AppShortcuts.selectNextTerminalTab.display)",
+        "selectPreviousTerminalPane=\(AppShortcuts.selectPreviousTerminalPane.display)",
+        "selectNextTerminalPane=\(AppShortcuts.selectNextTerminalPane.display)",
+        "selectTerminalPaneUp=\(AppShortcuts.selectTerminalPaneUp.display)",
+        "selectTerminalPaneDown=\(AppShortcuts.selectTerminalPaneDown.display)",
+        "selectTerminalPaneLeft=\(AppShortcuts.selectTerminalPaneLeft.display)",
+        "selectTerminalPaneRight=\(AppShortcuts.selectTerminalPaneRight.display)",
       ],
       [
         "openSettings=⌘,",
@@ -50,6 +58,14 @@ struct AppShortcutsTests {
         "showDiff=⌘⇧Y",
         "openFinder=⌘O",
         "openRepository=⌘⇧O",
+        "selectPreviousTerminalTab=⌘⇧[",
+        "selectNextTerminalTab=⌘⇧]",
+        "selectPreviousTerminalPane=⌘[",
+        "selectNextTerminalPane=⌘]",
+        "selectTerminalPaneUp=⌘⌥↑",
+        "selectTerminalPaneDown=⌘⌥↓",
+        "selectTerminalPaneLeft=⌘⌥←",
+        "selectTerminalPaneRight=⌘⌥→",
       ]
     )
   }
@@ -161,13 +177,75 @@ struct AppShortcutsTests {
     for argument in [
       "--keybind=super+[=unbind",
       "--keybind=super+]=unbind",
-      "--keybind=super+shift+[=unbind",
-      "--keybind=super+shift+]=unbind",
+      "--keybind=shift+super+[=unbind",
+      "--keybind=shift+super+]=unbind",
+    ] {
+      #expect(arguments.contains(argument))
+    }
+
+    for argument in [
       "--keybind=super+d=unbind",
       "--keybind=super+shift+d=unbind",
     ] {
       #expect(arguments.contains(argument) == false)
     }
+  }
+
+  @Test func ghosttyCLIArgumentsIncludeTerminalNavigationBindings() {
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments
+
+    for argument in [
+      "--keybind=shift+super+[=previous_tab",
+      "--keybind=shift+super+]=next_tab",
+      "--keybind=super+[=goto_split:previous",
+      "--keybind=super+]=goto_split:next",
+      "--keybind=alt+super+arrow_up=goto_split:up",
+      "--keybind=alt+super+arrow_down=goto_split:down",
+      "--keybind=alt+super+arrow_left=goto_split:left",
+      "--keybind=alt+super+arrow_right=goto_split:right",
+    ] {
+      #expect(arguments.contains(argument))
+    }
+  }
+
+  @Test func managedGhosttyActionOverrideRebindsAndUnbindsDefaults() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.selectNextTerminalTab: KeybindingUserOverride(
+          binding: Keybinding(key: "t", modifiers: .init(command: true, shift: true))
+        )
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=shift+super+t=unbind"))
+    #expect(arguments.contains("--keybind=shift+super+]=unbind"))
+    #expect(arguments.contains("--keybind=shift+super+t=next_tab"))
+    #expect(arguments.contains("--keybind=shift+super+]=next_tab") == false)
+  }
+
+  @Test func disabledManagedGhosttyActionKeepsDefaultUnboundWithoutBindingAction() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.selectNextTerminalPane: KeybindingUserOverride(
+          binding: Keybinding(key: "k", modifiers: .init(command: true)),
+          isEnabled: false
+        )
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+]=unbind"))
+    #expect(arguments.contains("--keybind=super+]=goto_split:next") == false)
+    #expect(arguments.contains("--keybind=super+k=goto_split:next") == false)
   }
 
   @Test func resolverOverridePropagatesToMenuPaletteAndGhosttyArgs() {

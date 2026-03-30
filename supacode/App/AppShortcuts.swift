@@ -114,6 +114,14 @@ enum AppShortcuts {
     static let selectWorktree0 = "select_worktree_0"
     static let renameBranch = "rename_branch"
     static let selectAllCanvasCards = "select_all_canvas_cards"
+    static let selectPreviousTerminalTab = "select_previous_terminal_tab"
+    static let selectNextTerminalTab = "select_next_terminal_tab"
+    static let selectPreviousTerminalPane = "select_previous_terminal_pane"
+    static let selectNextTerminalPane = "select_next_terminal_pane"
+    static let selectTerminalPaneUp = "select_terminal_pane_up"
+    static let selectTerminalPaneDown = "select_terminal_pane_down"
+    static let selectTerminalPaneLeft = "select_terminal_pane_left"
+    static let selectTerminalPaneRight = "select_terminal_pane_right"
   }
 
   enum Scope: String {
@@ -194,6 +202,22 @@ enum AppShortcuts {
   static let selectWorktree8 = AppShortcut(key: "8", modifiers: [.control])
   static let selectWorktree9 = AppShortcut(key: "9", modifiers: [.control])
   static let selectWorktree0 = AppShortcut(key: "0", modifiers: [.control])
+  static let selectPreviousTerminalTab = AppShortcut(key: "[", modifiers: [.command, .shift])
+  static let selectNextTerminalTab = AppShortcut(key: "]", modifiers: [.command, .shift])
+  static let selectPreviousTerminalPane = AppShortcut(key: "[", modifiers: [.command])
+  static let selectNextTerminalPane = AppShortcut(key: "]", modifiers: [.command])
+  static let selectTerminalPaneUp = AppShortcut(
+    keyEquivalent: .upArrow, ghosttyKeyName: "arrow_up", modifiers: [.command, .option]
+  )
+  static let selectTerminalPaneDown = AppShortcut(
+    keyEquivalent: .downArrow, ghosttyKeyName: "arrow_down", modifiers: [.command, .option]
+  )
+  static let selectTerminalPaneLeft = AppShortcut(
+    keyEquivalent: .leftArrow, ghosttyKeyName: "arrow_left", modifiers: [.command, .option]
+  )
+  static let selectTerminalPaneRight = AppShortcut(
+    keyEquivalent: .rightArrow, ghosttyKeyName: "arrow_right", modifiers: [.command, .option]
+  )
   static let renameBranch = AppShortcut(key: "m", modifiers: [.command, .shift])
   static let selectAllCanvasCards = AppShortcut(key: "a", modifiers: [.command, .option])
   static let worktreeSelection: [AppShortcut] = [
@@ -231,6 +255,14 @@ enum AppShortcuts {
     .init(actionTitle: "Show Diff", shortcut: showDiff),
     .init(actionTitle: "Open Worktree", shortcut: openFinder),
     .init(actionTitle: "Open Repository", shortcut: openRepository),
+    .init(actionTitle: "Select Previous Tab", shortcut: selectPreviousTerminalTab),
+    .init(actionTitle: "Select Next Tab", shortcut: selectNextTerminalTab),
+    .init(actionTitle: "Select Previous Pane", shortcut: selectPreviousTerminalPane),
+    .init(actionTitle: "Select Next Pane", shortcut: selectNextTerminalPane),
+    .init(actionTitle: "Select Pane Up", shortcut: selectTerminalPaneUp),
+    .init(actionTitle: "Select Pane Down", shortcut: selectTerminalPaneDown),
+    .init(actionTitle: "Select Pane Left", shortcut: selectTerminalPaneLeft),
+    .init(actionTitle: "Select Pane Right", shortcut: selectTerminalPaneRight),
   ]
 
   static let bindings: [Binding] = [
@@ -391,6 +423,54 @@ enum AppShortcuts {
       shortcut: selectWorktree0
     ),
     .init(
+      id: CommandID.selectPreviousTerminalTab,
+      title: "Select Previous Tab",
+      scope: .configurableAppAction,
+      shortcut: selectPreviousTerminalTab
+    ),
+    .init(
+      id: CommandID.selectNextTerminalTab,
+      title: "Select Next Tab",
+      scope: .configurableAppAction,
+      shortcut: selectNextTerminalTab
+    ),
+    .init(
+      id: CommandID.selectPreviousTerminalPane,
+      title: "Select Previous Pane",
+      scope: .configurableAppAction,
+      shortcut: selectPreviousTerminalPane
+    ),
+    .init(
+      id: CommandID.selectNextTerminalPane,
+      title: "Select Next Pane",
+      scope: .configurableAppAction,
+      shortcut: selectNextTerminalPane
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneUp,
+      title: "Select Pane Up",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneUp
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneDown,
+      title: "Select Pane Down",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneDown
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneLeft,
+      title: "Select Pane Left",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneLeft
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneRight,
+      title: "Select Pane Right",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneRight
+    ),
+    .init(
       id: CommandID.commandPalette,
       title: "Command Palette",
       scope: .systemFixedAppAction,
@@ -462,6 +542,27 @@ enum AppShortcuts {
     return resolvedBinding.binding?.appShortcut
   }
 
+  private static let ghosttyManagedActionBindings: [(commandID: String, action: String)] = [
+    (CommandID.selectWorktree1, "goto_tab:1"),
+    (CommandID.selectWorktree2, "goto_tab:2"),
+    (CommandID.selectWorktree3, "goto_tab:3"),
+    (CommandID.selectWorktree4, "goto_tab:4"),
+    (CommandID.selectWorktree5, "goto_tab:5"),
+    (CommandID.selectWorktree6, "goto_tab:6"),
+    (CommandID.selectWorktree7, "goto_tab:7"),
+    (CommandID.selectWorktree8, "goto_tab:8"),
+    (CommandID.selectWorktree9, "goto_tab:9"),
+    (CommandID.selectWorktree0, "goto_tab:10"),
+    (CommandID.selectPreviousTerminalTab, "previous_tab"),
+    (CommandID.selectNextTerminalTab, "next_tab"),
+    (CommandID.selectPreviousTerminalPane, "goto_split:previous"),
+    (CommandID.selectNextTerminalPane, "goto_split:next"),
+    (CommandID.selectTerminalPaneUp, "goto_split:up"),
+    (CommandID.selectTerminalPaneDown, "goto_split:down"),
+    (CommandID.selectTerminalPaneLeft, "goto_split:left"),
+    (CommandID.selectTerminalPaneRight, "goto_split:right"),
+  ]
+
   static var tabSelectionGhosttyKeybindArguments: [String] {
     var result: [String] = []
     for binding in tabSelectionBindings {
@@ -473,19 +574,32 @@ enum AppShortcuts {
 
   static func ghosttyCLIKeybindArguments(from resolvedKeybindings: ResolvedKeybindingMap) -> [String] {
     var unbindArguments: [String] = []
-    for binding in bindings where binding.scope == .configurableAppAction {
-      if let argument = resolvedShortcut(for: binding.id, in: resolvedKeybindings)?.ghosttyUnbindArgument {
+    var seenUnbindArguments = Set<String>()
+    func appendUnbindArgument(_ argument: String) {
+      if seenUnbindArguments.insert(argument).inserted {
         unbindArguments.append(argument)
       }
     }
 
-    var tabArguments: [String] = []
-    for (commandID, binding) in zip(worktreeSelectionCommandIDs, tabSelectionBindings) {
-      guard let shortcut = resolvedShortcut(for: commandID, in: resolvedKeybindings) else { continue }
-      tabArguments.append(contentsOf: shortcut.ghosttyBindArguments(action: "goto_tab:\(binding.tabIndex)"))
+    for binding in bindings where binding.scope == .configurableAppAction {
+      if let argument = resolvedShortcut(for: binding.id, in: resolvedKeybindings)?.ghosttyUnbindArgument {
+        appendUnbindArgument(argument)
+      }
     }
 
-    return unbindArguments + tabArguments
+    for (commandID, _) in ghosttyManagedActionBindings {
+      if let defaultUnbind = binding(for: commandID)?.shortcut.ghosttyUnbindArgument {
+        appendUnbindArgument(defaultUnbind)
+      }
+    }
+
+    var managedActionArguments: [String] = []
+    for (commandID, action) in ghosttyManagedActionBindings {
+      guard let shortcut = resolvedShortcut(for: commandID, in: resolvedKeybindings) else { continue }
+      managedActionArguments.append(contentsOf: shortcut.ghosttyBindArguments(action: action))
+    }
+
+    return unbindArguments + managedActionArguments
   }
 
   static var ghosttyCLIKeybindArguments: [String] {
@@ -519,6 +633,14 @@ enum AppShortcuts {
     selectWorktree8,
     selectWorktree9,
     selectWorktree0,
+    selectPreviousTerminalTab,
+    selectNextTerminalTab,
+    selectPreviousTerminalPane,
+    selectNextTerminalPane,
+    selectTerminalPaneUp,
+    selectTerminalPaneDown,
+    selectTerminalPaneLeft,
+    selectTerminalPaneRight,
   ]
 }
 

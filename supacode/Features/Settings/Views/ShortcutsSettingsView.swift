@@ -491,6 +491,7 @@ private struct PendingOverride: Equatable {
 private enum ShortcutGroup: String, CaseIterable, Identifiable {
   case general
   case navigation
+  case terminal
   case scripts
 
   var id: String {
@@ -503,6 +504,8 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       "General"
     case .navigation:
       "Navigation"
+    case .terminal:
+      "Terminal Tabs & Panes"
     case .scripts:
       "Scripts & Panels"
     }
@@ -530,6 +533,16 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.toggleCanvas,
       AppShortcuts.CommandID.archivedWorktrees:
       return .scripts
+
+    case AppShortcuts.CommandID.selectPreviousTerminalTab,
+      AppShortcuts.CommandID.selectNextTerminalTab,
+      AppShortcuts.CommandID.selectPreviousTerminalPane,
+      AppShortcuts.CommandID.selectNextTerminalPane,
+      AppShortcuts.CommandID.selectTerminalPaneUp,
+      AppShortcuts.CommandID.selectTerminalPaneDown,
+      AppShortcuts.CommandID.selectTerminalPaneLeft,
+      AppShortcuts.CommandID.selectTerminalPaneRight:
+      return .terminal
 
     default:
       return .general
