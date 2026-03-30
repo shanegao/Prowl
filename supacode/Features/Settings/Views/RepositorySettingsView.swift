@@ -320,7 +320,7 @@ struct RepositorySettingsView: View {
           .padding(.horizontal, 6)
           .padding(.vertical, 6)
         }
-        .frame(height: 300)
+        .frame(height: customCommandsListHeight)
       }
       .clipShape(RoundedRectangle(cornerRadius: 8))
 
@@ -1145,6 +1145,8 @@ struct RepositorySettingsView: View {
   private var customCommandsNameColumnWidth: CGFloat { 190 }
 
   private var customCommandsShortcutColumnWidth: CGFloat { 140 }
+
+  private var customCommandsListHeight: CGFloat { 200 }
 }
 
 private struct InlineEditableCellButton<Label: View>: View {
