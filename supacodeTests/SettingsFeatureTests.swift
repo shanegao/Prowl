@@ -302,4 +302,15 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.terminalFontSize == 18)
     #expect(capturedEvents.value.isEmpty)
   }
+
+  @Test(.dependencies) func clearTerminalLayoutSnapshotSendsDelegate() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.terminalLayoutPersistence.clearSnapshot = { true }
+    }
+
+    await store.send(.clearTerminalLayoutSnapshotButtonTapped)
+    await store.receive(\.delegate.terminalLayoutSnapshotCleared)
+  }
 }

@@ -489,6 +489,41 @@ struct RepositoriesFeatureTests {
     #expect(savedEntries.value == expectedSavedEntries)
   }
 
+  @Test func repositoriesLoadedSkipsRepositorySnapshotPersistenceWhileRestoring() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let savedSnapshots = LockIsolated<[[Repository]]>([])
+    var state = RepositoriesFeature.State()
+    state.snapshotPersistencePhase = .restoring
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveRepositorySnapshot = { repositories in
+        savedSnapshots.withValue { $0.append(repositories) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [URL(fileURLWithPath: repoRoot)],
+        animated: false
+      )
+    ) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedSnapshots.value.isEmpty)
+  }
+
   @Test func repositoriesLoadedPersistsRepositorySnapshotOnSuccess() async {
     let repoRoot = "/tmp/repo"
     let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
