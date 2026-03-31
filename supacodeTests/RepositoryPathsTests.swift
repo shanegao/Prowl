@@ -123,7 +123,10 @@ struct SupacodePathsTests {
     let legacyDirectory = tempRoot.appending(path: "legacy", directoryHint: .isDirectory)
     let cacheDirectory = tempRoot.appending(path: "cache", directoryHint: .isDirectory)
     let repositorySnapshot = legacyDirectory.appending(path: "repository-snapshot.json", directoryHint: .notDirectory)
-    let terminalSnapshot = legacyDirectory.appending(path: "terminal-layout-snapshot.json", directoryHint: .notDirectory)
+    let terminalSnapshot = legacyDirectory.appending(
+      path: "terminal-layout-snapshot.json",
+      directoryHint: .notDirectory
+    )
 
     try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
     try Data("repo".utf8).write(to: repositorySnapshot)
@@ -134,8 +137,14 @@ struct SupacodePathsTests {
       cacheDirectory: cacheDirectory
     )
 
-    #expect(FileManager.default.fileExists(atPath: cacheDirectory.appending(path: "repository-snapshot.json").path(percentEncoded: false)))
-    #expect(FileManager.default.fileExists(atPath: cacheDirectory.appending(path: "terminal-layout-snapshot.json").path(percentEncoded: false)))
+    let migratedRepositorySnapshotPath = cacheDirectory
+      .appending(path: "repository-snapshot.json")
+      .path(percentEncoded: false)
+    let migratedTerminalSnapshotPath = cacheDirectory
+      .appending(path: "terminal-layout-snapshot.json")
+      .path(percentEncoded: false)
+    #expect(FileManager.default.fileExists(atPath: migratedRepositorySnapshotPath))
+    #expect(FileManager.default.fileExists(atPath: migratedTerminalSnapshotPath))
     #expect(!FileManager.default.fileExists(atPath: repositorySnapshot.path(percentEncoded: false)))
     #expect(!FileManager.default.fileExists(atPath: terminalSnapshot.path(percentEncoded: false)))
 
