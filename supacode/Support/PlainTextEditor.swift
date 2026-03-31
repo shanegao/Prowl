@@ -5,13 +5,15 @@ struct PlainTextEditor: NSViewRepresentable {
   @Binding var text: String
   var isMonospaced: Bool = false
   var shouldFocus: Bool = false
+  var placeholder: String? = nil
+  var hidesPlaceholderWhenFocused: Bool = true
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: $text)
   }
 
   func makeNSView(context: Context) -> NSScrollView {
-    let textView = NSTextView(frame: .zero)
+    let textView = PlaceholderTextView(frame: .zero)
     textView.delegate = context.coordinator
     textView.drawsBackground = false
     textView.isRichText = false
@@ -29,6 +31,8 @@ struct PlainTextEditor: NSViewRepresentable {
     textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
     textView.textContainer?.widthTracksTextView = true
     textView.string = text
+    textView.placeholder = placeholder
+    textView.hidesPlaceholderWhenFocused = hidesPlaceholderWhenFocused
 
     let scrollView = NSScrollView(frame: .zero)
     scrollView.drawsBackground = false
@@ -41,14 +45,18 @@ struct PlainTextEditor: NSViewRepresentable {
   }
 
   func updateNSView(_ nsView: NSScrollView, context: Context) {
-    guard let textView = nsView.documentView as? NSTextView else { return }
+    guard let textView = nsView.documentView as? PlaceholderTextView else { return }
     if textView.string != text {
       textView.string = text
+      textView.needsDisplay = true
     }
     let updatedFont = editorFont
     if textView.font != updatedFont {
       textView.font = updatedFont
+      textView.needsDisplay = true
     }
+    textView.placeholder = placeholder
+    textView.hidesPlaceholderWhenFocused = hidesPlaceholderWhenFocused
     if shouldFocus,
       textView.window?.firstResponder !== textView
     {
@@ -71,8 +79,73 @@ struct PlainTextEditor: NSViewRepresentable {
     }
 
     func textDidChange(_ notification: Notification) {
-      guard let textView = notification.object as? NSTextView else { return }
+      guard let textView = notification.object as? PlaceholderTextView else { return }
       text = textView.string
+      textView.needsDisplay = true
+    }
+  }
+
+  final class PlaceholderTextView: NSTextView {
+    var placeholder: String? {
+      didSet {
+        needsDisplay = true
+      }
+    }
+    var hidesPlaceholderWhenFocused: Bool = true {
+      didSet {
+        needsDisplay = true
+      }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+      let didBecomeFirstResponder = super.becomeFirstResponder()
+      if didBecomeFirstResponder {
+        needsDisplay = true
+      }
+      return didBecomeFirstResponder
+    }
+
+    override func resignFirstResponder() -> Bool {
+      let didResignFirstResponder = super.resignFirstResponder()
+      if didResignFirstResponder {
+        needsDisplay = true
+      }
+      return didResignFirstResponder
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+      super.draw(dirtyRect)
+      drawPlaceholderIfNeeded()
+    }
+
+    private func drawPlaceholderIfNeeded() {
+      guard let placeholder,
+        !placeholder.isEmpty,
+        string.isEmpty
+      else {
+        return
+      }
+
+      if hidesPlaceholderWhenFocused,
+        window?.firstResponder === self
+      {
+        return
+      }
+
+      let lineFragmentPadding = textContainer?.lineFragmentPadding ?? 0
+      let horizontalInset = textContainerInset.width + lineFragmentPadding
+      let verticalInset = textContainerInset.height - 2
+      let placeholderRect = NSRect(
+        x: bounds.minX + horizontalInset,
+        y: bounds.minY + verticalInset,
+        width: max(0, bounds.width - horizontalInset - textContainerInset.width),
+        height: max(0, bounds.height - verticalInset)
+      )
+      let placeholderAttributes: [NSAttributedString.Key: Any] = [
+        .foregroundColor: NSColor.placeholderTextColor,
+        .font: font ?? NSFont.preferredFont(forTextStyle: .body),
+      ]
+      (placeholder as NSString).draw(in: placeholderRect, withAttributes: placeholderAttributes)
     }
   }
 }

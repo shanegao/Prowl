@@ -167,20 +167,11 @@ struct RepositorySettingsView: View {
 
       if store.showsSetupScriptSettings {
         Section {
-          ZStack(alignment: .topLeading) {
-            if store.settings.setupScript.isEmpty {
-              Text("claude --dangerously-skip-permissions")
-                .foregroundStyle(.secondary)
-                .padding(.leading, plainTextPlaceholderLeading)
-                .padding(.top, plainTextPlaceholderTop)
-                .font(.body)
-                .allowsHitTesting(false)
-            }
-            PlainTextEditor(
-              text: settings.setupScript
-            )
-            .frame(minHeight: 120)
-          }
+          PlainTextEditor(
+            text: settings.setupScript,
+            placeholder: "claude --dangerously-skip-permissions"
+          )
+          .frame(minHeight: 120)
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Setup Script")
@@ -192,20 +183,11 @@ struct RepositorySettingsView: View {
 
       if store.showsArchiveScriptSettings {
         Section {
-          ZStack(alignment: .topLeading) {
-            if store.settings.archiveScript.isEmpty {
-              Text("docker compose down")
-                .foregroundStyle(.secondary)
-                .padding(.leading, plainTextPlaceholderLeading)
-                .padding(.top, plainTextPlaceholderTop)
-                .font(.body)
-                .allowsHitTesting(false)
-            }
-            PlainTextEditor(
-              text: settings.archiveScript
-            )
-            .frame(minHeight: 120)
-          }
+          PlainTextEditor(
+            text: settings.archiveScript,
+            placeholder: "docker compose down"
+          )
+          .frame(minHeight: 120)
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Archive Script")
@@ -217,20 +199,11 @@ struct RepositorySettingsView: View {
 
       if store.showsRunScriptSettings {
         Section {
-          ZStack(alignment: .topLeading) {
-            if store.settings.runScript.isEmpty {
-              Text("npm run dev")
-                .foregroundStyle(.secondary)
-                .padding(.leading, plainTextPlaceholderLeading)
-                .padding(.top, plainTextPlaceholderTop)
-                .font(.body)
-                .allowsHitTesting(false)
-            }
-            PlainTextEditor(
-              text: settings.runScript
-            )
-            .frame(minHeight: 120)
-          }
+          PlainTextEditor(
+            text: settings.runScript,
+            placeholder: "npm run dev"
+          )
+          .frame(minHeight: 120)
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Run Script")
@@ -710,23 +683,13 @@ struct RepositorySettingsView: View {
       }
       .pickerStyle(.segmented)
 
-      ZStack(alignment: .topLeading) {
-        if command.wrappedValue.command.isEmpty {
-          Text(scriptPlaceholder(for: command.wrappedValue.execution))
-            .foregroundStyle(.secondary)
-            .padding(.leading, plainTextPlaceholderLeading)
-            .padding(.top, plainTextPlaceholderTop)
-            .font(.body.monospaced())
-            .allowsHitTesting(false)
-        }
-
-        PlainTextEditor(
-          text: command.command,
-          isMonospaced: true,
-          shouldFocus: true
-        )
-        .frame(height: 140)
-      }
+      PlainTextEditor(
+        text: command.command,
+        isMonospaced: true,
+        shouldFocus: true,
+        placeholder: scriptPlaceholder(for: command.wrappedValue.execution)
+      )
+      .frame(height: 140)
 
       Text(scriptDescription(for: command.wrappedValue.execution))
         .font(.caption)
@@ -1008,14 +971,6 @@ struct RepositorySettingsView: View {
       selectedCustomCommandID = normalizedCommands[normalizedCommands.count - 1].id
     }
     clearRemovedCommandState(using: normalizedCommands)
-  }
-
-  private var plainTextPlaceholderLeading: CGFloat {
-    4
-  }
-
-  private var plainTextPlaceholderTop: CGFloat {
-    -2
   }
 
   private func clearShortcut(for commandID: UserCustomCommand.ID) {
