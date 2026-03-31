@@ -8,6 +8,29 @@ private enum CancelID {
   static let periodicRefresh = "app.periodicRefresh"
 }
 
+private func makeTerminalRestorableWorktrees(from repositories: [Repository]) -> [Worktree] {
+  var worktrees: [Worktree] = []
+  worktrees.reserveCapacity(repositories.reduce(0) { $0 + max(1, $1.worktrees.count) })
+  for repository in repositories {
+    if repository.capabilities.supportsWorktrees {
+      worktrees.append(contentsOf: repository.worktrees)
+      continue
+    }
+    if repository.capabilities.supportsRunnableFolderActions {
+      worktrees.append(
+        Worktree(
+          id: repository.id,
+          name: repository.name,
+          detail: repository.rootURL.path(percentEncoded: false),
+          workingDirectory: repository.rootURL,
+          repositoryRootURL: repository.rootURL
+        )
+      )
+    }
+  }
+  return worktrees
+}
+
 @Reducer
 struct AppFeature {
   @ObservableState
@@ -24,6 +47,7 @@ struct AppFeature {
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
+    var didAttemptTerminalLayoutRestore = false
     @Presents var alert: AlertState<Alert>?
 
     init(
@@ -124,7 +148,12 @@ struct AppFeature {
             .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
           )
         case .inactive, .background:
-          return .cancel(id: CancelID.periodicRefresh)
+          return .merge(
+            .cancel(id: CancelID.periodicRefresh),
+            .run { _ in
+              await terminalClient.send(.saveLayoutSnapshot)
+            }
+          )
         @unknown default:
           return .cancel(id: CancelID.periodicRefresh)
         }
@@ -222,11 +251,19 @@ struct AppFeature {
         let ids = state.repositories.terminalStateIDs.subtracting(archivedIDs)
         let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(from: repositories)
         let worktrees = state.repositories.worktreesForInfoWatcher()
+        let shouldRestoreLayoutOnLaunch =
+          !state.didAttemptTerminalLayoutRestore
+          && state.settings.restoreTerminalLayoutOnLaunch
+          && state.repositories.snapshotPersistencePhase == .active
+        if shouldRestoreLayoutOnLaunch {
+          state.didAttemptTerminalLayoutRestore = true
+        }
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
+        let restorableWorktrees = makeTerminalRestorableWorktrees(from: Array(repositories))
         if case .repository(let repositoryID)? = state.settings.selection,
           !repositories.contains(where: { $0.id == repositoryID })
         {
-          return .merge(
+          var effects: [Effect<Action>] = [
             .send(.settings(.setSelection(.general))),
             .send(.commandPalette(.pruneRecency(recencyIDs))),
             .run { _ in
@@ -234,18 +271,34 @@ struct AppFeature {
             },
             .run { _ in
               await worktreeInfoWatcher.send(.setWorktrees(worktrees))
-            }
-          )
+            },
+          ]
+          if shouldRestoreLayoutOnLaunch {
+            effects.append(
+              .run { _ in
+                await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
+              }
+            )
+          }
+          return .merge(effects)
         }
-        return .merge(
+        var effects: [Effect<Action>] = [
           .send(.commandPalette(.pruneRecency(recencyIDs))),
           .run { _ in
             await terminalClient.send(.prune(ids))
           },
           .run { _ in
             await worktreeInfoWatcher.send(.setWorktrees(worktrees))
-          }
-        )
+          },
+        ]
+        if shouldRestoreLayoutOnLaunch {
+          effects.append(
+            .run { _ in
+              await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
+            }
+          )
+        }
+        return .merge(effects)
 
       case .repositories(.delegate(.openRepositorySettings(let repositoryID))):
         guard state.repositories.repositories.contains(where: { $0.id == repositoryID }) else {

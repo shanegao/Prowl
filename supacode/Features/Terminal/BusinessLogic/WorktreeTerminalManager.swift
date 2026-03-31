@@ -7,6 +7,7 @@ private let terminalLogger = SupaLogger("Terminal")
 @Observable
 final class WorktreeTerminalManager {
   private let runtime: GhosttyRuntime
+  private let layoutPersistence: TerminalLayoutPersistenceClient
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
   private var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
@@ -21,8 +22,13 @@ final class WorktreeTerminalManager {
   /// Used by toggleCanvas to know which worktree to return to.
   var canvasFocusedWorktreeID: Worktree.ID?
 
-  init(runtime: GhosttyRuntime, preferredFontSize: Float32? = nil) {
+  init(
+    runtime: GhosttyRuntime,
+    preferredFontSize: Float32? = nil,
+    layoutPersistence: TerminalLayoutPersistenceClient = .liveValue
+  ) {
     self.runtime = runtime
+    self.layoutPersistence = layoutPersistence
     self.preferredFontSize = preferredFontSize
     baselineFontSize = runtime.defaultFontSize()
   }
@@ -127,6 +133,10 @@ final class WorktreeTerminalManager {
       }
       selectedWorktreeID = id
       terminalLogger.info("Selected worktree \(id ?? "nil")")
+    case .saveLayoutSnapshot:
+      Task { await persistLayoutSnapshot() }
+    case .restoreLayoutSnapshot(let worktrees):
+      Task { await restoreLayoutSnapshot(from: worktrees) }
     default:
       return
     }
@@ -381,5 +391,69 @@ final class WorktreeTerminalManager {
       lastNotificationIndicatorCount = count
       emit(.notificationIndicatorChanged(count: count))
     }
+  }
+
+  func persistLayoutSnapshot() async {
+    guard let payload = makeLayoutSnapshotPayload() else {
+      _ = await layoutPersistence.clearSnapshot()
+      return
+    }
+    _ = await layoutPersistence.saveSnapshot(payload)
+  }
+
+  func restoreLayoutSnapshot(from worktrees: [Worktree]) async {
+    guard let payload = await layoutPersistence.loadSnapshot() else {
+      return
+    }
+    let didRestore = applyLayoutSnapshotPayload(payload, availableWorktrees: worktrees)
+    if !didRestore {
+      _ = await layoutPersistence.clearSnapshot()
+    }
+  }
+
+  private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
+    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
+    guard !activeStates.isEmpty else {
+      return nil
+    }
+
+    var snapshotWorktrees: [TerminalLayoutSnapshotPayload.SnapshotWorktree] = []
+    snapshotWorktrees.reserveCapacity(activeStates.count)
+    for state in activeStates {
+      guard let snapshot = state.makeLayoutSnapshotWorktree() else {
+        return nil
+      }
+      snapshotWorktrees.append(snapshot)
+    }
+    return TerminalLayoutSnapshotPayload(worktrees: snapshotWorktrees)
+  }
+
+  private func applyLayoutSnapshotPayload(
+    _ payload: TerminalLayoutSnapshotPayload,
+    availableWorktrees: [Worktree]
+  ) -> Bool {
+    let worktreeByID = Dictionary(uniqueKeysWithValues: availableWorktrees.map { ($0.id, $0) })
+    var restoredStates: [WorktreeTerminalState] = []
+    restoredStates.reserveCapacity(payload.worktrees.count)
+
+    for snapshot in payload.worktrees {
+      guard let worktree = worktreeByID[snapshot.worktreeID] else {
+        for state in restoredStates {
+          state.closeAllSurfaces()
+        }
+        return false
+      }
+      let state = state(for: worktree)
+      guard state.applyLayoutSnapshot(snapshot) else {
+        state.closeAllSurfaces()
+        for restored in restoredStates {
+          restored.closeAllSurfaces()
+        }
+        return false
+      }
+      restoredStates.append(state)
+    }
+
+    return true
   }
 }

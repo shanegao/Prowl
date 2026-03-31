@@ -26,6 +26,8 @@ struct TerminalClient {
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
     case setCanvasMode(Bool)
     case setSelectedWorktreeID(Worktree.ID?)
+    case saveLayoutSnapshot
+    case restoreLayoutSnapshot(worktrees: [Worktree])
   }
 
   enum Event: Equatable {

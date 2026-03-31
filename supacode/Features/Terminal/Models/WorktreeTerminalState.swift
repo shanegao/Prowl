@@ -554,6 +554,101 @@ final class WorktreeTerminalState {
     tabManager.closeAll()
   }
 
+  func makeLayoutSnapshotWorktree() -> TerminalLayoutSnapshotPayload.SnapshotWorktree? {
+    guard !tabManager.tabs.isEmpty else {
+      return nil
+    }
+
+    var snapshotTabs: [TerminalLayoutSnapshotPayload.SnapshotTab] = []
+    snapshotTabs.reserveCapacity(tabManager.tabs.count)
+    for tab in tabManager.tabs {
+      guard let tree = trees[tab.id], let root = tree.root else {
+        return nil
+      }
+      guard let splitRoot = makeLayoutSnapshotNode(from: root) else {
+        return nil
+      }
+      snapshotTabs.append(
+        TerminalLayoutSnapshotPayload.SnapshotTab(
+          tabID: tab.id.rawValue.uuidString,
+          splitRoot: splitRoot
+        )
+      )
+    }
+
+    return TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: worktree.id,
+      selectedTabID: tabManager.selectedTabId?.rawValue.uuidString,
+      tabs: snapshotTabs
+    )
+  }
+
+  func applyLayoutSnapshot(_ snapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree) -> Bool {
+    guard snapshot.worktreeID == worktree.id else {
+      return false
+    }
+
+    var restoredTabs: [TerminalTabItem] = []
+    var restoredTrees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
+    var restoredFocusedSurfaceIDs: [TerminalTabID: UUID] = [:]
+    var seenTabIDs: Set<TerminalTabID> = []
+
+    for (index, snapshotTab) in snapshot.tabs.enumerated() {
+      guard let tabUUID = UUID(uuidString: snapshotTab.tabID) else {
+        return false
+      }
+      let tabID = TerminalTabID(rawValue: tabUUID)
+      guard seenTabIDs.insert(tabID).inserted else {
+        return false
+      }
+      guard let rootNode = restoreSplitNode(from: snapshotTab.splitRoot, tabID: tabID, isRoot: true) else {
+        closeAllSurfaces()
+        return false
+      }
+      let tree = SplitTree<GhosttySurfaceView>(root: rootNode, zoomed: nil)
+      restoredTrees[tabID] = tree
+      restoredFocusedSurfaceIDs[tabID] = rootNode.leftmostLeaf().id
+      restoredTabs.append(
+        TerminalTabItem(
+          id: tabID,
+          title: "\(worktree.name) \(index + 1)",
+          icon: "terminal"
+        )
+      )
+    }
+
+    let selectedTabID: TerminalTabID?
+    if let selectedTabRaw = snapshot.selectedTabID {
+      guard let selectedUUID = UUID(uuidString: selectedTabRaw) else {
+        closeAllSurfaces()
+        return false
+      }
+      let candidate = TerminalTabID(rawValue: selectedUUID)
+      guard seenTabIDs.contains(candidate) else {
+        closeAllSurfaces()
+        return false
+      }
+      selectedTabID = candidate
+    } else {
+      selectedTabID = restoredTabs.first?.id
+    }
+
+    closeAllSurfaces()
+    trees = restoredTrees
+    focusedSurfaceIdByTab = restoredFocusedSurfaceIDs
+    tabIsRunningById = Dictionary(uniqueKeysWithValues: restoredTabs.map { ($0.id, false) })
+    tabManager.tabs = restoredTabs
+    tabManager.selectedTabId = selectedTabID
+    setRunScriptTabId(nil)
+    if let selectedTabID {
+      focusSurface(in: selectedTabID)
+    } else {
+      lastEmittedFocusSurfaceId = nil
+    }
+    emitTaskStatusIfChanged()
+    return true
+  }
+
   func setNotificationsEnabled(_ enabled: Bool) {
     notificationsEnabled = enabled
     if !enabled {
@@ -907,6 +1002,96 @@ final class WorktreeTerminalState {
 
   /// How recently the user must have typed for us to consider the exit user-initiated.
   static let recentInteractionWindow: Duration = .seconds(3)
+
+  private func makeLayoutSnapshotNode(
+    from node: SplitTree<GhosttySurfaceView>.Node
+  ) -> TerminalLayoutSnapshotPayload.SnapshotSplitNode? {
+    switch node {
+    case .leaf(let view):
+      return .leaf(surfaceID: view.id.uuidString)
+    case .split(let split):
+      guard let left = makeLayoutSnapshotNode(from: split.left) else {
+        return nil
+      }
+      guard let right = makeLayoutSnapshotNode(from: split.right) else {
+        return nil
+      }
+      return .split(
+        direction: snapshotSplitDirection(from: split.direction),
+        ratio: split.ratio,
+        children: [left, right]
+      )
+    }
+  }
+
+  private func restoreSplitNode(
+    from snapshotNode: TerminalLayoutSnapshotPayload.SnapshotSplitNode,
+    tabID: TerminalTabID,
+    isRoot: Bool
+  ) -> SplitTree<GhosttySurfaceView>.Node? {
+    switch snapshotNode.kind {
+    case .leaf:
+      guard let surfaceID = snapshotNode.surfaceID,
+        !surfaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      else {
+        return nil
+      }
+      let context: ghostty_surface_context_e = isRoot ? GHOSTTY_SURFACE_CONTEXT_TAB : GHOSTTY_SURFACE_CONTEXT_SPLIT
+      let view = createSurface(
+        tabId: tabID,
+        initialInput: nil,
+        inheritingFromSurfaceId: nil,
+        context: context
+      )
+      return .leaf(view: view)
+    case .split:
+      guard let direction = snapshotNode.direction else {
+        return nil
+      }
+      guard let ratio = snapshotNode.ratio, ratio > 0, ratio < 1 else {
+        return nil
+      }
+      guard let children = snapshotNode.children, children.count == 2 else {
+        return nil
+      }
+      guard let left = restoreSplitNode(from: children[0], tabID: tabID, isRoot: false) else {
+        return nil
+      }
+      guard let right = restoreSplitNode(from: children[1], tabID: tabID, isRoot: false) else {
+        return nil
+      }
+      return .split(
+        .init(
+          direction: splitDirection(from: direction),
+          ratio: ratio,
+          left: left,
+          right: right
+        )
+      )
+    }
+  }
+
+  private func snapshotSplitDirection(
+    from direction: SplitTree<GhosttySurfaceView>.Direction
+  ) -> TerminalLayoutSnapshotSplitDirection {
+    switch direction {
+    case .horizontal:
+      .horizontal
+    case .vertical:
+      .vertical
+    }
+  }
+
+  private func splitDirection(
+    from direction: TerminalLayoutSnapshotSplitDirection
+  ) -> SplitTree<GhosttySurfaceView>.Direction {
+    switch direction {
+    case .horizontal:
+      .horizontal
+    case .vertical:
+      .vertical
+    }
+  }
 
   func recordKeyInput(forSurfaceID surfaceId: UUID) {
     lastKeyInputTimeBySurface[surfaceId] = .now
