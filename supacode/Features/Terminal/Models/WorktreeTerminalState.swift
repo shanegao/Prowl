@@ -5,6 +5,8 @@ import GhosttyKit
 import Observation
 import Sharing
 
+private let terminalStateLogger = SupaLogger("TerminalState")
+
 @MainActor
 @Observable
 final class WorktreeTerminalState {
@@ -555,7 +557,11 @@ final class WorktreeTerminalState {
   }
 
   func makeLayoutSnapshotWorktree() -> TerminalLayoutSnapshotPayload.SnapshotWorktree? {
+    terminalStateLogger.info(
+      "[LayoutRestore] makeSnapshot: worktree=\(worktree.id) tabs=\(tabManager.tabs.count)"
+    )
     guard !tabManager.tabs.isEmpty else {
+      terminalStateLogger.info("[LayoutRestore] makeSnapshot: no tabs, returning nil")
       return nil
     }
 
@@ -563,9 +569,15 @@ final class WorktreeTerminalState {
     snapshotTabs.reserveCapacity(tabManager.tabs.count)
     for tab in tabManager.tabs {
       guard let tree = trees[tab.id], let root = tree.root else {
+        terminalStateLogger.warning(
+          "[LayoutRestore] makeSnapshot: no tree/root for tab \(tab.id.rawValue.uuidString)"
+        )
         return nil
       }
       guard let splitRoot = makeLayoutSnapshotNode(from: root) else {
+        terminalStateLogger.warning(
+          "[LayoutRestore] makeSnapshot: failed to snapshot split tree for tab \(tab.id.rawValue.uuidString)"
+        )
         return nil
       }
       snapshotTabs.append(
@@ -576,15 +588,24 @@ final class WorktreeTerminalState {
       )
     }
 
-    return TerminalLayoutSnapshotPayload.SnapshotWorktree(
+    let result = TerminalLayoutSnapshotPayload.SnapshotWorktree(
       worktreeID: worktree.id,
       selectedTabID: tabManager.selectedTabId?.rawValue.uuidString,
       tabs: snapshotTabs
     )
+    terminalStateLogger.info(
+      "[LayoutRestore] makeSnapshot: success, \(snapshotTabs.count) tab(s) captured"
+    )
+    return result
   }
 
   func applyLayoutSnapshot(_ snapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree) -> Bool {
+    terminalStateLogger.info(
+      "[LayoutRestore] applySnapshot: worktree=\(worktree.id)"
+        + " snapshotWorktreeID=\(snapshot.worktreeID) tabs=\(snapshot.tabs.count)"
+    )
     guard snapshot.worktreeID == worktree.id else {
+      terminalStateLogger.warning("[LayoutRestore] applySnapshot: worktreeID mismatch")
       return false
     }
 
@@ -595,13 +616,17 @@ final class WorktreeTerminalState {
 
     for (index, snapshotTab) in snapshot.tabs.enumerated() {
       guard let tabUUID = UUID(uuidString: snapshotTab.tabID) else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: invalid tab UUID \(snapshotTab.tabID)")
         return false
       }
       let tabID = TerminalTabID(rawValue: tabUUID)
       guard seenTabIDs.insert(tabID).inserted else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: duplicate tab ID \(snapshotTab.tabID)")
         return false
       }
+      terminalStateLogger.info("[LayoutRestore] applySnapshot: restoring tab[\(index)] id=\(snapshotTab.tabID)")
       guard let rootNode = restoreSplitNode(from: snapshotTab.splitRoot, tabID: tabID, isRoot: true) else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: restoreSplitNode failed for tab[\(index)]")
         closeAllSurfaces()
         return false
       }
@@ -620,11 +645,13 @@ final class WorktreeTerminalState {
     let selectedTabID: TerminalTabID?
     if let selectedTabRaw = snapshot.selectedTabID {
       guard let selectedUUID = UUID(uuidString: selectedTabRaw) else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: invalid selectedTab UUID \(selectedTabRaw)")
         closeAllSurfaces()
         return false
       }
       let candidate = TerminalTabID(rawValue: selectedUUID)
       guard seenTabIDs.contains(candidate) else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: selectedTab not in restored tabs")
         closeAllSurfaces()
         return false
       }
@@ -646,6 +673,10 @@ final class WorktreeTerminalState {
       lastEmittedFocusSurfaceId = nil
     }
     emitTaskStatusIfChanged()
+    terminalStateLogger.info(
+      "[LayoutRestore] applySnapshot: success, restored \(restoredTabs.count) tab(s)"
+        + " selectedTab=\(selectedTabID?.rawValue.uuidString ?? "nil")"
+    )
     return true
   }
 

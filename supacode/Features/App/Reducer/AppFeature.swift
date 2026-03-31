@@ -4,6 +4,8 @@ import Foundation
 import PostHog
 import SwiftUI
 
+private let appLogger = SupaLogger("App")
+
 private enum CancelID {
   static let periodicRefresh = "app.periodicRefresh"
 }
@@ -149,6 +151,7 @@ struct AppFeature {
             .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
           )
         case .inactive, .background:
+          appLogger.info("[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
           return .merge(
             .cancel(id: CancelID.periodicRefresh),
             .run { _ in
@@ -256,11 +259,18 @@ struct AppFeature {
           !state.didAttemptTerminalLayoutRestore
           && state.settings.restoreTerminalLayoutOnLaunch
           && state.repositories.snapshotPersistencePhase == .active
+        appLogger.info(
+          "[LayoutRestore] repositoriesChanged: didAttempt=\(state.didAttemptTerminalLayoutRestore)"
+            + " settingEnabled=\(state.settings.restoreTerminalLayoutOnLaunch)"
+            + " phase=\(String(describing: state.repositories.snapshotPersistencePhase))"
+            + " → shouldRestore=\(shouldRestoreLayoutOnLaunch)"
+        )
         if shouldRestoreLayoutOnLaunch {
           state.didAttemptTerminalLayoutRestore = true
         }
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
         let restorableWorktrees = makeTerminalRestorableWorktrees(from: Array(repositories))
+        appLogger.info("[LayoutRestore] restorableWorktrees count=\(restorableWorktrees.count)")
         if case .repository(let repositoryID)? = state.settings.selection,
           !repositories.contains(where: { $0.id == repositoryID })
         {
