@@ -117,6 +117,7 @@ struct AppFeature {
       case .appLaunched:
         try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
         appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
+        state.repositories.launchRestoreMode = state.launchRestoreMode
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),

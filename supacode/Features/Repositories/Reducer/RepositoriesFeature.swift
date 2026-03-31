@@ -85,6 +85,7 @@ struct RepositoriesFeature {
     var lastFocusedWorktreeID: Worktree.ID?
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
+    var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
     var isRefreshingWorktrees = false
@@ -390,7 +391,9 @@ struct RepositoriesFeature {
 
       case .lastFocusedWorktreeIDLoaded(let lastFocusedWorktreeID):
         state.lastFocusedWorktreeID = lastFocusedWorktreeID
-        state.shouldRestoreLastFocusedWorktree = true
+        if state.launchRestoreMode != .restoreLayout {
+          state.shouldRestoreLastFocusedWorktree = true
+        }
         return .none
 
       case .setOpenPanelPresented(let isPresented):
