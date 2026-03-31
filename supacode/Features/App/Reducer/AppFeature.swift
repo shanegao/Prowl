@@ -154,13 +154,12 @@ struct AppFeature {
             .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
           )
         case .inactive, .background:
-          appLogger.info("[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
-          return .merge(
-            .cancel(id: CancelID.periodicRefresh),
-            .run { _ in
-              await terminalClient.send(.saveLayoutSnapshot)
-            }
-          )
+          var effects: [Effect<Action>] = [.cancel(id: CancelID.periodicRefresh)]
+          if state.settings.restoreTerminalLayoutOnLaunch {
+            appLogger.info("[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
+            effects.append(.run { _ in await terminalClient.send(.saveLayoutSnapshot) })
+          }
+          return .merge(effects)
         @unknown default:
           return .cancel(id: CancelID.periodicRefresh)
         }
