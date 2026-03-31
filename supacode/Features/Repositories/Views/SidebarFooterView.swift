@@ -23,11 +23,12 @@ struct SidebarFooterView: View {
           }
         }
       }
-      .help(AppShortcuts.helpText(
-        title: "Add Repository",
-        commandID: AppShortcuts.CommandID.openRepository,
-        in: resolvedKeybindings
-      ))
+      .help(
+        AppShortcuts.helpText(
+          title: "Add Repository",
+          commandID: AppShortcuts.CommandID.openRepository,
+          in: resolvedKeybindings
+        ))
       Spacer()
       Menu {
         Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {
@@ -49,11 +50,13 @@ struct SidebarFooterView: View {
           .symbolEffect(.rotate, options: .repeating, isActive: store.state.isRefreshingWorktrees)
           .accessibilityLabel("Refresh Worktrees")
       }
-      .help(AppShortcuts.helpText(
-        title: "Refresh Worktrees",
-        commandID: AppShortcuts.CommandID.refreshWorktrees,
-        in: resolvedKeybindings
-      ))
+      .help(
+        AppShortcuts.helpText(
+          title: "Refresh Worktrees",
+          commandID: AppShortcuts.CommandID.refreshWorktrees,
+          in: resolvedKeybindings
+        )
+      )
       .disabled(store.state.repositoryRoots.isEmpty && !store.state.isRefreshingWorktrees)
       Button {
         store.send(.selectArchivedWorktrees)
@@ -61,20 +64,22 @@ struct SidebarFooterView: View {
         Image(systemName: "archivebox")
           .accessibilityLabel("Archived Worktrees")
       }
-      .help(AppShortcuts.helpText(
-        title: "Archived Worktrees",
-        commandID: AppShortcuts.CommandID.archivedWorktrees,
-        in: resolvedKeybindings
-      ))
+      .help(
+        AppShortcuts.helpText(
+          title: "Archived Worktrees",
+          commandID: AppShortcuts.CommandID.archivedWorktrees,
+          in: resolvedKeybindings
+        ))
       Button("Settings", systemImage: "gearshape") {
         SettingsWindowManager.shared.show()
       }
       .labelStyle(.iconOnly)
-      .help(AppShortcuts.helpText(
-        title: "Settings",
-        commandID: AppShortcuts.CommandID.openSettings,
-        in: resolvedKeybindings
-      ))
+      .help(
+        AppShortcuts.helpText(
+          title: "Settings",
+          commandID: AppShortcuts.CommandID.openSettings,
+          in: resolvedKeybindings
+        ))
     }
     .buttonStyle(.plain)
     .font(.callout)

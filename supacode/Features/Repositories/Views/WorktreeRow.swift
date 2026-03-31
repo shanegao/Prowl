@@ -91,11 +91,12 @@ struct WorktreeRow: View {
             )
           }
           .buttonStyle(.plain)
-          .help(AppShortcuts.helpText(
-            title: "Show Diff",
-            commandID: AppShortcuts.CommandID.showDiff,
-            in: resolvedKeybindings
-          ))
+          .help(
+            AppShortcuts.helpText(
+              title: "Show Diff",
+              commandID: AppShortcuts.CommandID.showDiff,
+              in: resolvedKeybindings
+            ))
         }
         if isHovered {
           Button {

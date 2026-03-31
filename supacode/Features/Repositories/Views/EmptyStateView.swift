@@ -14,19 +14,22 @@ struct EmptyStateView: View {
       Text("Open a repository or folder")
         .font(.headline)
       Text(promptText(shortcutDisplay: shortcutDisplay))
-      .font(.subheadline)
-      .foregroundStyle(.secondary)
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
       Button("Open Repository...") {
         store.send(.setOpenPanelPresented(true))
       }
-      .modifier(KeyboardShortcutModifier(
-        shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openRepository)
-      ))
-      .help(AppShortcuts.helpText(
-        title: "Open Repository",
-        commandID: AppShortcuts.CommandID.openRepository,
-        in: resolvedKeybindings
-      ))
+      .modifier(
+        KeyboardShortcutModifier(
+          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openRepository)
+        )
+      )
+      .help(
+        AppShortcuts.helpText(
+          title: "Open Repository",
+          commandID: AppShortcuts.CommandID.openRepository,
+          in: resolvedKeybindings
+        ))
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor))

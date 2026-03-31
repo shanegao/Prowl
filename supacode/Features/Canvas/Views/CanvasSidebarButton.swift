@@ -26,10 +26,11 @@ struct CanvasSidebarButton: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 6)
     .background(isSelected ? Color.accentColor.opacity(0.15) : .clear, in: .rect(cornerRadius: 6))
-    .help(AppShortcuts.helpText(
-      title: "Canvas",
-      commandID: AppShortcuts.CommandID.toggleCanvas,
-      in: resolvedKeybindings
-    ))
+    .help(
+      AppShortcuts.helpText(
+        title: "Canvas",
+        commandID: AppShortcuts.CommandID.toggleCanvas,
+        in: resolvedKeybindings
+      ))
   }
 }

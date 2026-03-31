@@ -93,7 +93,7 @@ struct ShortcutResetPlannerTests {
 
     let overrides = KeybindingUserOverrideStore(
       overrides: [
-        commandOne: KeybindingUserOverride(binding: custom),
+        commandOne: KeybindingUserOverride(binding: custom)
       ]
     )
 

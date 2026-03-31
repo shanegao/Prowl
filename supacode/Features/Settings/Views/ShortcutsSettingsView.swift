@@ -538,13 +538,15 @@ struct ShortcutsSettingsView: View {
     binding: Keybinding,
     policy: KeybindingConflictPolicy
   ) -> ShortcutConflict? {
-    guard let existingCommandID = ShortcutConflictDetector.firstConflictCommandID(
-      commandID: commandID,
-      binding: binding,
-      policy: policy,
-      schema: .appResolverSchema(),
-      userOverrides: store.keybindingUserOverrides
-    ) else {
+    guard
+      let existingCommandID = ShortcutConflictDetector.firstConflictCommandID(
+        commandID: commandID,
+        binding: binding,
+        policy: policy,
+        schema: .appResolverSchema(),
+        userOverrides: store.keybindingUserOverrides
+      )
+    else {
       return nil
     }
 
@@ -846,7 +848,8 @@ enum ShortcutResetPlanner {
       return []
     }
 
-    return editableCommandIDs
+    return
+      editableCommandIDs
       .filter {
         $0 != commandID
           && !excludedCommandIDs.contains($0)

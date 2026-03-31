@@ -38,11 +38,12 @@ struct DiffWindowContentView: View {
           Image(systemName: "sidebar.left")
             .accessibilityLabel("Toggle Sidebar")
         }
-        .help(AppShortcuts.helpText(
-          title: "Toggle Sidebar",
-          commandID: AppShortcuts.CommandID.toggleLeftSidebar,
-          in: resolvedKeybindings
-        ))
+        .help(
+          AppShortcuts.helpText(
+            title: "Toggle Sidebar",
+            commandID: AppShortcuts.CommandID.toggleLeftSidebar,
+            in: resolvedKeybindings
+          ))
       }
       ToolbarItem(id: "diffStyle", placement: .primaryAction) {
         Picker("Diff Style", selection: $diffStyleRaw) {

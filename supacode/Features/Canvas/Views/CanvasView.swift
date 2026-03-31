@@ -432,11 +432,12 @@ struct CanvasView: View {
           .accessibilityLabel("Select All")
       }
       .buttonStyle(.bordered)
-      .help(AppShortcuts.helpText(
-        title: "Select all cards for broadcast",
-        commandID: AppShortcuts.CommandID.selectAllCanvasCards,
-        in: resolvedKeybindings
-      ))
+      .help(
+        AppShortcuts.helpText(
+          title: "Select all cards for broadcast",
+          commandID: AppShortcuts.CommandID.selectAllCanvasCards,
+          in: resolvedKeybindings
+        ))
 
       Button {
         withAnimation(.easeInOut(duration: 0.2)) {

@@ -99,6 +99,110 @@ struct AppFeatureCustomCommandTests {
     #expect(sent.value.isEmpty)
   }
 
+  @Test(.dependencies) func supportsCustomCommandBeyondLegacyThreeItemLimit() async {
+    let worktree = makeWorktree()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(worktree: worktree),
+      settings: SettingsFeature.State()
+    )
+    state.selectedCustomCommands = [
+      UserCustomCommand(
+        title: "One",
+        systemImage: "1.circle",
+        command: "echo one",
+        execution: .shellScript,
+        shortcut: nil,
+      ),
+      UserCustomCommand(
+        title: "Two",
+        systemImage: "2.circle",
+        command: "echo two",
+        execution: .shellScript,
+        shortcut: nil,
+      ),
+      UserCustomCommand(
+        title: "Three",
+        systemImage: "3.circle",
+        command: "echo three",
+        execution: .shellScript,
+        shortcut: nil,
+      ),
+      UserCustomCommand(
+        title: "Four",
+        systemImage: "4.circle",
+        command: "echo four",
+        execution: .shellScript,
+        shortcut: nil,
+      ),
+      UserCustomCommand(
+        title: "Five",
+        systemImage: "5.circle",
+        command: "echo five",
+        execution: .shellScript,
+        shortcut: nil,
+      ),
+    ]
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.runCustomCommand(4))
+    await store.finish()
+
+    #expect(
+      sent.value == [
+        .createTabWithInput(worktree, input: "echo five", runSetupScriptIfNew: false)
+      ],
+    )
+  }
+
+  @Test(.dependencies) func loadingUserSettingsKeepsCustomCommandsWithoutScript() async {
+    let worktree = makeWorktree()
+    let settings = UserRepositorySettings(
+      customCommands: [
+        UserCustomCommand(
+          title: "Empty",
+          systemImage: "sparkles",
+          command: "",
+          execution: .shellScript,
+          shortcut: nil
+        ),
+        UserCustomCommand(
+          title: "Runnable",
+          systemImage: "terminal",
+          command: "echo hello",
+          execution: .shellScript,
+          shortcut: nil
+        ),
+      ]
+    )
+
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: makeRepositoriesState(worktree: worktree),
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.worktreeUserSettingsLoaded(settings, worktreeID: worktree.id)) {
+      $0.selectedCustomCommands = settings.customCommands
+      $0.resolvedKeybindings = KeybindingResolver.resolve(
+        schema: .appResolverSchema(customCommands: settings.customCommands),
+        migratedOverrides: LegacyCustomCommandShortcutMigration
+          .migrate(commands: settings.customCommands)
+          .overrides
+      )
+    }
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",

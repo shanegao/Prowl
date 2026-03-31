@@ -148,4 +148,84 @@ struct RepositorySettingsFeatureTests {
     let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: savedData)
     #expect(decoded.customCommands.first?.shortcut == conflicted.customCommands.first?.shortcut)
   }
+
+  @Test(.dependencies) func taskLoadsLatestUserSettingsAfterAsyncGitProbe() async throws {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
+    let settingsStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let gitProbeGate = LockIsolated<CheckedContinuation<Void, Never>?>(nil)
+
+    let initialUserSettings = UserRepositorySettings(
+      customCommands: [.default(index: 0)]
+    )
+    let updatedUserSettings = UserRepositorySettings(
+      customCommands: [
+        UserCustomCommand(
+          title: "Updated",
+          systemImage: "terminal",
+          command: "echo updated",
+          execution: .shellScript,
+          shortcut: nil
+        ),
+      ]
+    )
+
+    let initialData = try #require(try? JSONEncoder().encode(initialUserSettings))
+    try #require(
+      try? localStorage.save(
+        initialData,
+        at: SupacodePaths.userRepositorySettingsURL(for: rootURL)
+      )
+    )
+
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        rootURL: rootURL,
+        repositoryKind: .git,
+        settings: .default,
+        userSettings: .default
+      )
+    ) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+      $0.gitClient.isBareRepository = { _ in
+        await withCheckedContinuation { continuation in
+          gitProbeGate.setValue(continuation)
+        }
+        return false
+      }
+      $0.gitClient.branchRefs = { _ in [] }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+    }
+
+    await store.send(.task)
+
+    for _ in 0..<50 {
+      if gitProbeGate.value != nil {
+        break
+      }
+      await Task.yield()
+    }
+    #expect(gitProbeGate.value != nil)
+
+    await store.send(.binding(.set(\.userSettings, updatedUserSettings))) {
+      $0.userSettings = updatedUserSettings
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    let continuation = try #require(gitProbeGate.value)
+    continuation.resume()
+
+    await store.receive(\.settingsLoaded, timeout: .seconds(5))
+    await store.receive(\.branchDataLoaded) {
+      $0.defaultWorktreeBaseRef = "origin/main"
+      $0.branchOptions = ["origin/main"]
+      $0.isBranchDataLoaded = true
+    }
+    #expect(store.state.userSettings == updatedUserSettings)
+  }
 }

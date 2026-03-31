@@ -487,7 +487,8 @@ final class GhosttyRuntime {
       entries: entries,
       previousEntries: appKeybindOverrideEntries
     )
-    let contents = overrideEntries
+    let contents =
+      overrideEntries
       .map { "keybind = \($0)" }
       .joined(separator: "\n")
     guard contents != appKeybindOverrideContents else { return }

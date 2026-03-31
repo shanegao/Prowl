@@ -18,14 +18,17 @@ struct WorktreeDetailTitleView: View {
         } label: {
           labelContent
         }
-        .help(AppShortcuts.helpText(
-          title: "Rename branch",
-          commandID: AppShortcuts.CommandID.renameBranch,
-          in: resolvedKeybindings
-        ))
-        .modifier(KeyboardShortcutModifier(
-          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.renameBranch)
-        ))
+        .help(
+          AppShortcuts.helpText(
+            title: "Rename branch",
+            commandID: AppShortcuts.CommandID.renameBranch,
+            in: resolvedKeybindings
+          )
+        )
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.renameBranch)
+          ))
       } else {
         labelContent
       }

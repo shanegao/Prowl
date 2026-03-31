@@ -123,11 +123,13 @@ struct RepositorySectionView: View {
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
-          .help(AppShortcuts.helpText(
-            title: "New Worktree",
-            commandID: AppShortcuts.CommandID.newWorktree,
-            in: resolvedKeybindings
-          ))
+          .help(
+            AppShortcuts.helpText(
+              title: "New Worktree",
+              commandID: AppShortcuts.CommandID.newWorktree,
+              in: resolvedKeybindings
+            )
+          )
           .disabled(isRemovingRepository)
         }
         if repository.capabilities.supportsWorktrees {

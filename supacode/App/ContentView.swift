@@ -164,20 +164,12 @@ private struct RunScriptPromptView: View {
           .foregroundStyle(.secondary)
       }
 
-      ZStack(alignment: .topLeading) {
-        PlainTextEditor(
-          text: $script,
-          isMonospaced: true
-        )
-        .frame(minHeight: 160)
-        if script.isEmpty {
-          Text("npm run dev")
-            .foregroundStyle(.secondary)
-            .padding(.leading, 6)
-            .font(.body.monospaced())
-            .allowsHitTesting(false)
-        }
-      }
+      PlainTextEditor(
+        text: $script,
+        isMonospaced: true,
+        placeholder: "npm run dev"
+      )
+      .frame(minHeight: 160)
 
       HStack {
         Spacer()
