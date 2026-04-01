@@ -433,14 +433,14 @@ final class WorktreeTerminalManager {
       "[LayoutRestore] restore: loaded snapshot with \(payload.worktrees.count) worktree(s),"
         + " available worktrees=\(worktrees.count)"
     )
-    for (i, sw) in payload.worktrees.enumerated() {
+    for (index, snapshot) in payload.worktrees.enumerated() {
       terminalLogger.info(
-        "[LayoutRestore] restore: snapshot[\(i)] worktreeID=\(sw.worktreeID)"
-          + " tabs=\(sw.tabs.count) selectedTab=\(sw.selectedTabID ?? "nil")"
+        "[LayoutRestore] restore: snapshot[\(index)] worktreeID=\(snapshot.worktreeID)"
+          + " tabs=\(snapshot.tabs.count) selectedTab=\(snapshot.selectedTabID ?? "nil")"
       )
     }
-    for (i, w) in worktrees.enumerated() {
-      terminalLogger.info("[LayoutRestore] restore: available[\(i)] id=\(w.id) name=\(w.name)")
+    for (index, worktree) in worktrees.enumerated() {
+      terminalLogger.info("[LayoutRestore] restore: available[\(index)] id=\(worktree.id) name=\(worktree.name)")
     }
     let didRestore = applyLayoutSnapshotPayload(payload, availableWorktrees: worktrees)
     terminalLogger.info("[LayoutRestore] restore: applyResult=\(didRestore)")

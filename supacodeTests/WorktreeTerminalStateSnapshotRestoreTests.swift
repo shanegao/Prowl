@@ -3,7 +3,7 @@ import Testing
 
 @testable import supacode
 
-struct WorktreeTerminalStateSnapshotRestoreTests {
+struct SnapshotRestoreTests {
   @Test func resolveSnapshotWorkingDirectoryAcceptsAbsolutePathWithinWorktree() throws {
     let fileManager = FileManager.default
     let worktreeRoot = try makeTemporaryDirectory(fileManager: fileManager)
