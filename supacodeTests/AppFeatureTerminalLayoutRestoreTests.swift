@@ -131,7 +131,9 @@ struct AppFeatureTerminalLayoutRestoreTests {
 
   @Test(.dependencies) func scenePhaseInactiveSavesLayoutSnapshot() async {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
-    let store = TestStore(initialState: AppFeature.State()) {
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = true
+    let store = TestStore(initialState: AppFeature.State(settings: settings)) {
       AppFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in

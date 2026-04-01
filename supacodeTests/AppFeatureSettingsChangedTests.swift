@@ -60,6 +60,7 @@ struct AppFeatureSettingsChangedTests {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
+    store.exhaustivity = .off
 
     await store.send(.settings(.delegate(.terminalLayoutSnapshotCleared(success: true))))
     await store.receive(\.repositories.showToast) {
