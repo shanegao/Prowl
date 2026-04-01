@@ -770,19 +770,29 @@ final class WorktreeTerminalState {
 
   private func setupScriptInput(setupScript: String?) -> String? {
     guard pendingSetupScript, let script = setupScript else { return nil }
-    let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      return nil
-    }
-    return worktree.scriptEnvironmentExportPrefix + trimmed + "\n"
+    return formatCommandInput(script)
+  }
+
+  private func formatCommandInput(_ script: String) -> String? {
+    makeCommandInput(
+      script: script,
+      environmentExportPrefix: worktree.scriptEnvironmentExportPrefix
+    )
   }
 
   private func runScriptInput(_ script: String) -> String? {
-    let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      return nil
-    }
-    return worktree.scriptEnvironmentExportPrefix + trimmed + "\n"
+    formatCommandInput(script)
+  }
+
+  // Appends a bare `exit`, which preserves the most recent command status in
+  // bash, zsh, and fish while remaining portable across those shells.
+  // Without this, the interactive shell stays alive after the script finishes
+  // and GHOSTTY_ACTION_SHOW_CHILD_EXITED never fires for completion detection.
+  private func blockingScriptInput(_ script: String) -> String? {
+    makeBlockingScriptInput(
+      script: script,
+      environmentExportPrefix: worktree.scriptEnvironmentExportPrefix
+    )
   }
 
   private func setRunScriptTabId(_ tabId: TerminalTabID?) {
@@ -1445,4 +1455,26 @@ final class WorktreeTerminalState {
     }
     return maxIndex + 1
   }
+}
+
+nonisolated func makeCommandInput(
+  script: String,
+  environmentExportPrefix: String
+) -> String? {
+  let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
+  guard !trimmed.isEmpty else { return nil }
+  return environmentExportPrefix + trimmed + "\n"
+}
+
+nonisolated func makeBlockingScriptInput(
+  script: String,
+  environmentExportPrefix: String
+) -> String? {
+  guard let input = makeCommandInput(
+    script: script,
+    environmentExportPrefix: environmentExportPrefix
+  ) else {
+    return nil
+  }
+  return input + "exit\n"
 }
