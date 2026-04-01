@@ -170,9 +170,27 @@ struct RepositorySettingsView: View {
           }
         }
       }
+      Section {
+        ScriptEnvironmentRow(
+          name: "SUPACODE_WORKTREE_PATH",
+          description: "Path to the active worktree."
+        )
+        ScriptEnvironmentRow(
+          name: "SUPACODE_ROOT_PATH",
+          value: store.rootURL.path(percentEncoded: false),
+          description: "Path to the repository root."
+        )
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Environment Variables")
+          Text("Exported in all scripts below")
+            .foregroundStyle(.secondary)
+        }
+      }
 
       if store.showsSetupScriptSettings {
         Section {
+          ZStack(alignment: .topLeading) {
           PlainTextEditor(
             text: settings.setupScript,
             placeholder: "claude --dangerously-skip-permissions"
@@ -1345,6 +1363,7 @@ private struct BranchPickerPopover: View {
   }
 }
 
+<<<<<<< HEAD
 private struct CustomCommandShortcutConflict: Equatable {
   let newCommandID: UserCustomCommand.ID
   let newCommandTitle: String
@@ -1356,4 +1375,24 @@ private struct CustomCommandShortcutConflict: Equatable {
 private struct PendingCustomShortcut: Equatable {
   let commandID: UserCustomCommand.ID
   let shortcut: UserCustomShortcut
+}
+
+private struct ScriptEnvironmentRow: View {
+  let name: String
+  var value: String?
+  let description: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(name)
+        .monospaced()
+      if let value {
+        Text(value)
+          .foregroundStyle(.secondary)
+          .monospaced()
+      }
+      Text(description)
+        .foregroundStyle(.tertiary)
+    }
+  }
 }

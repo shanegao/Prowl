@@ -774,10 +774,7 @@ final class WorktreeTerminalState {
     if trimmed.isEmpty {
       return nil
     }
-    if script.hasSuffix("\n") {
-      return script
-    }
-    return "\(script)\n"
+    return worktree.scriptEnvironmentExportPrefix + trimmed + "\n"
   }
 
   private func runScriptInput(_ script: String) -> String? {
@@ -785,10 +782,7 @@ final class WorktreeTerminalState {
     if trimmed.isEmpty {
       return nil
     }
-    if script.hasSuffix("\n") {
-      return script
-    }
-    return "\(script)\n"
+    return worktree.scriptEnvironmentExportPrefix + trimmed + "\n"
   }
 
   private func setRunScriptTabId(_ tabId: TerminalTabID?) {
