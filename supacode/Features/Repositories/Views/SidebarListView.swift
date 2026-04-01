@@ -32,7 +32,7 @@ struct SidebarListView: View {
         return nextSelections
       },
       set: { newValue in
-        var nextSelections = newValue
+        let nextSelections = newValue
         let repositorySelections: [Repository.ID] = nextSelections.compactMap { selection in
           guard case .repository(let repositoryID) = selection else { return nil }
           return repositoryID
