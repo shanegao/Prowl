@@ -3,18 +3,26 @@
 
 import Foundation
 
+/// Top-level response wrapper.
+/// For v1, `data` is left as raw JSON bytes so each command can define
+/// its own strongly-typed success payload without introducing `Any`.
 public struct CommandResponse: Codable, Sendable {
   public let ok: Bool
   public let command: String
   public let schemaVersion: String
-  public let data: AnyCodable?
+
+  /// Raw JSON data payload (success case). Consumers decode into
+  /// command-specific types. Nil when `ok == false`.
+  public let data: RawJSON?
+
+  /// Error payload (failure case). Nil when `ok == true`.
   public let error: CommandError?
 
   public init(
     ok: Bool,
     command: String,
     schemaVersion: String,
-    data: AnyCodable? = nil,
+    data: RawJSON? = nil,
     error: CommandError? = nil
   ) {
     self.ok = ok
@@ -36,73 +44,103 @@ public struct CommandResponse: Codable, Sendable {
 public struct CommandError: Codable, Sendable {
   public let code: String
   public let message: String
-  public let details: AnyCodable?
 
-  public init(code: String, message: String, details: AnyCodable? = nil) {
+  public init(code: String, message: String) {
     self.code = code
     self.message = message
-    self.details = details
   }
 }
 
-// MARK: - AnyCodable (lightweight type-erased Codable wrapper)
+// MARK: - RawJSON
 
-public struct AnyCodable: Codable, Sendable {
-  public let value: Any
+/// A type-safe wrapper around raw JSON bytes.
+/// Preserves the original JSON without round-tripping through `Any`.
+/// Fully `Sendable` because it only holds `Data`.
+public struct RawJSON: Codable, Sendable {
+  public let bytes: Data
 
-  public init(_ value: Any) {
-    self.value = value
+  public init(_ bytes: Data) {
+    self.bytes = bytes
+  }
+
+  /// Create from an Encodable value.
+  public init<T: Encodable>(encoding value: T) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    self.bytes = try encoder.encode(value)
   }
 
   public init(from decoder: Decoder) throws {
+    // When decoding as part of a larger structure, capture the raw JSON.
+    // This works by re-encoding the decoded JSON value container.
+    let container = try decoder.singleValueContainer()
+    // Decode as a generic JSON value, then re-encode to bytes.
+    let jsonValue = try container.decode(JSONValue.self)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    self.bytes = try encoder.encode(jsonValue)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    // Decode bytes back to JSONValue, then encode inline.
+    let decoder = JSONDecoder()
+    let jsonValue = try decoder.decode(JSONValue.self, from: bytes)
+    var container = encoder.singleValueContainer()
+    try container.encode(jsonValue)
+  }
+
+  /// Decode the raw JSON into a specific type.
+  public func decode<T: Decodable>(as type: T.Type) throws -> T {
+    try JSONDecoder().decode(type, from: bytes)
+  }
+}
+
+// MARK: - JSONValue (internal helper for RawJSON round-tripping)
+
+/// A simple recursive JSON value type that is fully Codable and Sendable.
+enum JSONValue: Codable, Sendable {
+  case null
+  case bool(Bool)
+  case int(Int)
+  case double(Double)
+  case string(String)
+  case array([JSONValue])
+  case object([String: JSONValue])
+
+  init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
     if container.decodeNil() {
-      value = NSNull()
-    } else if let bool = try? container.decode(Bool.self) {
-      value = bool
-    } else if let int = try? container.decode(Int.self) {
-      value = int
-    } else if let double = try? container.decode(Double.self) {
-      value = double
-    } else if let string = try? container.decode(String.self) {
-      value = string
-    } else if let array = try? container.decode([AnyCodable].self) {
-      value = array.map(\.value)
-    } else if let dict = try? container.decode([String: AnyCodable].self) {
-      value = dict.mapValues(\.value)
+      self = .null
+    } else if let b = try? container.decode(Bool.self) {
+      self = .bool(b)
+    } else if let i = try? container.decode(Int.self) {
+      self = .int(i)
+    } else if let d = try? container.decode(Double.self) {
+      self = .double(d)
+    } else if let s = try? container.decode(String.self) {
+      self = .string(s)
+    } else if let a = try? container.decode([JSONValue].self) {
+      self = .array(a)
+    } else if let o = try? container.decode([String: JSONValue].self) {
+      self = .object(o)
     } else {
       throw DecodingError.dataCorruptedError(
         in: container,
-        debugDescription: "Unsupported AnyCodable type"
+        debugDescription: "Unsupported JSON value"
       )
     }
   }
 
-  public func encode(to encoder: Encoder) throws {
+  func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
-    switch value {
-    case is NSNull:
-      try container.encodeNil()
-    case let bool as Bool:
-      try container.encode(bool)
-    case let int as Int:
-      try container.encode(int)
-    case let double as Double:
-      try container.encode(double)
-    case let string as String:
-      try container.encode(string)
-    case let array as [Any]:
-      try container.encode(array.map { AnyCodable($0) })
-    case let dict as [String: Any]:
-      try container.encode(dict.mapValues { AnyCodable($0) })
-    default:
-      throw EncodingError.invalidValue(
-        value,
-        EncodingError.Context(
-          codingPath: container.codingPath,
-          debugDescription: "Unsupported AnyCodable type: \(type(of: value))"
-        )
-      )
+    switch self {
+    case .null: try container.encodeNil()
+    case .bool(let b): try container.encode(b)
+    case .int(let i): try container.encode(i)
+    case .double(let d): try container.encode(d)
+    case .string(let s): try container.encode(s)
+    case .array(let a): try container.encode(a)
+    case .object(let o): try container.encode(o)
     }
   }
 }
