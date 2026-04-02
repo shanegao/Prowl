@@ -40,11 +40,47 @@ enum OutputRenderer {
 
   private static func renderText(_ response: CommandResponse) {
     if response.ok {
+      if response.command == "list",
+         let data = response.data,
+         let payload = try? data.decode(as: ListCommandPayload.self)
+      {
+        print(renderList(payload))
+        return
+      }
+
       print("ok: \(response.command)")
-    } else if let error = response.error {
+      return
+    }
+
+    if let error = response.error {
       FileHandle.standardError.write(
         Data("error [\(error.code)]: \(error.message)\n".utf8)
       )
     }
+  }
+
+  private static func renderList(_ payload: ListCommandPayload) -> String {
+    guard !payload.items.isEmpty else {
+      return "No panes found."
+    }
+
+    var lines: [String] = []
+    lines.reserveCapacity(payload.items.count * 2)
+
+    for item in payload.items {
+      let status = item.task.status?.rawValue ?? "n/a"
+      let focused = item.pane.focused ? "focused" : "-"
+      lines.append(
+        "\(item.worktree.name) | \(item.tab.title) | \(item.pane.title) | \(status) | \(focused)"
+      )
+
+      var detail = "  worktree=\(item.worktree.id) tab=\(item.tab.id) pane=\(item.pane.id)"
+      if let cwd = item.pane.cwd {
+        detail += " cwd=\(cwd)"
+      }
+      lines.append(detail)
+    }
+
+    return lines.joined(separator: "\n")
   }
 }

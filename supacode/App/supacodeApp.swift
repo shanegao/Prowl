@@ -176,7 +176,13 @@ struct SupacodeApp: App {
     }
     _store = State(initialValue: appStore)
 
-    let cliRouter = CLICommandRouter()
+    let listHandler = ListCommandHandler {
+      ListRuntimeSnapshotBuilder.makeSnapshot(
+        repositoriesState: appStore.state.repositories,
+        terminalManager: terminalManager
+      )
+    }
+    let cliRouter = CLICommandRouter(listHandler: listHandler)
     let cliServer = CLISocketServer(router: cliRouter)
     let cliLogger = SupaLogger("CLIService")
     do {

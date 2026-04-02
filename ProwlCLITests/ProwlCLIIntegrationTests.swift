@@ -96,6 +96,53 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(payload["command"] as? String, "focus")
   }
 
+
+  func testListCommandTextRenderingFromSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "list-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "list",
+      schemaVersion: "prowl.cli.list.v1",
+      data: RawJSON(encoding: ListResponseData(
+        count: 1,
+        items: [
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "Prowl:/Users/onevcat/Projects/Prowl",
+              name: "Prowl",
+              path: "/Users/onevcat/Projects/Prowl",
+              rootPath: "/Users/onevcat/Projects/Prowl",
+              kind: "git"
+            ),
+            tab: ListTab(
+              id: "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0",
+              title: "Prowl 1",
+              selected: true
+            ),
+            pane: ListPane(
+              id: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764",
+              title: "zsh",
+              cwd: "/Users/onevcat/Projects/Prowl",
+              focused: true
+            ),
+            task: ListTask(status: "running")
+          )
+        ]
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["list"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("Prowl | Prowl 1 | zsh | running | focused"))
+    XCTAssertTrue(result.stdout.contains("worktree=Prowl:/Users/onevcat/Projects/Prowl"))
+    XCTAssertTrue(result.stdout.contains("pane=6E1A2A10-D99F-4E3F-920C-D93AA3C05764"))
+  }
+
   // MARK: - Helpers
 
   private func runWithMockServer(
@@ -203,6 +250,53 @@ private struct OpenPayload: Encodable {
   }
 
   let broughtToFront: Bool
+}
+
+
+private struct ListResponseData: Encodable {
+  let count: Int
+  let items: [ListResponseItem]
+}
+
+private struct ListResponseItem: Encodable {
+  let worktree: ListWorktree
+  let tab: ListTab
+  let pane: ListPane
+  let task: ListTask
+}
+
+private struct ListWorktree: Encodable {
+  let id: String
+  let name: String
+  let path: String
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case name
+    case path
+    case rootPath = "root_path"
+    case kind
+  }
+
+  let rootPath: String
+  let kind: String
+}
+
+private struct ListTab: Encodable {
+  let id: String
+  let title: String
+  let selected: Bool
+}
+
+private struct ListPane: Encodable {
+  let id: String
+  let title: String
+  let cwd: String?
+  let focused: Bool
+}
+
+private struct ListTask: Encodable {
+  let status: String?
 }
 
 private struct CommandResult {
