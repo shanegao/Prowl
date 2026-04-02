@@ -41,7 +41,9 @@ enum OutputRenderer {
     if response.ok {
       print("ok: \(response.command)")
     } else if let error = response.error {
-      fputs("error [\(error.code)]: \(error.message)\n", stderr)
+      FileHandle.standardError.write(
+        Data("error [\(error.code)]: \(error.message)\n".utf8)
+      )
     }
   }
 }
