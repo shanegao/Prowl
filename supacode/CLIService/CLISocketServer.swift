@@ -1,6 +1,11 @@
 // supacode/CLIService/CLISocketServer.swift
 // Unix domain socket server that listens for CLI command requests.
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 @MainActor
@@ -30,16 +35,9 @@ final class CLISocketServer {
     // Bind
     var addr = sockaddr_un()
     addr.sun_family = sa_family_t(AF_UNIX)
-    let pathBytes = socketPath.utf8CString
-    guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else {
-      close(serverFD)
-      throw CLIServiceError.socketPathTooLong
-    }
-    withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
-      ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dest in
-        for (i, byte) in pathBytes.enumerated() {
-          dest[i] = byte
-        }
+    socketPath.withCString { cstr in
+      withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
+        _ = memcpy(pathPtr, cstr, min(strlen(cstr) + 1, MemoryLayout.size(ofValue: addr.sun_path)))
       }
     }
 
@@ -81,19 +79,16 @@ final class CLISocketServer {
 
   // MARK: - Accept loop
 
-  private func acceptLoop() async {
-    while isRunning, !Task.isCancelled {
-      let clientFD = accept(serverFD, nil, nil)
+  nonisolated private func acceptLoop() async {
+    while !Task.isCancelled {
+      let clientFD = Darwin.accept(serverFD, nil, nil)
       guard clientFD >= 0 else {
-        if isRunning {
-          // Brief pause before retrying
+        if !Task.isCancelled {
           try? await Task.sleep(for: .milliseconds(100))
         }
         continue
       }
-
-      // Handle each client connection concurrently
-      Task { [weak self] in
+      Task { @MainActor [weak self] in
         await self?.handleClient(fd: clientFD)
       }
     }
@@ -104,13 +99,13 @@ final class CLISocketServer {
 
     do {
       // Read length-prefixed request
-      let lengthData = try socketRead(fd: clientFD, count: 4)
+      let lengthData = try Self.fdRead(fd: clientFD, count: 4)
       let length = lengthData.withUnsafeBytes {
         UInt32(bigEndian: $0.load(as: UInt32.self))
       }
       guard length > 0, length < 10_000_000 else { return }
 
-      let requestData = try socketRead(fd: clientFD, count: Int(length))
+      let requestData = try Self.fdRead(fd: clientFD, count: Int(length))
 
       // Decode envelope
       let decoder = JSONDecoder()
@@ -125,47 +120,41 @@ final class CLISocketServer {
       let responseData = try encoder.encode(response)
 
       var responseLength = UInt32(responseData.count).bigEndian
-      let responseLengthData = Data(bytes: &responseLength, count: 4)
-      try socketWrite(fd: clientFD, data: responseLengthData)
-      try socketWrite(fd: clientFD, data: responseData)
+      try withUnsafeBytes(of: &responseLength) { try Self.fdWrite(fd: clientFD, buffer: $0) }
+      try responseData.withUnsafeBytes { try Self.fdWrite(fd: clientFD, buffer: $0) }
     } catch {
       // Connection-level errors are silently dropped
     }
   }
 
-  // MARK: - Socket I/O helpers
+  // MARK: - Low-level I/O using Darwin read/write
 
-  private func socketRead(fd: Int32, count: Int) throws -> Data {
+  nonisolated private static func fdRead(fd: Int32, count: Int) throws -> Data {
     var data = Data(capacity: count)
     var remaining = count
     let bufferSize = min(count, 65536)
-    var buffer = [UInt8](repeating: 0, count: bufferSize)
+    let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 1)
+    defer { buffer.deallocate() }
     while remaining > 0 {
       let toRead = min(remaining, bufferSize)
-      let bytesRead = Foundation.read(fd, &buffer, toRead)
+      let bytesRead = Darwin.read(fd, buffer, toRead)
       guard bytesRead > 0 else {
         throw CLIServiceError.readFailed
       }
-      data.append(buffer, count: bytesRead)
+      data.append(buffer.assumingMemoryBound(to: UInt8.self), count: bytesRead)
       remaining -= bytesRead
     }
     return data
   }
 
-  private func socketWrite(fd: Int32, data: Data) throws {
-    try data.withUnsafeBytes { buffer in
-      var offset = 0
-      while offset < buffer.count {
-        let written = Foundation.write(
-          fd,
-          buffer.baseAddress!.advanced(by: offset),
-          buffer.count - offset
-        )
-        guard written > 0 else {
-          throw CLIServiceError.writeFailed
-        }
-        offset += written
+  nonisolated private static func fdWrite(fd: Int32, buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    while offset < buffer.count {
+      let written = Darwin.write(fd, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+      guard written > 0 else {
+        throw CLIServiceError.writeFailed
       }
+      offset += written
     }
   }
 }
