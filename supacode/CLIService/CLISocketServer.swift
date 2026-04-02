@@ -40,7 +40,7 @@ final class CLISocketServer {
     let copyLen = min(pathBytes.count, maxLen)
     withUnsafeMutableBytes(of: &addr.sun_path) { sunPathPtr in
       for idx in 0..<copyLen {
-        sunPathPtr[idx] = Int8(bitPattern: pathBytes[idx])
+        sunPathPtr[idx] = pathBytes[idx]
       }
       sunPathPtr[copyLen] = 0
     }
