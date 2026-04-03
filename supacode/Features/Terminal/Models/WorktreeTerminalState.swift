@@ -37,6 +37,7 @@ final class WorktreeTerminalState {
   private var commandFinishedNotificationEnabled = true
   private var commandFinishedNotificationThreshold = 10
   private var lastKeyInputTimeBySurface: [UUID: ContinuousClock.Instant] = [:]
+  private var commandFinishedWaiters: [UUID: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation] = [:]
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
@@ -1199,6 +1200,13 @@ final class WorktreeTerminalState {
   }
 
   func handleCommandFinished(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
+    // Notify CLI waiters unconditionally before applying notification filters.
+    if let continuation = commandFinishedWaiters.removeValue(forKey: surfaceId) {
+      let durationMs = Int(durationNs / 1_000_000)
+      continuation.yield((exitCode: exitCode, durationMs: durationMs))
+      continuation.finish()
+    }
+
     guard commandFinishedNotificationEnabled else { return }
     let durationSeconds = Int(durationNs / 1_000_000_000)
     guard durationSeconds >= commandFinishedNotificationThreshold else { return }
@@ -1516,6 +1524,27 @@ extension WorktreeTerminalState {
     }
 
     return fallbackTabTitle
+  }
+}
+
+// MARK: - CLI Command Finished Waiting
+
+extension WorktreeTerminalState {
+  /// Returns an `AsyncStream` that yields exactly once when the command finishes
+  /// on the given surface. The caller should race this against a timeout.
+  func waitForCommandFinished(surfaceID: UUID) -> AsyncStream<(exitCode: Int?, durationMs: Int)> {
+    // Cancel any existing waiter for this surface.
+    commandFinishedWaiters[surfaceID]?.finish()
+    commandFinishedWaiters.removeValue(forKey: surfaceID)
+
+    return AsyncStream { continuation in
+      commandFinishedWaiters[surfaceID] = continuation
+      continuation.onTermination = { [weak self] _ in
+        Task { @MainActor in
+          self?.commandFinishedWaiters.removeValue(forKey: surfaceID)
+        }
+      }
+    }
   }
 }
 

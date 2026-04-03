@@ -202,7 +202,21 @@ struct SupacodeApp: App {
         terminalManager: terminalManager
       )
     }
-    let cliRouter = CLICommandRouter(listHandler: listHandler)
+    let sendHandler = SendCommandHandler(
+      resolverProvider: {
+        TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+      },
+      waiterProvider: { worktreeID, surfaceID in
+        terminalManager.stateIfExists(for: worktreeID)?
+          .waitForCommandFinished(surfaceID: surfaceID)
+      }
+    )
+    let cliRouter = CLICommandRouter(listHandler: listHandler, sendHandler: sendHandler)
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")
     do {
