@@ -73,9 +73,9 @@ struct WorktreeEnvironmentTests {
 
     let input = makeBlockingScriptInput(
       script: """
-      docker compose down
-      codex exec "test"
-      """,
+        docker compose down
+        codex exec "test"
+        """,
       environmentExportPrefix: worktree.scriptEnvironmentExportPrefix
     )
 

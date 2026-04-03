@@ -42,13 +42,15 @@ nonisolated struct TerminalLayoutSnapshotPayload: Codable, Equatable, Sendable {
     guard !worktrees.isEmpty, worktrees.count <= Self.maxWorktrees else {
       return false
     }
-    guard worktrees.allSatisfy({
-      $0.isValid(
-        maxTabsPerWorktree: Self.maxTabsPerWorktree,
-        maxSplitNodesPerTab: Self.maxSplitNodesPerTab,
-        maxSplitDepth: Self.maxSplitDepth
-      )
-    }) else {
+    guard
+      worktrees.allSatisfy({
+        $0.isValid(
+          maxTabsPerWorktree: Self.maxTabsPerWorktree,
+          maxSplitNodesPerTab: Self.maxSplitNodesPerTab,
+          maxSplitDepth: Self.maxSplitDepth
+        )
+      })
+    else {
       return false
     }
     if let selectedWorktreeID {

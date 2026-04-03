@@ -1,12 +1,13 @@
 // supacode/CLIService/CLISocketServer.swift
 // Unix domain socket server that listens for CLI command requests.
 
-#if canImport(Darwin)
-import Darwin
-#elseif canImport(Glibc)
-import Glibc
-#endif
 import Foundation
+
+#if canImport(Darwin)
+  import Darwin
+#elseif canImport(Glibc)
+  import Glibc
+#endif
 
 @MainActor
 final class CLISocketServer {
