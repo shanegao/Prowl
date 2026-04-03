@@ -1,5 +1,5 @@
 // supacodeTests/OpenCommandHandlerTests.swift
-// Unit tests for OpenCommandHandler.
+// Unit tests for OpenCommandHandler — contract-aligned.
 
 import Foundation
 import Testing
@@ -8,84 +8,161 @@ import Testing
 
 struct OpenCommandHandlerTests {
 
+  // MARK: - Helpers
+
+  private func makeHandler(
+    resolver: @escaping OpenCommandHandler.Resolver = { _ in
+      OpenResolverResult(
+        resolution: .noArgument, worktreeID: nil, worktreeName: nil,
+        worktreePath: nil, rootPath: nil, worktreeKind: nil, resolvedPath: nil
+      )
+    },
+    selectWorktree: @escaping OpenCommandHandler.SelectAction = { _ in },
+    addAndOpen: @escaping OpenCommandHandler.AddAndOpenAction = { _ in },
+    terminalSnapshot: @escaping OpenCommandHandler.TerminalSnapshotProvider = { _ in nil }
+  ) -> OpenCommandHandler {
+    OpenCommandHandler(
+      resolver: resolver,
+      selectWorktree: selectWorktree,
+      addAndOpen: addAndOpen,
+      terminalSnapshot: terminalSnapshot
+    )
+  }
+
   // MARK: - Bring to front (no path)
 
   @MainActor
   @Test func openWithNoPathReturnsBringToFront() async throws {
-    var selectCalled = false
-    var addCalled = false
-
-    let handler = OpenCommandHandler(
-      resolver: { path in
-        #expect(path == nil)
-        return .bringToFront
-      },
-      selectWorktree: { _ in selectCalled = true },
-      addAndOpen: { _ in addCalled = true }
-    )
-
+    let handler = makeHandler()
     let envelope = CommandEnvelope(output: .json, command: .open(OpenInput()))
     let response = await handler.handle(envelope: envelope)
 
     #expect(response.ok == true)
     #expect(response.command == "open")
     #expect(response.schemaVersion == "prowl.cli.open.v1")
-    #expect(!selectCalled)
-    #expect(!addCalled)
 
-    if let data = response.data {
-      let payload = try data.decode(as: OpenCommandPayload.self)
-      #expect(payload.broughtToFront == true)
-      #expect(payload.worktreeID == nil)
-    }
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.resolution == "no-argument")
+    #expect(payload.invocation == "bare")
+    #expect(payload.requestedPath == nil)
+    #expect(payload.resolvedPath == nil)
+    #expect(payload.broughtToFront == true)
+    #expect(payload.appLaunched == false)
+    #expect(payload.target == nil)
   }
 
-  // MARK: - Known worktree
+  // MARK: - Exact root
 
   @MainActor
-  @Test func openKnownWorktreeSelectsAndReturnsPayload() async throws {
+  @Test func openExactRootSelectsAndReturnsContractPayload() async throws {
     var selectedID: String?
 
-    let handler = OpenCommandHandler(
+    let handler = makeHandler(
       resolver: { _ in
-        .worktree(
-          id: "Prowl:/Users/test/Projects/Prowl",
-          name: "Prowl",
-          path: "/Users/test/Projects/Prowl",
-          repositoryRoot: "/Users/test/Projects/Prowl"
+        OpenResolverResult(
+          resolution: .exactRoot,
+          worktreeID: "Prowl:/Users/test/Projects/Prowl",
+          worktreeName: "Prowl",
+          worktreePath: "/Users/test/Projects/Prowl",
+          rootPath: "/Users/test/Projects/Prowl",
+          worktreeKind: "git",
+          resolvedPath: "/Users/test/Projects/Prowl"
         )
       },
       selectWorktree: { id in selectedID = id },
-      addAndOpen: { _ in }
+      terminalSnapshot: { _ in
+        OpenTerminalSnapshot(
+          tabID: "0E2A7C03-9C01-4BC1-9327-6C1C7B629A52",
+          tabTitle: "Prowl 1",
+          tabCwd: "/Users/test/Projects/Prowl",
+          paneID: "0FB4DDB4-A797-4315-A00E-8AAFB32BFC95",
+          paneTitle: "Prowl",
+          paneCwd: "/Users/test/Projects/Prowl"
+        )
+      }
     )
 
     let envelope = CommandEnvelope(
-      output: .text,
-      command: .open(OpenInput(path: "/Users/test/Projects/Prowl"))
+      output: .json,
+      command: .open(OpenInput(path: "/Users/test/Projects/Prowl", invocation: "open-subcommand"))
     )
     let response = await handler.handle(envelope: envelope)
 
     #expect(response.ok == true)
     #expect(selectedID == "Prowl:/Users/test/Projects/Prowl")
 
-    if let data = response.data {
-      let payload = try data.decode(as: OpenCommandPayload.self)
-      #expect(payload.worktreeID == "Prowl:/Users/test/Projects/Prowl")
-      #expect(payload.worktreeName == "Prowl")
-      #expect(payload.path == "/Users/test/Projects/Prowl")
-      #expect(payload.broughtToFront == true)
-    }
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.resolution == "exact-root")
+    #expect(payload.invocation == "open-subcommand")
+    #expect(payload.requestedPath == "/Users/test/Projects/Prowl")
+    #expect(payload.resolvedPath == "/Users/test/Projects/Prowl")
+    #expect(payload.createdTab == false)
+    #expect(payload.broughtToFront == true)
+
+    let target = try #require(payload.target)
+    #expect(target.worktree.id == "Prowl:/Users/test/Projects/Prowl")
+    #expect(target.worktree.name == "Prowl")
+    #expect(target.worktree.kind == "git")
+    #expect(target.tab?.id == "0E2A7C03-9C01-4BC1-9327-6C1C7B629A52")
+    #expect(target.pane?.id == "0FB4DDB4-A797-4315-A00E-8AAFB32BFC95")
   }
 
-  // MARK: - Unknown path triggers addAndOpen
+  // MARK: - Inside root
 
   @MainActor
-  @Test func openUnknownPathCallsAddAndOpen() async throws {
+  @Test func openInsideRootResolvesToParentWorktree() async throws {
+    var selectedID: String?
+
+    let handler = makeHandler(
+      resolver: { _ in
+        OpenResolverResult(
+          resolution: .insideRoot,
+          worktreeID: "Prowl:/Users/test/Projects/Prowl",
+          worktreeName: "Prowl",
+          worktreePath: "/Users/test/Projects/Prowl",
+          rootPath: "/Users/test/Projects/Prowl",
+          worktreeKind: "git",
+          resolvedPath: "/Users/test/Projects/Prowl/supacode"
+        )
+      },
+      selectWorktree: { id in selectedID = id }
+    )
+
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: "/Users/test/Projects/Prowl/supacode", invocation: "implicit-open"))
+    )
+    let response = await handler.handle(envelope: envelope)
+
+    #expect(response.ok == true)
+    #expect(selectedID == "Prowl:/Users/test/Projects/Prowl")
+
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.resolution == "inside-root")
+    #expect(payload.invocation == "implicit-open")
+    #expect(payload.requestedPath == "/Users/test/Projects/Prowl/supacode")
+    #expect(payload.resolvedPath == "/Users/test/Projects/Prowl/supacode")
+    #expect(payload.createdTab == true)
+  }
+
+  // MARK: - New root
+
+  @MainActor
+  @Test func openNewRootCallsAddAndOpen() async throws {
     var addedURL: URL?
 
-    let handler = OpenCommandHandler(
-      resolver: { _ in .unknownPath("/Users/test/NewProject") },
-      selectWorktree: { _ in },
+    let handler = makeHandler(
+      resolver: { _ in
+        OpenResolverResult(
+          resolution: .newRoot,
+          worktreeID: nil, worktreeName: nil,
+          worktreePath: nil, rootPath: nil,
+          worktreeKind: nil, resolvedPath: "/Users/test/NewProject"
+        )
+      },
       addAndOpen: { url in addedURL = url }
     )
 
@@ -98,24 +175,19 @@ struct OpenCommandHandlerTests {
     #expect(response.ok == true)
     #expect(addedURL?.path == "/Users/test/NewProject")
 
-    if let data = response.data {
-      let payload = try data.decode(as: OpenCommandPayload.self)
-      #expect(payload.worktreeID == nil)
-      #expect(payload.path == "/Users/test/NewProject")
-      #expect(payload.broughtToFront == true)
-    }
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.resolution == "new-root")
+    #expect(payload.requestedPath == "/Users/test/NewProject")
+    #expect(payload.createdTab == true)
+    #expect(payload.target == nil)
   }
 
-  // MARK: - Router dispatches to injected open handler
+  // MARK: - Router integration
 
   @MainActor
-  @Test func routerUsesInjectedOpenHandler() async {
-    let handler = OpenCommandHandler(
-      resolver: { _ in .bringToFront },
-      selectWorktree: { _ in },
-      addAndOpen: { _ in }
-    )
-
+  @Test func routerUsesInjectedOpenHandler() async throws {
+    let handler = makeHandler()
     let router = CLICommandRouter(openHandler: handler)
     let envelope = CommandEnvelope(output: .json, command: .open(OpenInput()))
     let response = await router.route(envelope)
@@ -129,17 +201,64 @@ struct OpenCommandHandlerTests {
 
   @MainActor
   @Test func handlerRejectsNonOpenCommand() async {
-    let handler = OpenCommandHandler(
-      resolver: { _ in .bringToFront },
-      selectWorktree: { _ in },
-      addAndOpen: { _ in }
-    )
-
-    // Directly call handle with a list envelope (shouldn't happen via router, but tests guard)
+    let handler = makeHandler()
     let envelope = CommandEnvelope(output: .json, command: .list(ListInput()))
     let response = await handler.handle(envelope: envelope)
 
     #expect(response.ok == false)
     #expect(response.error?.code == "INVALID_ARGUMENT")
+  }
+
+  // MARK: - Invocation derivation
+
+  @MainActor
+  @Test func defaultInvocationIsBareWhenNoPath() async throws {
+    let handler = makeHandler()
+    let envelope = CommandEnvelope(output: .json, command: .open(OpenInput()))
+    let response = await handler.handle(envelope: envelope)
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.invocation == "bare")
+  }
+
+  @MainActor
+  @Test func defaultInvocationIsOpenSubcommandWhenPathPresent() async throws {
+    let handler = makeHandler(
+      resolver: { _ in
+        OpenResolverResult(
+          resolution: .newRoot,
+          worktreeID: nil, worktreeName: nil,
+          worktreePath: nil, rootPath: nil,
+          worktreeKind: nil, resolvedPath: "/tmp/test"
+        )
+      }
+    )
+    let envelope = CommandEnvelope(output: .json, command: .open(OpenInput(path: "/tmp/test")))
+    let response = await handler.handle(envelope: envelope)
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.invocation == "open-subcommand")
+  }
+
+  @MainActor
+  @Test func explicitInvocationIsPreserved() async throws {
+    let handler = makeHandler(
+      resolver: { _ in
+        OpenResolverResult(
+          resolution: .newRoot,
+          worktreeID: nil, worktreeName: nil,
+          worktreePath: nil, rootPath: nil,
+          worktreeKind: nil, resolvedPath: "/tmp/test"
+        )
+      }
+    )
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: "/tmp/test", invocation: "implicit-open"))
+    )
+    let response = await handler.handle(envelope: envelope)
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.invocation == "implicit-open")
   }
 }
