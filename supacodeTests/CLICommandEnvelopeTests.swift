@@ -59,11 +59,12 @@ struct CLICommandEnvelopeTests {
   @Test func envelopeSendWithSelectorRoundTrips() throws {
     let envelope = CommandEnvelope(
       output: .json,
-      command: .send(SendInput(
-        selector: .pane("abc-123"),
-        text: "hello world",
-        trailingEnter: false
-      ))
+      command: .send(
+        SendInput(
+          selector: .pane("abc-123"),
+          text: "hello world",
+          trailingEnter: false
+        ))
     )
     let data = try JSONEncoder().encode(envelope)
     let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
@@ -79,11 +80,12 @@ struct CLICommandEnvelopeTests {
   @Test func envelopeKeyWithRepeatRoundTrips() throws {
     let envelope = CommandEnvelope(
       output: .text,
-      command: .key(KeyInput(
-        selector: .tab("tab-1"),
-        token: "enter",
-        repeatCount: 5
-      ))
+      command: .key(
+        KeyInput(
+          selector: .tab("tab-1"),
+          token: "enter",
+          repeatCount: 5
+        ))
     )
     let data = try JSONEncoder().encode(envelope)
     let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
