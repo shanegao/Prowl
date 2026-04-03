@@ -142,9 +142,216 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     )
 
     XCTAssertEqual(result.exitCode, 0)
-    XCTAssertTrue(result.stdout.contains("Prowl | Prowl 1 | zsh | running | focused"))
-    XCTAssertTrue(result.stdout.contains("worktree=Prowl:/Users/onevcat/Projects/Prowl"))
-    XCTAssertTrue(result.stdout.contains("pane=6E1A2A10-D99F-4E3F-920C-D93AA3C05764"))
+    XCTAssertTrue(result.stdout.contains("Prowl:Prowl (running)"), "Missing worktree header: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Tab 1:"), "Missing tab label: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Pane 1:"), "Missing pane label: \(result.stdout)")
+    XCTAssertTrue(
+      result.stdout.contains("6E1A2A10-D99F-4E3F-920C-D93AA3C05764"),
+      "Missing pane ID: \(result.stdout)"
+    )
+  }
+
+  func testListEmptyPayloadShowsNoPanesFound() throws {
+    let socketPath = temporarySocketPath(suffix: "list-empty")
+    let response = try CommandResponse(
+      ok: true,
+      command: "list",
+      schemaVersion: "prowl.cli.list.v1",
+      data: RawJSON(encoding: ListResponseData(count: 0, items: []))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["list"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("No panes found."), "Expected empty message: \(result.stdout)")
+  }
+
+  func testListMultipleWorktreesGroupedWithBlankLine() throws {
+    let socketPath = temporarySocketPath(suffix: "list-multi-wt")
+    let response = try CommandResponse(
+      ok: true,
+      command: "list",
+      schemaVersion: "prowl.cli.list.v1",
+      data: RawJSON(encoding: ListResponseData(
+        count: 2,
+        items: [
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-1", name: "main",
+              path: "/Projects/Alpha", rootPath: "/Projects/Alpha", kind: "git"
+            ),
+            tab: ListTab(id: "t1", title: "Tab A", selected: true),
+            pane: ListPane(id: "p1", title: "zsh", cwd: "/Projects/Alpha", focused: true),
+            task: ListTask(status: "running")
+          ),
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-2", name: "develop",
+              path: "/Projects/Beta", rootPath: "/Projects/Beta", kind: "git"
+            ),
+            tab: ListTab(id: "t2", title: "Tab B", selected: true),
+            pane: ListPane(id: "p2", title: "zsh", cwd: "/Projects/Beta", focused: false),
+            task: ListTask(status: "idle")
+          ),
+        ]
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["list"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("Alpha:main (running)"), "Missing first worktree: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Beta:develop (idle)"), "Missing second worktree: \(result.stdout)")
+
+    // Worktrees should be separated by a blank line.
+    let lines = result.stdout.components(separatedBy: "\n")
+    let blankIndices = lines.enumerated().filter { $0.element.isEmpty }.map(\.offset)
+    XCTAssertFalse(blankIndices.isEmpty, "Expected blank line between worktrees: \(result.stdout)")
+  }
+
+  func testListCwdSuppressedWhenMatchingWorktreePath() throws {
+    let socketPath = temporarySocketPath(suffix: "list-cwd-dedup")
+    let response = try CommandResponse(
+      ok: true,
+      command: "list",
+      schemaVersion: "prowl.cli.list.v1",
+      data: RawJSON(encoding: ListResponseData(
+        count: 2,
+        items: [
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-1", name: "main",
+              path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+            ),
+            tab: ListTab(id: "t1", title: "Tab 1", selected: true),
+            pane: ListPane(id: "p-same", title: "zsh", cwd: "/Projects/App", focused: true),
+            task: ListTask(status: "idle")
+          ),
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-1", name: "main",
+              path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+            ),
+            tab: ListTab(id: "t1", title: "Tab 1", selected: true),
+            pane: ListPane(id: "p-diff", title: "zsh", cwd: "/Users/onevcat", focused: false),
+            task: ListTask(status: "idle")
+          ),
+        ]
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["list"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let lines = result.stdout.components(separatedBy: "\n")
+
+    // Pane whose cwd matches worktree path should NOT repeat the cwd.
+    let sameLine = lines.first { $0.contains("p-same") }
+    XCTAssertNotNil(sameLine, "Missing same-cwd pane")
+    XCTAssertFalse(sameLine?.contains("/Projects/App") ?? true, "cwd should be suppressed: \(sameLine ?? "")")
+
+    // Pane whose cwd differs should show it.
+    let diffLine = lines.first { $0.contains("p-diff") }
+    XCTAssertNotNil(diffLine, "Missing diff-cwd pane")
+    XCTAssertTrue(diffLine?.contains("/Users/onevcat") ?? false, "cwd should be shown: \(diffLine ?? "")")
+  }
+
+  func testListMultiTabMultiPaneNumbering() throws {
+    let socketPath = temporarySocketPath(suffix: "list-numbering")
+    let response = try CommandResponse(
+      ok: true,
+      command: "list",
+      schemaVersion: "prowl.cli.list.v1",
+      data: RawJSON(encoding: ListResponseData(
+        count: 3,
+        items: [
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-1", name: "main",
+              path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+            ),
+            tab: ListTab(id: "tab-a", title: "Tab A", selected: false),
+            pane: ListPane(id: "pa1", title: "zsh", cwd: "/Projects/App", focused: false),
+            task: ListTask(status: "idle")
+          ),
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-1", name: "main",
+              path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+            ),
+            tab: ListTab(id: "tab-b", title: "Tab B", selected: true),
+            pane: ListPane(id: "pb1", title: "vim", cwd: "/Projects/App", focused: true),
+            task: ListTask(status: "idle")
+          ),
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-1", name: "main",
+              path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+            ),
+            tab: ListTab(id: "tab-b", title: "Tab B", selected: true),
+            pane: ListPane(id: "pb2", title: "htop", cwd: "/Projects/App", focused: false),
+            task: ListTask(status: "idle")
+          ),
+        ]
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["list"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("Tab 1:"), "Missing Tab 1: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Tab 2:"), "Missing Tab 2: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Pane 1:"), "Missing Pane 1: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Pane 2:"), "Missing Pane 2: \(result.stdout)")
+  }
+
+  func testListNoColorFlagProducesCleanOutput() throws {
+    let socketPath = temporarySocketPath(suffix: "list-no-color")
+    let response = try CommandResponse(
+      ok: true,
+      command: "list",
+      schemaVersion: "prowl.cli.list.v1",
+      data: RawJSON(encoding: ListResponseData(
+        count: 1,
+        items: [
+          ListResponseItem(
+            worktree: ListWorktree(
+              id: "wt-1", name: "main",
+              path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+            ),
+            tab: ListTab(id: "t1", title: "Tab A", selected: true),
+            pane: ListPane(id: "p1", title: "zsh", cwd: "/Projects/App", focused: true),
+            task: ListTask(status: "running")
+          ),
+        ]
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["list", "--no-color"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertFalse(result.stdout.contains("\u{1B}["), "Should not contain ANSI escape codes: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("App:main (running)"), "Missing header: \(result.stdout)")
   }
 
   // MARK: - Helpers
