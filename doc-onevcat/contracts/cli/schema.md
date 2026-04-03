@@ -410,7 +410,7 @@ This file provides machine-validatable JSON Schema definitions for the v1 CLI ou
         "data": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["target", "input", "created_tab"],
+          "required": ["target", "input", "created_tab", "wait"],
           "properties": {
             "target": { "$ref": "#/$defs/resolvedTarget" },
             "input": {
@@ -433,7 +433,26 @@ This file provides machine-validatable JSON Schema definitions for the v1 CLI ou
                 "trailing_enter_sent": { "type": "boolean" }
               }
             },
-            "created_tab": { "type": "boolean" }
+            "created_tab": { "type": "boolean" },
+            "wait": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["exit_code", "duration_ms"],
+                  "properties": {
+                    "exit_code": {
+                      "type": ["integer", "null"]
+                    },
+                    "duration_ms": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
           }
         }
       }
@@ -459,7 +478,8 @@ This file provides machine-validatable JSON Schema definitions for the v1 CLI ou
                 "TARGET_NOT_FOUND",
                 "TARGET_NOT_UNIQUE",
                 "EMPTY_INPUT",
-                "SEND_FAILED"
+                "SEND_FAILED",
+                "WAIT_TIMEOUT"
               ]
             },
             "message": { "type": "string", "minLength": 1 },

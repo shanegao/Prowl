@@ -25,6 +25,14 @@ This file defines the **JSON output contract** for:
 - stdin text
 - `--no-enter`
 
+## Wait behavior
+
+By default, `send` waits for the delivered command to finish before returning. This relies on shell integration (OSC 133) to detect command completion. When the command finishes, the response includes exit code and duration.
+
+- `--no-wait`: return immediately after text delivery without waiting for completion.
+- `--timeout <seconds>`: maximum time to wait (default: 30, range: 1–300). Ignored when `--no-wait` is used.
+- If the terminal does not have shell integration enabled, the wait will time out and return `WAIT_TIMEOUT`.
+
 ### Input source semantics
 
 `data.input.source` is **inferred from where the accepted payload came from**. It is not a separate `--source` flag.
@@ -72,7 +80,11 @@ This file defines the **JSON output contract** for:
       "bytes": 10,
       "trailing_enter_sent": true
     },
-    "created_tab": false
+    "created_tab": false,
+    "wait": {
+      "exit_code": 0,
+      "duration_ms": 1234
+    }
   }
 }
 ```
@@ -124,6 +136,14 @@ This file defines the **JSON output contract** for:
 - boolean
 - `true` only when targeting a worktree that had no current tab and Prowl had to create one before sending.
 
+## `data.wait`
+
+- object or `null`
+- `null` when `--no-wait` is used (fire-and-forget mode).
+- When present (default behavior), contains:
+  - `exit_code`: integer or `null`. The command's exit code reported by shell integration (OSC 133;D). `null` if the shell did not report an exit code.
+  - `duration_ms`: integer. Wall-clock time in milliseconds from text delivery to command completion.
+
 ## Output invariants
 
 - The payload must describe the **resolved pane** that received the text.
@@ -153,12 +173,16 @@ This file defines the **JSON output contract** for:
 - `TARGET_NOT_UNIQUE`
 - `EMPTY_INPUT`
 - `SEND_FAILED`
+- `WAIT_TIMEOUT`
 
 ## Notes
 
 - `send` is text delivery, not general key simulation. Control inputs such as `ctrl-c` belong to `key`.
 - Returning byte and character counts gives scripts enough confirmation without leaking payload contents into logs.
 - A future implementation may add optional debug echo flags, but v1 default JSON must stay redaction-friendly.
+- Wait behavior depends on shell integration (OSC 133). Without it, `onCommandFinished` never fires and the wait will time out. The `WAIT_TIMEOUT` error message should hint at this possible cause.
+- `--no-wait` combined with `--no-enter` is the purest "paste text" mode — no Enter, no waiting.
+- A future `--capture` flag may return the command's output text alongside `wait`, pending upstream support for reading semantic zone data via the Ghostty C API.
 
 ## Example: stdin + `--no-enter`
 
@@ -194,7 +218,51 @@ This file defines the **JSON output contract** for:
       "bytes": 24,
       "trailing_enter_sent": false
     },
-    "created_tab": false
+    "created_tab": false,
+    "wait": {
+      "exit_code": 0,
+      "duration_ms": 350
+    }
+  }
+}
+```
+
+## Example: `--no-wait` (fire-and-forget)
+
+```json
+{
+  "ok": true,
+  "command": "send",
+  "schema_version": "prowl.cli.send.v1",
+  "data": {
+    "target": {
+      "worktree": {
+        "id": "Prowl:/Users/onevcat/Projects/Prowl",
+        "name": "Prowl",
+        "path": "/Users/onevcat/Projects/Prowl",
+        "root_path": "/Users/onevcat/Projects/Prowl",
+        "kind": "git"
+      },
+      "tab": {
+        "id": "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0",
+        "title": "Prowl 1",
+        "selected": true
+      },
+      "pane": {
+        "id": "6E1A2A10-D99F-4E3F-920C-D93AA3C05764",
+        "title": "zsh",
+        "cwd": "/Users/onevcat/Projects/Prowl",
+        "focused": true
+      }
+    },
+    "input": {
+      "source": "argv",
+      "characters": 5,
+      "bytes": 5,
+      "trailing_enter_sent": true
+    },
+    "created_tab": false,
+    "wait": null
   }
 }
 ```

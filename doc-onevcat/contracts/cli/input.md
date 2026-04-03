@@ -179,9 +179,9 @@ prowl focus [--worktree <...> | --tab <...> | --pane <...>] [--json]
 ### Grammar
 
 ```bash
-prowl send [selector] [--no-enter] [--json] [<text>]
+prowl send [selector] [--no-enter] [--no-wait] [--timeout <seconds>] [--json] [<text>]
 # or
-printf '...' | prowl send [selector] [--no-enter] [--json]
+printf '...' | prowl send [selector] [--no-enter] [--no-wait] [--timeout <seconds>] [--json]
 ```
 
 ### Rules
@@ -192,6 +192,9 @@ printf '...' | prowl send [selector] [--no-enter] [--json]
 - Both provided simultaneously: `INVALID_ARGUMENT`.
 - Neither provided (or empty stdin): `EMPTY_INPUT`.
 - Default sends trailing Enter; `--no-enter` disables it.
+- Default waits for command completion (requires shell integration); `--no-wait` disables it and returns immediately after delivery.
+- `--timeout <seconds>` sets the maximum wait duration (default: 30, range: 1–300). Ignored when `--no-wait` is used.
+- If the wait times out: `WAIT_TIMEOUT`.
 
 ## 5.5 `key`
 
