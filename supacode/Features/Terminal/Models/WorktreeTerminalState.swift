@@ -1519,6 +1519,39 @@ extension WorktreeTerminalState {
   }
 }
 
+// MARK: - CLI Send Snapshot
+
+struct CLISendTabSnapshot {
+  let focusedPaneID: UUID?
+  let panes: [TargetResolutionSnapshot.Pane]
+}
+
+extension WorktreeTerminalState {
+  func makeCLISendSnapshot(for tabId: TerminalTabID) -> CLISendTabSnapshot? {
+    let paneIDs = trees[tabId]?.leaves().map(\.id) ?? []
+    guard !paneIDs.isEmpty else { return nil }
+
+    let focusedPaneID = focusedSurfaceIdByTab[tabId]
+    let panes: [TargetResolutionSnapshot.Pane] = paneIDs.compactMap { paneID in
+      guard let surfaceView = surfaces[paneID] else { return nil }
+      let cwd = inheritedSurfaceConfig(
+        fromSurfaceId: paneID,
+        context: GHOSTTY_SURFACE_CONTEXT_TAB
+      ).workingDirectory?.path(percentEncoded: false)
+      let title = paneTitle(surfaceID: paneID, fallbackTabTitle: "")
+      return TargetResolutionSnapshot.Pane(
+        id: paneID,
+        title: title,
+        cwd: cwd,
+        isFocusedInTab: paneID == focusedPaneID,
+        surfaceView: surfaceView
+      )
+    }
+
+    return CLISendTabSnapshot(focusedPaneID: focusedPaneID, panes: panes)
+  }
+}
+
 nonisolated func makeCommandInput(
   script: String,
   environmentExportPrefix: String

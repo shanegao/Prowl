@@ -66,7 +66,7 @@ enum ListRuntimeSnapshotBuilder {
     return ListRuntimeSnapshot(worktrees: worktrees, focusedWorktreeID: focusedWorktreeID)
   }
 
-  private static func orderedWorktreeContexts(from repositoriesState: RepositoriesFeature.State) -> [WorktreeContext] {
+  static func orderedWorktreeContexts(from repositoriesState: RepositoriesFeature.State) -> [WorktreeContext] {
     var contexts: [WorktreeContext] = []
     let repositoriesByID = Dictionary(uniqueKeysWithValues: repositoriesState.repositories.map { ($0.id, $0) })
 
