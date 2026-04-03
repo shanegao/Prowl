@@ -196,7 +196,8 @@ struct AppFeatureCustomCommandTests {
       $0.selectedCustomCommands = settings.customCommands
       $0.resolvedKeybindings = KeybindingResolver.resolve(
         schema: .appResolverSchema(customCommands: settings.customCommands),
-        migratedOverrides: LegacyCustomCommandShortcutMigration
+        migratedOverrides:
+          LegacyCustomCommandShortcutMigration
           .migrate(commands: settings.customCommands)
           .overrides
       )

@@ -1455,10 +1455,12 @@ nonisolated func makeBlockingScriptInput(
   script: String,
   environmentExportPrefix: String
 ) -> String? {
-  guard let input = makeCommandInput(
-    script: script,
-    environmentExportPrefix: environmentExportPrefix
-  ) else {
+  guard
+    let input = makeCommandInput(
+      script: script,
+      environmentExportPrefix: environmentExportPrefix
+    )
+  else {
     return nil
   }
   return input + "exit\n"
