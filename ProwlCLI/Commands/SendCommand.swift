@@ -10,6 +10,12 @@ import Foundation
 import ProwlCLIShared
 
 struct SendCommand: ParsableCommand {
+  /// Check if stdin has readable data using poll(2) with zero timeout.
+  private static func stdinHasData() -> Bool {
+    var pfd = pollfd(fd: fileno(stdin), events: Int16(POLLIN), revents: 0)
+    return poll(&pfd, 1, 0) > 0 && (pfd.revents & Int16(POLLIN)) != 0
+  }
+
   static let configuration = CommandConfiguration(
     commandName: "send",
     abstract: "Send text input to a terminal pane."
@@ -42,12 +48,11 @@ struct SendCommand: ParsableCommand {
       }
 
       // Resolve input source: argv xor stdin
+      let stdinIsPiped = isatty(fileno(stdin)) == 0 && Self.stdinHasData()
       let inputText: String
       let source: InputSource
       if let argText = text {
-        // Check stdin is not also provided
-        if isatty(fileno(stdin)) == 0 {
-          // stdin has data too — ambiguous
+        if stdinIsPiped {
           throw ExitError(
             code: CLIErrorCode.invalidArgument,
             message: "Cannot provide text as both argument and stdin."
@@ -55,8 +60,7 @@ struct SendCommand: ParsableCommand {
         }
         inputText = argText
         source = .argv
-      } else if isatty(fileno(stdin)) == 0 {
-        // Read from stdin
+      } else if stdinIsPiped {
         guard let stdinData = try? FileHandle.standardInput.readToEnd(),
               let stdinText = String(data: stdinData, encoding: .utf8),
               !stdinText.isEmpty

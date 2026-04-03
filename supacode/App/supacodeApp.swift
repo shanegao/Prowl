@@ -203,12 +203,21 @@ struct SupacodeApp: App {
       )
     }
     let sendHandler = SendCommandHandler(
-      resolverProvider: {
-        TargetResolver {
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
           TargetResolutionSnapshotBuilder.makeSnapshot(
             repositoriesState: appStore.state.repositories,
             terminalManager: terminalManager
           )
+        }
+        return resolver.resolve(selector).map { SendResolvedTarget(from: $0) }
+      },
+      textDelivery: { target, text, trailingEnter in
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return }
+        let tabID = TerminalTabID(rawValue: target.tabID)
+        state.insertCommittedText(text, in: tabID)
+        if trailingEnter {
+          state.surfaceView(for: tabID)?.submitLine()
         }
       },
       waiterProvider: { worktreeID, surfaceID in

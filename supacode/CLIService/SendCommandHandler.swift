@@ -5,19 +5,56 @@ import Foundation
 
 private let sendLogger = SupaLogger("SendCommandHandler")
 
+/// Resolved target metadata for payload construction (no live view reference).
+struct SendResolvedTarget: Sendable {
+  let worktreeID: String
+  let worktreeName: String
+  let worktreePath: String
+  let worktreeRootPath: String
+  let worktreeKind: ListCommandWorktree.Kind
+  let tabID: UUID
+  let tabTitle: String
+  let tabSelected: Bool
+  let paneID: UUID
+  let paneTitle: String
+  let paneCWD: String?
+  let paneFocused: Bool
+}
+
+extension SendResolvedTarget {
+  init(from resolved: ResolvedTarget) {
+    self.worktreeID = resolved.worktreeID
+    self.worktreeName = resolved.worktreeName
+    self.worktreePath = resolved.worktreePath
+    self.worktreeRootPath = resolved.worktreeRootPath
+    self.worktreeKind = resolved.worktreeKind
+    self.tabID = resolved.tabID
+    self.tabTitle = resolved.tabTitle
+    self.tabSelected = resolved.tabSelected
+    self.paneID = resolved.paneID
+    self.paneTitle = resolved.paneTitle
+    self.paneCWD = resolved.paneCWD
+    self.paneFocused = resolved.paneFocused
+  }
+}
+
 @MainActor
 final class SendCommandHandler: CommandHandler {
-  typealias ResolverProvider = @MainActor () -> TargetResolver
+  typealias ResolveProvider = @MainActor (TargetSelector) -> Result<SendResolvedTarget, TargetResolverError>
+  typealias TextDelivery = @MainActor (SendResolvedTarget, String, Bool) -> Void
   typealias WaiterProvider = @MainActor (String, UUID) -> AsyncStream<(exitCode: Int?, durationMs: Int)>?
 
-  private let resolverProvider: ResolverProvider
+  private let resolveProvider: ResolveProvider
+  private let textDelivery: TextDelivery
   private let waiterProvider: WaiterProvider
 
   init(
-    resolverProvider: @escaping ResolverProvider,
+    resolveProvider: @escaping ResolveProvider,
+    textDelivery: @escaping TextDelivery,
     waiterProvider: @escaping WaiterProvider
   ) {
-    self.resolverProvider = resolverProvider
+    self.resolveProvider = resolveProvider
+    self.textDelivery = textDelivery
     self.waiterProvider = waiterProvider
   }
 
@@ -27,9 +64,8 @@ final class SendCommandHandler: CommandHandler {
     }
 
     // Resolve target
-    let resolver = resolverProvider()
-    let result = resolver.resolve(input.selector)
-    let target: ResolvedTarget
+    let result = resolveProvider(input.selector)
+    let target: SendResolvedTarget
     switch result {
     case .success(let resolved):
       target = resolved
@@ -37,14 +73,8 @@ final class SendCommandHandler: CommandHandler {
       return mapResolverError(error)
     }
 
-    // Deliver text
-    let surfaceView = target.surfaceView
-    surfaceView.insertCommittedTextForBroadcast(input.text)
-
-    // Send trailing Enter if requested
-    if input.trailingEnter {
-      surfaceView.submitLine()
-    }
+    // Deliver text (and optional Enter)
+    textDelivery(target, input.text, input.trailingEnter)
 
     // Wait for command completion if requested
     let waitResult: SendWaitResult?
@@ -67,7 +97,7 @@ final class SendCommandHandler: CommandHandler {
 
     // Build payload
     let payload = SendCommandPayload(
-      target: makeTarget(from: target),
+      target: makePayloadTarget(from: target),
       input: SendInputInfo(
         source: input.source.rawValue,
         characters: input.text.unicodeScalars.count,
@@ -129,25 +159,25 @@ final class SendCommandHandler: CommandHandler {
 
   // MARK: - Helpers
 
-  private func makeTarget(from resolved: ResolvedTarget) -> SendTarget {
+  private func makePayloadTarget(from target: SendResolvedTarget) -> SendTarget {
     SendTarget(
       worktree: SendTargetWorktree(
-        id: resolved.worktreeID,
-        name: resolved.worktreeName,
-        path: resolved.worktreePath,
-        rootPath: resolved.worktreeRootPath,
-        kind: resolved.worktreeKind.rawValue
+        id: target.worktreeID,
+        name: target.worktreeName,
+        path: target.worktreePath,
+        rootPath: target.worktreeRootPath,
+        kind: target.worktreeKind.rawValue
       ),
       tab: SendTargetTab(
-        id: resolved.tabID.uuidString,
-        title: resolved.tabTitle,
-        selected: resolved.tabSelected
+        id: target.tabID.uuidString,
+        title: target.tabTitle,
+        selected: target.tabSelected
       ),
       pane: SendTargetPane(
-        id: resolved.paneID.uuidString,
-        title: resolved.paneTitle,
-        cwd: resolved.paneCWD,
-        focused: resolved.paneFocused
+        id: target.paneID.uuidString,
+        title: target.paneTitle,
+        cwd: target.paneCWD,
+        focused: target.paneFocused
       )
     )
   }
