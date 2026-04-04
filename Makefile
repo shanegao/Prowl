@@ -241,7 +241,18 @@ export-archive: # Export xarchive
 	bash -o pipefail -c 'xcodebuild -exportArchive -archivePath build/supacode.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw --format toon'
 
 test: ensure-ghostty
-	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1
+	@set -euo pipefail; \
+	result_bundle="$(CURRENT_MAKEFILE_DIR)/build/test-results/supacode-tests.xcresult"; \
+	mkdir -p "$$(dirname "$$result_bundle")"; \
+	rm -rf "$$result_bundle"; \
+	set +e; \
+	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -w --format toon; \
+	xcodebuild_status=$${PIPESTATUS[0]}; \
+	set -e; \
+	if [ "$$xcodebuild_status" -ne 0 ]; then \
+		bash "$(CURRENT_MAKEFILE_DIR)/scripts/print-xcresult-failures.sh" "$$result_bundle" || true; \
+	fi; \
+	exit "$$xcodebuild_status"
 
 test-cli-smoke: build-cli # Smoke test CLI executable
 	@set -euo pipefail; \
