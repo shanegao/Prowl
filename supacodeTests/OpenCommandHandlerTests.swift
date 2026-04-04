@@ -271,4 +271,42 @@ struct OpenCommandHandlerTests {
     let payload = try data.decode(as: OpenCommandData.self)
     #expect(payload.invocation == "implicit-open")
   }
+
+  // MARK: - App launched flag
+
+  @MainActor
+  @Test func appLaunchedFlagIsPassedThrough() async throws {
+    let handler = makeHandler(
+      resolver: { _ in
+        OpenResolverResult(
+          resolution: .exactRoot,
+          worktreeID: "Test:/tmp/project",
+          worktreeName: "project",
+          worktreePath: "/tmp/project",
+          rootPath: "/tmp/project",
+          worktreeKind: "git",
+          resolvedPath: "/tmp/project"
+        )
+      }
+    )
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: "/tmp/project", appLaunched: true))
+    )
+    let response = await handler.handle(envelope: envelope)
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.appLaunched == true)
+    #expect(payload.broughtToFront == true)
+  }
+
+  @MainActor
+  @Test func appLaunchedDefaultsToFalse() async throws {
+    let handler = makeHandler()
+    let envelope = CommandEnvelope(output: .json, command: .open(OpenInput()))
+    let response = await handler.handle(envelope: envelope)
+    let data = try #require(response.data)
+    let payload = try data.decode(as: OpenCommandData.self)
+    #expect(payload.appLaunched == false)
+  }
 }

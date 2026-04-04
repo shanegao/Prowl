@@ -142,6 +142,7 @@ final class OpenCommandHandler: CommandHandler {
 
     let result = resolver(input.path)
     let invocation = deriveInvocation(input: input)
+    let appLaunched = input.appLaunched
 
     switch result.resolution {
     case .noArgument:
@@ -151,6 +152,7 @@ final class OpenCommandHandler: CommandHandler {
         requestedPath: nil,
         resolvedPath: nil,
         resolution: .noArgument,
+        appLaunched: appLaunched,
         createdTab: false,
         target: nil
       )
@@ -166,6 +168,7 @@ final class OpenCommandHandler: CommandHandler {
         requestedPath: input.path,
         resolvedPath: result.resolvedPath ?? input.path,
         resolution: .exactRoot,
+        appLaunched: appLaunched,
         createdTab: false,
         target: makeTarget(result: result, snapshot: snapshot)
       )
@@ -185,6 +188,7 @@ final class OpenCommandHandler: CommandHandler {
         requestedPath: input.path,
         resolvedPath: result.resolvedPath ?? input.path,
         resolution: .insideRoot,
+        appLaunched: appLaunched,
         createdTab: true,
         target: makeTarget(result: result, snapshot: snapshot)
       )
@@ -200,6 +204,7 @@ final class OpenCommandHandler: CommandHandler {
         requestedPath: input.path,
         resolvedPath: result.resolvedPath ?? input.path,
         resolution: .newRoot,
+        appLaunched: appLaunched,
         createdTab: true,
         target: nil
       )
@@ -264,6 +269,7 @@ final class OpenCommandHandler: CommandHandler {
     requestedPath: String?,
     resolvedPath: String?,
     resolution: OpenResolution,
+    appLaunched: Bool,
     createdTab: Bool,
     target: OpenTarget?
   ) -> CommandResponse {
@@ -272,7 +278,7 @@ final class OpenCommandHandler: CommandHandler {
       requestedPath: requestedPath,
       resolvedPath: resolvedPath,
       resolution: resolution.rawValue,
-      appLaunched: false,
+      appLaunched: appLaunched,
       broughtToFront: true,
       createdTab: createdTab,
       target: target
