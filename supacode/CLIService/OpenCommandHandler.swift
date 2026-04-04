@@ -363,6 +363,7 @@ final class OpenCommandHandler: CommandHandler {
       return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
     }
 
+    selectWorktree(worktreeID)
     createTabAtPath(worktreeID, path)
     guard let target = await waitForOpenTarget(
       selector: .worktree(worktreeID),
