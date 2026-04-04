@@ -31,6 +31,16 @@ make test-cli-integration  # End-to-end CLI socket integration tests
 make format                # Run swift-format
 ```
 
+### Local Ghostty sync (avoid submodule/XCFramework drift)
+
+```bash
+make setup-local-hooks     # one-time: enable .githooks/post-checkout + post-merge
+make ensure-ghostty        # fast SHA check, rebuilds only when ThirdParty/ghostty changed
+make sync-ghostty          # force rebuild + clear DerivedData
+```
+
+`build-app` and `test` already run `ensure-ghostty` automatically.
+
 ## Contributing
 
 - I actual prefer a well written issue describing features/bugs u want rather than a vibe-coded PR
