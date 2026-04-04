@@ -488,10 +488,6 @@ struct SupacodeApp: App {
     )
   }
 
-  static func shellQuote(_ value: String) -> String {
-    "'\(value.replacing("'", with: "'\"'\"'"))'"
-  }
-
   static func resolveCLITerminalWorktree(
     id: Worktree.ID,
     repositories: [Repository]

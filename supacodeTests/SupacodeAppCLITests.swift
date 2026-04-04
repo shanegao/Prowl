@@ -7,23 +7,6 @@ import Testing
 
 @MainActor
 struct SupacodeAppCLITests {
-  @Test func shellQuoteAlwaysProducesShellLiterals() {
-    let cases = [
-      ("/tmp/plain", "'/tmp/plain'"),
-      ("/tmp/with space", "'/tmp/with space'"),
-      ("/tmp/it'works", "'/tmp/it'\"'\"'works'"),
-      ("/tmp/foo;bar", "'/tmp/foo;bar'"),
-      ("/tmp/$HOME-test", "'/tmp/$HOME-test'"),
-      ("/tmp/$(whoami)-x", "'/tmp/$(whoami)-x'"),
-      ("/tmp/`whoami`-x", "'/tmp/`whoami`-x'"),
-    ]
-
-    for (input, expected) in cases {
-      #expect(SupacodeApp.shellQuote(input) == expected)
-      #expect(shellQuote(input) == expected)
-    }
-  }
-
   @Test func cliRouterWiresKeyAndReadHandlersInsteadOfStubHandlers() async {
     let store = Store(initialState: AppFeature.State()) {
       AppFeature()
