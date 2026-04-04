@@ -199,11 +199,25 @@ struct CLIKeyCommandHandlerTests {
     #expect(response.error?.code == CLIErrorCode.keyDeliveryFailed)
   }
 
-  @Test func targetNotFoundError() async throws {
+  @Test func noActivePaneWhenNoSelector() async throws {
+    let handler = Self.makeHandler(
+      resolveResult: .failure(.notFound("No focused pane in selected tab."))
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(selector: .none)
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.noActivePane)
+  }
+
+  @Test func targetNotFoundWithExplicitSelector() async throws {
     let handler = Self.makeHandler(
       resolveResult: .failure(.notFound("Worktree 'missing' not found."))
     )
-    let response = await handler.handle(envelope: Self.makeEnvelope())
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(selector: .worktree("missing"))
+    )
 
     #expect(response.ok == false)
     #expect(response.error?.code == CLIErrorCode.targetNotFound)
@@ -213,7 +227,9 @@ struct CLIKeyCommandHandlerTests {
     let handler = Self.makeHandler(
       resolveResult: .failure(.notUnique("Worktree 'Prowl' matches 2 worktrees."))
     )
-    let response = await handler.handle(envelope: Self.makeEnvelope())
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(selector: .worktree("Prowl"))
+    )
 
     #expect(response.ok == false)
     #expect(response.error?.code == CLIErrorCode.targetNotUnique)

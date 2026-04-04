@@ -80,6 +80,12 @@ final class KeyCommandHandler: CommandHandler {
     case .success(let resolved):
       target = resolved
     case .failure(let error):
+      if input.selector == .none, case .notFound = error {
+        return errorResponse(
+          code: CLIErrorCode.noActivePane,
+          message: "No active pane to receive key events."
+        )
+      }
       return mapResolverError(error)
     }
 
