@@ -222,117 +222,174 @@ final class OpenCommandHandler: CommandHandler {
     let result = resolver(input.path)
     let invocation = deriveInvocation(input: input)
 
+    return await handleResolvedResult(
+      result,
+      input: input,
+      invocation: invocation,
+      appLaunched: appLaunched
+    )
+  }
+
+  private func handleResolvedResult(
+    _ result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
     switch result.resolution {
     case .noArgument:
-      bringAppToFront()
-      let target = await waitForOpenTarget(selector: .none)
-      return makeSuccess(
-        invocation: invocation,
-        requestedPath: nil,
-        resolvedPath: nil,
-        resolution: .noArgument,
-        appLaunched: appLaunched,
-        createdTab: false,
-        target: target
-      )
-
+      return await handleNoArgument(invocation: invocation, appLaunched: appLaunched)
     case .exactRoot:
-      guard let worktreeID = result.worktreeID else {
-        return makeFailure(message: "Resolved exact-root target is missing a worktree ID.")
-      }
-      let requestedPath = result.resolvedPath ?? input.path
-      selectWorktree(worktreeID)
-      bringAppToFront()
+      return await handleExactRoot(
+        result: result,
+        input: input,
+        invocation: invocation,
+        appLaunched: appLaunched
+      )
+    case .insideRoot:
+      return await handleInsideRoot(
+        result: result,
+        input: input,
+        invocation: invocation,
+        appLaunched: appLaunched
+      )
+    case .newRoot:
+      return await handleNewRoot(
+        result: result,
+        input: input,
+        invocation: invocation,
+        appLaunched: appLaunched
+      )
+    }
+  }
 
-      var createdTab = false
-      var target = await waitForOpenTarget(
+  private func handleNoArgument(invocation: String, appLaunched: Bool) async -> CommandResponse {
+    bringAppToFront()
+    let target = await waitForOpenTarget(selector: .none)
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: nil,
+      resolvedPath: nil,
+      resolution: .noArgument,
+      appLaunched: appLaunched,
+      createdTab: false,
+      target: target
+    )
+  }
+
+  private func handleExactRoot(
+    result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
+    guard let worktreeID = result.worktreeID else {
+      return makeFailure(message: "Resolved exact-root target is missing a worktree ID.")
+    }
+    let requestedPath = result.resolvedPath ?? input.path
+    selectWorktree(worktreeID)
+    bringAppToFront()
+
+    var createdTab = false
+    var target = await waitForOpenTarget(
+      selector: .worktree(worktreeID),
+      preferredPaneCWD: requestedPath
+    )
+    if target == nil, let requestedPath {
+      createTabAtPath(worktreeID, requestedPath)
+      createdTab = true
+      target = await waitForOpenTarget(
         selector: .worktree(worktreeID),
         preferredPaneCWD: requestedPath
       )
-      if target == nil, let requestedPath {
-        createTabAtPath(worktreeID, requestedPath)
-        createdTab = true
-        target = await waitForOpenTarget(
-          selector: .worktree(worktreeID),
-          preferredPaneCWD: requestedPath
-        )
-      }
-      guard let target else {
-        return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
-      }
-      return makeSuccess(
-        invocation: invocation,
-        requestedPath: input.path,
-        resolvedPath: requestedPath,
-        resolution: .exactRoot,
-        appLaunched: appLaunched,
-        createdTab: createdTab,
-        target: target
-      )
+    }
+    guard let target else {
+      return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
+    }
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: input.path,
+      resolvedPath: requestedPath,
+      resolution: .exactRoot,
+      appLaunched: appLaunched,
+      createdTab: createdTab,
+      target: target
+    )
+  }
 
-    case .insideRoot:
-      guard let worktreeID = result.worktreeID else {
-        return makeFailure(message: "Resolved inside-root target is missing a worktree ID.")
-      }
-      selectWorktree(worktreeID)
-      if let subpath = result.resolvedPath ?? input.path {
-        createTabAtPath(worktreeID, subpath)
-      }
-      bringAppToFront()
-      guard let target = await waitForOpenTarget(
-        selector: .worktree(worktreeID),
-        preferredPaneCWD: result.resolvedPath ?? input.path
-      ) else {
-        return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
-      }
-      return makeSuccess(
-        invocation: invocation,
-        requestedPath: input.path,
-        resolvedPath: result.resolvedPath ?? input.path,
-        resolution: .insideRoot,
-        appLaunched: appLaunched,
-        createdTab: true,
-        target: target
-      )
+  private func handleInsideRoot(
+    result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
+    guard let worktreeID = result.worktreeID else {
+      return makeFailure(message: "Resolved inside-root target is missing a worktree ID.")
+    }
+    selectWorktree(worktreeID)
+    if let subpath = result.resolvedPath ?? input.path {
+      createTabAtPath(worktreeID, subpath)
+    }
+    bringAppToFront()
+    guard let target = await waitForOpenTarget(
+      selector: .worktree(worktreeID),
+      preferredPaneCWD: result.resolvedPath ?? input.path
+    ) else {
+      return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
+    }
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: input.path,
+      resolvedPath: result.resolvedPath ?? input.path,
+      resolution: .insideRoot,
+      appLaunched: appLaunched,
+      createdTab: true,
+      target: target
+    )
+  }
 
-    case .newRoot:
-      guard let path = result.resolvedPath ?? input.path else {
-        return makeFailure(message: "Resolved new-root target is missing a path.")
-      }
-      let url = URL(fileURLWithPath: path, isDirectory: true)
-      addAndOpen(url)
-      bringAppToFront()
+  private func handleNewRoot(
+    result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
+    guard let path = result.resolvedPath ?? input.path else {
+      return makeFailure(message: "Resolved new-root target is missing a path.")
+    }
+    let url = URL(fileURLWithPath: path, isDirectory: true)
+    addAndOpen(url)
+    bringAppToFront()
 
-      let finalResult = await waitForManagedResult(path: path)
-      guard let worktreeID = finalResult?.worktreeID else {
-        return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
-      }
+    let finalResult = await waitForManagedResult(path: path)
+    guard let worktreeID = finalResult?.worktreeID else {
+      return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
+    }
 
-      var target = await waitForOpenTarget(
+    var target = await waitForOpenTarget(
+      selector: .worktree(worktreeID),
+      preferredPaneCWD: path
+    )
+    if target == nil {
+      createTabAtPath(worktreeID, path)
+      target = await waitForOpenTarget(
         selector: .worktree(worktreeID),
         preferredPaneCWD: path
       )
-      if target == nil {
-        createTabAtPath(worktreeID, path)
-        target = await waitForOpenTarget(
-          selector: .worktree(worktreeID),
-          preferredPaneCWD: path
-        )
-      }
-      guard let target else {
-        return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
-      }
-
-      return makeSuccess(
-        invocation: invocation,
-        requestedPath: input.path,
-        resolvedPath: result.resolvedPath ?? input.path,
-        resolution: .newRoot,
-        appLaunched: appLaunched,
-        createdTab: true,
-        target: target
-      )
     }
+    guard let target else {
+      return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
+    }
+
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: input.path,
+      resolvedPath: result.resolvedPath ?? input.path,
+      resolution: .newRoot,
+      appLaunched: appLaunched,
+      createdTab: true,
+      target: target
+    )
   }
 
   // MARK: - Private

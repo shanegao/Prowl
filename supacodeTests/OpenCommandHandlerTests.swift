@@ -212,7 +212,7 @@ struct OpenCommandHandlerTests {
     let json = try jsonObject(from: response)
     #expect(Set(json.keys) == [
       "invocation", "requested_path", "resolved_path", "resolution",
-      "app_launched", "brought_to_front", "created_tab", "target"
+      "app_launched", "brought_to_front", "created_tab", "target",
     ])
     let jsonTarget = try #require(json["target"] as? [String: Any])
     #expect(Set(jsonTarget.keys) == ["worktree", "tab", "pane"])
