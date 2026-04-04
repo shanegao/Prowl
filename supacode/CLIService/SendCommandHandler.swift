@@ -109,10 +109,20 @@ final class SendCommandHandler: CommandHandler {
       return mapResolverError(error)
     }
 
+    let waitStream = input.wait ? waiterProvider(target.worktreeID, target.paneID) : nil
+
+    // If capture is requested but the pane has no shell integration (no wait stream),
+    // reject early with CAPTURE_UNSUPPORTED — do not send text and fall through to timeout.
+    if input.captureOutput && waitStream == nil {
+      return errorResponse(
+        code: CLIErrorCode.captureUnsupported,
+        message: "--capture requires shell integration (OSC 133) on the target pane. "
+          + "This pane does not appear to support it."
+      )
+    }
+
     // Pre-capture snapshot (before text delivery)
     let preCapture: ReadCaptureInput? = input.captureOutput ? captureProvider?(target) : nil
-
-    let waitStream = input.wait ? waiterProvider(target.worktreeID, target.paneID) : nil
 
     // Deliver text (and optional Enter)
     textDelivery(target, input.text, input.trailingEnter)

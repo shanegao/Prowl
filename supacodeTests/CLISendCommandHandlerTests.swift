@@ -442,4 +442,18 @@ struct CLISendCommandHandlerTests {
     #expect(capture.text == "hello")
     #expect(capture.lineCount == 1)
   }
+
+  @Test func captureUnsupportedWhenNoShellIntegration() async throws {
+    // waiterProvider returns nil (no shell integration) → CAPTURE_UNSUPPORTED, not WAIT_TIMEOUT
+    let handler = Self.makeHandler(
+      waiterResult: nil,  // nil means waiterProvider returns nil stream
+      captureProvider: { _ in ReadCaptureInput(viewportText: "$ ", screenText: nil) }
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(captureOutput: true)
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.captureUnsupported)
+  }
 }
