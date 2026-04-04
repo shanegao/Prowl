@@ -57,6 +57,28 @@ struct CLIReadCommandHandlerTests {
     #expect(payload.text == "line-1\nline-2")
   }
 
+  @Test func snapshotSucceedsWhenScreenCaptureUnavailable() async throws {
+    let handler = ReadCommandHandler(
+      resolveProvider: { _ in .success(Self.makeTarget()) },
+      captureProvider: { _ in
+        ReadCaptureInput(
+          viewportText: "line-1\nline-2",
+          screenText: nil
+        )
+      }
+    )
+
+    let response = await handler.handle(envelope: Self.makeEnvelope())
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: ReadCommandPayload.self))
+    #expect(payload.mode == .snapshot)
+    #expect(payload.source == .screen)
+    #expect(payload.truncated == false)
+    #expect(payload.lineCount == 2)
+    #expect(payload.text == "line-1\nline-2")
+  }
+
   @Test func lastUsesViewportWhenEnoughLines() async throws {
     let handler = ReadCommandHandler(
       resolveProvider: { _ in .success(Self.makeTarget()) },
@@ -120,6 +142,48 @@ struct CLIReadCommandHandlerTests {
     #expect(payload.truncated == true)
     #expect(payload.lineCount == 4)
     #expect(payload.text == "one\ntwo\nthree\nfour")
+  }
+
+  @Test func lastFallsBackToViewportWhenScreenCaptureUnavailable() async throws {
+    let handler = ReadCommandHandler(
+      resolveProvider: { _ in .success(Self.makeTarget()) },
+      captureProvider: { _ in
+        ReadCaptureInput(
+          viewportText: "three\nfour",
+          screenText: nil
+        )
+      }
+    )
+
+    let response = await handler.handle(envelope: Self.makeEnvelope(last: 10))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: ReadCommandPayload.self))
+    #expect(payload.source == .mixed)
+    #expect(payload.truncated == true)
+    #expect(payload.lineCount == 2)
+    #expect(payload.text == "three\nfour")
+  }
+
+  @Test func lastPrefersViewportWhenScreenHasFewerLines() async throws {
+    let handler = ReadCommandHandler(
+      resolveProvider: { _ in .success(Self.makeTarget()) },
+      captureProvider: { _ in
+        ReadCaptureInput(
+          viewportText: "b\nc\nd",
+          screenText: "c\nd"
+        )
+      }
+    )
+
+    let response = await handler.handle(envelope: Self.makeEnvelope(last: 5))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: ReadCommandPayload.self))
+    #expect(payload.source == .mixed)
+    #expect(payload.truncated == true)
+    #expect(payload.lineCount == 3)
+    #expect(payload.text == "b\nc\nd")
   }
 
   @Test func trailingNewlineCountsAsExtraLine() async throws {

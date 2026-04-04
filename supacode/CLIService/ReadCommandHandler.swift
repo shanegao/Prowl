@@ -11,7 +11,7 @@ private struct ReadCapture {
 
 struct ReadCaptureInput: Sendable {
   let viewportText: String
-  let screenText: String
+  let screenText: String?
 }
 
 /// Resolved target metadata for read payload construction.
@@ -121,7 +121,7 @@ final class ReadCommandHandler: CommandHandler {
   private func captureLast(
     requestedLineCount: Int,
     viewportText: String,
-    screenText: String
+    screenText: String?
   ) -> ReadCapture {
     let viewportLines = splitLines(viewportText)
     if viewportLines.count >= requestedLineCount {
@@ -133,18 +133,25 @@ final class ReadCommandHandler: CommandHandler {
       )
     }
 
-    let screenLines = splitLines(screenText)
-    let source: ReadSource
-    if screenLines.count > viewportLines.count {
-      source = .scrollback
-    } else if screenLines.count < viewportLines.count {
-      source = .mixed
-    } else {
-      source = .screen
+    guard let screenText else {
+      return ReadCapture(
+        text: joinLines(viewportLines.suffix(min(requestedLineCount, viewportLines.count))),
+        source: .mixed,
+        truncated: viewportLines.count < requestedLineCount
+      )
     }
 
-    let available = min(requestedLineCount, screenLines.count)
-    let text = joinLines(screenLines.suffix(available))
+    let screenLines = splitLines(screenText)
+    if screenLines.count < viewportLines.count {
+      return ReadCapture(
+        text: joinLines(viewportLines.suffix(min(requestedLineCount, viewportLines.count))),
+        source: .mixed,
+        truncated: viewportLines.count < requestedLineCount
+      )
+    }
+
+    let source: ReadSource = screenLines.count > viewportLines.count ? .scrollback : .screen
+    let text = joinLines(screenLines.suffix(min(requestedLineCount, screenLines.count)))
 
     return ReadCapture(
       text: text,

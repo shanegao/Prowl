@@ -267,12 +267,14 @@ struct SupacodeApp: App {
       captureProvider: { target in
         guard let state = terminalManager.stateIfExists(for: target.worktreeID),
           let surface = state.surfaceView(for: target.paneID),
-          let viewportText = surface.readViewportContentsForCLI(),
-          let screenText = surface.readScreenContentsForCLI()
+          let viewportText = surface.readViewportContentsForCLI()
         else {
           return nil
         }
-        return ReadCaptureInput(viewportText: viewportText, screenText: screenText)
+        return ReadCaptureInput(
+          viewportText: viewportText,
+          screenText: surface.readScreenContentsForCLI()
+        )
       }
     )
     let cliRouter = CLICommandRouter(
