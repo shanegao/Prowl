@@ -7,10 +7,21 @@ import Testing
 
 @MainActor
 struct SupacodeAppCLITests {
-  @Test func shellQuoteEscapesWhitespaceAndSingleQuotes() {
-    #expect(SupacodeApp.shellQuote("/tmp/plain") == "/tmp/plain")
-    #expect(SupacodeApp.shellQuote("/tmp/with space") == "'/tmp/with space'")
-    #expect(SupacodeApp.shellQuote("/tmp/it'works") == "'/tmp/it'\"'\"'works'")
+  @Test func shellQuoteAlwaysProducesShellLiterals() {
+    let cases = [
+      ("/tmp/plain", "'/tmp/plain'"),
+      ("/tmp/with space", "'/tmp/with space'"),
+      ("/tmp/it'works", "'/tmp/it'\"'\"'works'"),
+      ("/tmp/foo;bar", "'/tmp/foo;bar'"),
+      ("/tmp/$HOME-test", "'/tmp/$HOME-test'"),
+      ("/tmp/$(whoami)-x", "'/tmp/$(whoami)-x'"),
+      ("/tmp/`whoami`-x", "'/tmp/`whoami`-x'"),
+    ]
+
+    for (input, expected) in cases {
+      #expect(SupacodeApp.shellQuote(input) == expected)
+      #expect(shellQuote(input) == expected)
+    }
   }
 
   @Test func cliRouterWiresKeyAndReadHandlersInsteadOfStubHandlers() async {
