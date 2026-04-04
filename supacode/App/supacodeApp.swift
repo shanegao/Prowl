@@ -254,83 +254,33 @@ struct SupacodeApp: App {
         bringMainWindowToFront()
       }
     )
-    let openHandler = OpenCommandHandler(
+    let openHandler = Self.makeOpenHandler(appStore: appStore, terminalManager: terminalManager)
+    let cliRouter = CLICommandRouter(
+      openHandler: openHandler,
+      listHandler: listHandler,
+      focusHandler: focusHandler,
+      sendHandler: sendHandler
+    )
+    let cliServer = CLISocketServer(router: cliRouter)
+    let logger = SupaLogger("CLIService")
+    do {
+      try cliServer.start()
+      logger.info("CLI socket server started at \(ProwlSocket.defaultPath)")
+    } catch {
+      logger.warning("Failed to start CLI socket server: \(String(describing: error))")
+    }
+    return cliServer
+  }
+
+  // MARK: - Open handler factory
+
+  private static func makeOpenHandler(
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) -> OpenCommandHandler {
+    OpenCommandHandler(
       resolver: { path in
-        guard let path else {
-          return OpenResolverResult(
-            resolution: .noArgument, worktreeID: nil, worktreeName: nil,
-            worktreePath: nil, rootPath: nil, worktreeKind: nil, resolvedPath: nil
-          )
-        }
-        let normalized = URL(fileURLWithPath: path, isDirectory: true)
-          .standardizedFileURL.path(percentEncoded: false)
-        let repositories = appStore.state.repositories
-        // Exact match: worktree working directory
-        for repository in repositories.repositories {
-          let kind = repository.kind.rawValue
-          for worktree in repository.worktrees {
-            let wtPath = worktree.workingDirectory
-              .standardizedFileURL.path(percentEncoded: false)
-            if wtPath == normalized {
-              return OpenResolverResult(
-                resolution: .exactRoot, worktreeID: worktree.id,
-                worktreeName: worktree.name, worktreePath: wtPath,
-                rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
-                worktreeKind: kind, resolvedPath: normalized
-              )
-            }
-          }
-          // Exact match: repository root for non-worktree repos
-          let repoRoot = repository.rootURL
-            .standardizedFileURL.path(percentEncoded: false)
-          if repoRoot == normalized,
-             !repository.capabilities.supportsWorktrees,
-             repository.capabilities.supportsRunnableFolderActions
-          {
-            return OpenResolverResult(
-              resolution: .exactRoot, worktreeID: repository.id,
-              worktreeName: repository.name, worktreePath: repoRoot,
-              rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
-            )
-          }
-        }
-        // Inside-root: path is inside an existing worktree/repo root
-        let normalizedSlash = normalized.hasSuffix("/") ? normalized : normalized + "/"
-        for repository in repositories.repositories {
-          let kind = repository.kind.rawValue
-          for worktree in repository.worktrees {
-            let wtPath = worktree.workingDirectory
-              .standardizedFileURL.path(percentEncoded: false)
-            let wtSlash = wtPath.hasSuffix("/") ? wtPath : wtPath + "/"
-            if normalizedSlash.hasPrefix(wtSlash) {
-              return OpenResolverResult(
-                resolution: .insideRoot, worktreeID: worktree.id,
-                worktreeName: worktree.name, worktreePath: wtPath,
-                rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
-                worktreeKind: kind, resolvedPath: normalized
-              )
-            }
-          }
-          if !repository.capabilities.supportsWorktrees,
-             repository.capabilities.supportsRunnableFolderActions
-          {
-            let repoRoot = repository.rootURL
-              .standardizedFileURL.path(percentEncoded: false)
-            let repoSlash = repoRoot.hasSuffix("/") ? repoRoot : repoRoot + "/"
-            if normalizedSlash.hasPrefix(repoSlash) {
-              return OpenResolverResult(
-                resolution: .insideRoot, worktreeID: repository.id,
-                worktreeName: repository.name, worktreePath: repoRoot,
-                rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
-              )
-            }
-          }
-        }
-        // New root: unknown path
-        return OpenResolverResult(
-          resolution: .newRoot, worktreeID: nil, worktreeName: nil,
-          worktreePath: nil, rootPath: nil, worktreeKind: nil, resolvedPath: normalized
-        )
+        resolveOpenPath(path, repositories: appStore.state.repositories)
       },
       selectWorktree: { worktreeID in
         selectCLIWorktreeContext(
@@ -373,21 +323,87 @@ struct SupacodeApp: App {
         )
       }
     )
-    let cliRouter = CLICommandRouter(
-      openHandler: openHandler,
-      listHandler: listHandler,
-      focusHandler: focusHandler,
-      sendHandler: sendHandler
-    )
-    let cliServer = CLISocketServer(router: cliRouter)
-    let logger = SupaLogger("CLIService")
-    do {
-      try cliServer.start()
-      logger.info("CLI socket server started at \(ProwlSocket.defaultPath)")
-    } catch {
-      logger.warning("Failed to start CLI socket server: \(String(describing: error))")
+  }
+
+  // MARK: - Open path resolution
+
+  private static func resolveOpenPath(
+    _ path: String?,
+    repositories: RepositoriesFeature.State
+  ) -> OpenResolverResult {
+    guard let path else {
+      return OpenResolverResult(
+        resolution: .noArgument, worktreeID: nil, worktreeName: nil,
+        worktreePath: nil, rootPath: nil, worktreeKind: nil, resolvedPath: nil
+      )
     }
-    return cliServer
+    let normalized = URL(fileURLWithPath: path, isDirectory: true)
+      .standardizedFileURL.path(percentEncoded: false)
+    // Exact match: worktree working directory or repository root
+    for repository in repositories.repositories {
+      let kind = repository.kind.rawValue
+      for worktree in repository.worktrees {
+        let wtPath = worktree.workingDirectory
+          .standardizedFileURL.path(percentEncoded: false)
+        if wtPath == normalized {
+          return OpenResolverResult(
+            resolution: .exactRoot, worktreeID: worktree.id,
+            worktreeName: worktree.name, worktreePath: wtPath,
+            rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
+            worktreeKind: kind, resolvedPath: normalized
+          )
+        }
+      }
+      let repoRoot = repository.rootURL
+        .standardizedFileURL.path(percentEncoded: false)
+      if repoRoot == normalized,
+         !repository.capabilities.supportsWorktrees,
+         repository.capabilities.supportsRunnableFolderActions
+      {
+        return OpenResolverResult(
+          resolution: .exactRoot, worktreeID: repository.id,
+          worktreeName: repository.name, worktreePath: repoRoot,
+          rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
+        )
+      }
+    }
+    // Inside-root: path is inside an existing worktree/repo root
+    let normalizedSlash = normalized.hasSuffix("/") ? normalized : normalized + "/"
+    for repository in repositories.repositories {
+      let kind = repository.kind.rawValue
+      for worktree in repository.worktrees {
+        let wtPath = worktree.workingDirectory
+          .standardizedFileURL.path(percentEncoded: false)
+        let wtSlash = wtPath.hasSuffix("/") ? wtPath : wtPath + "/"
+        if normalizedSlash.hasPrefix(wtSlash) {
+          return OpenResolverResult(
+            resolution: .insideRoot, worktreeID: worktree.id,
+            worktreeName: worktree.name, worktreePath: wtPath,
+            rootPath: repository.rootURL.standardizedFileURL.path(percentEncoded: false),
+            worktreeKind: kind, resolvedPath: normalized
+          )
+        }
+      }
+      if !repository.capabilities.supportsWorktrees,
+         repository.capabilities.supportsRunnableFolderActions
+      {
+        let repoRoot = repository.rootURL
+          .standardizedFileURL.path(percentEncoded: false)
+        let repoSlash = repoRoot.hasSuffix("/") ? repoRoot : repoRoot + "/"
+        if normalizedSlash.hasPrefix(repoSlash) {
+          return OpenResolverResult(
+            resolution: .insideRoot, worktreeID: repository.id,
+            worktreeName: repository.name, worktreePath: repoRoot,
+            rootPath: repoRoot, worktreeKind: kind, resolvedPath: normalized
+          )
+        }
+      }
+    }
+    // New root: unknown path
+    return OpenResolverResult(
+      resolution: .newRoot, worktreeID: nil, worktreeName: nil,
+      worktreePath: nil, rootPath: nil, worktreeKind: nil, resolvedPath: normalized
+    )
   }
 
   private static func selectCLIWorktreeContext(
