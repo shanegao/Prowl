@@ -41,7 +41,7 @@ struct OpenCommandData: Codable {
   let appLaunched: Bool
   let broughtToFront: Bool
   let createdTab: Bool
-  let target: OpenTarget
+  let target: OpenTarget?
 
   enum CodingKeys: String, CodingKey {
     case invocation
@@ -71,7 +71,11 @@ struct OpenCommandData: Codable {
     try container.encode(appLaunched, forKey: .appLaunched)
     try container.encode(broughtToFront, forKey: .broughtToFront)
     try container.encode(createdTab, forKey: .createdTab)
-    try container.encode(target, forKey: .target)
+    if let target {
+      try container.encode(target, forKey: .target)
+    } else {
+      try container.encodeNil(forKey: .target)
+    }
   }
 }
 
@@ -221,9 +225,7 @@ final class OpenCommandHandler: CommandHandler {
     switch result.resolution {
     case .noArgument:
       bringAppToFront()
-      guard let target = await waitForOpenTarget(selector: .none) else {
-        return makeFailure(message: "Failed to resolve the current focused target.")
-      }
+      let target = await waitForOpenTarget(selector: .none)
       return makeSuccess(
         invocation: invocation,
         requestedPath: nil,
@@ -238,21 +240,33 @@ final class OpenCommandHandler: CommandHandler {
       guard let worktreeID = result.worktreeID else {
         return makeFailure(message: "Resolved exact-root target is missing a worktree ID.")
       }
+      let requestedPath = result.resolvedPath ?? input.path
       selectWorktree(worktreeID)
       bringAppToFront()
-      guard let target = await waitForOpenTarget(
+
+      var createdTab = false
+      var target = await waitForOpenTarget(
         selector: .worktree(worktreeID),
-        preferredPaneCWD: result.resolvedPath ?? input.path
-      ) else {
+        preferredPaneCWD: requestedPath
+      )
+      if target == nil, let requestedPath {
+        createTabAtPath(worktreeID, requestedPath)
+        createdTab = true
+        target = await waitForOpenTarget(
+          selector: .worktree(worktreeID),
+          preferredPaneCWD: requestedPath
+        )
+      }
+      guard let target else {
         return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
       }
       return makeSuccess(
         invocation: invocation,
         requestedPath: input.path,
-        resolvedPath: result.resolvedPath ?? input.path,
+        resolvedPath: requestedPath,
         resolution: .exactRoot,
         appLaunched: appLaunched,
-        createdTab: false,
+        createdTab: createdTab,
         target: target
       )
 
@@ -290,9 +304,22 @@ final class OpenCommandHandler: CommandHandler {
       bringAppToFront()
 
       let finalResult = await waitForManagedResult(path: path)
-      guard let worktreeID = finalResult?.worktreeID,
-            let target = await waitForOpenTarget(selector: .worktree(worktreeID))
-      else {
+      guard let worktreeID = finalResult?.worktreeID else {
+        return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
+      }
+
+      var target = await waitForOpenTarget(
+        selector: .worktree(worktreeID),
+        preferredPaneCWD: path
+      )
+      if target == nil {
+        createTabAtPath(worktreeID, path)
+        target = await waitForOpenTarget(
+          selector: .worktree(worktreeID),
+          preferredPaneCWD: path
+        )
+      }
+      guard let target else {
         return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
       }
 
@@ -433,7 +460,7 @@ final class OpenCommandHandler: CommandHandler {
     resolution: OpenResolution,
     appLaunched: Bool,
     createdTab: Bool,
-    target: OpenTarget
+    target: OpenTarget?
   ) -> CommandResponse {
     let payload = OpenCommandData(
       invocation: invocation,

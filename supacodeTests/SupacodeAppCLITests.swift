@@ -43,4 +43,27 @@ struct SupacodeAppCLITests {
     #expect(keyResponse.error?.code != "NOT_IMPLEMENTED")
     #expect(readResponse.error?.code != "NOT_IMPLEMENTED")
   }
+
+  @Test func resolveCLITerminalWorktreeBuildsSyntheticRunnableFolderWorktree() {
+    let repository = Repository(
+      id: "/Users/test/PlainFolder",
+      rootURL: URL(fileURLWithPath: "/Users/test/PlainFolder", isDirectory: true),
+      name: "PlainFolder",
+      kind: .plain,
+      worktrees: []
+    )
+
+    let resolved = SupacodeApp.resolveCLITerminalWorktree(
+      id: repository.id,
+      repositories: [repository]
+    )
+
+    #expect(resolved?.id == repository.id)
+    #expect(resolved?.name == "PlainFolder")
+    #expect(
+      resolved?.workingDirectory.standardizedFileURL.path(percentEncoded: false)
+        == URL(fileURLWithPath: "/Users/test/PlainFolder", isDirectory: true)
+        .standardizedFileURL.path(percentEncoded: false)
+    )
+  }
 }

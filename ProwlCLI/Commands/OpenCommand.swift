@@ -49,8 +49,9 @@ struct OpenCommand: ParsableCommand {
 
   private static func deriveInvocation(path: String?) -> String {
     guard path != nil else { return "bare" }
-    let args = CommandLine.arguments.dropFirst()
-    if args.first == "open" {
+    let args = ProcessInfo.processInfo.arguments.dropFirst()
+    let firstPositional = args.first { !$0.hasPrefix("-") }
+    if firstPositional == "open" {
       return "open-subcommand"
     }
     return "implicit-open"

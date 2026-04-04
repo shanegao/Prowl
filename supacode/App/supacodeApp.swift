@@ -373,21 +373,18 @@ struct SupacodeApp: App {
         appStore.send(.repositories(.repositoryManagement(.openRepositories([url]))))
       },
       createTabAtPath: { worktreeID, path in
-        // Find the Worktree object by ID to create a tab cd'd to the subpath.
-        let repositories = appStore.state.repositories
-        for repository in repositories.repositories {
-          if let worktree = repository.worktrees.first(where: { $0.id == worktreeID }) {
-            let quotedPath = shellQuote(path)
-            terminalManager.handleCommand(
-              .createTabWithInput(
-                worktree,
-                input: "cd -- \(quotedPath)",
-                runSetupScriptIfNew: false
-              )
-            )
-            return
-          }
+        let repositories = Array(appStore.state.repositories.repositories)
+        guard let worktree = resolveCLITerminalWorktree(id: worktreeID, repositories: repositories) else {
+          return
         }
+        let quotedPath = shellQuote(path)
+        terminalManager.handleCommand(
+          .createTabWithInput(
+            worktree,
+            input: "cd -- \(quotedPath)",
+            runSetupScriptIfNew: false
+          )
+        )
       },
       resolveTarget: { selector in
         switch makeTargetResolver(appStore: appStore, terminalManager: terminalManager).resolve(selector) {
@@ -498,6 +495,30 @@ struct SupacodeApp: App {
 
   static func shellQuote(_ value: String) -> String {
     "'\(value.replacing("'", with: "'\"'\"'"))'"
+  }
+
+  static func resolveCLITerminalWorktree(
+    id: Worktree.ID,
+    repositories: [Repository]
+  ) -> Worktree? {
+    for repository in repositories {
+      if let worktree = repository.worktrees[id: id] {
+        return worktree
+      }
+      if repository.id == id,
+         repository.capabilities.supportsRunnableFolderActions,
+         !repository.capabilities.supportsWorktrees
+      {
+        return Worktree(
+          id: repository.id,
+          name: repository.name,
+          detail: repository.rootURL.path(percentEncoded: false),
+          workingDirectory: repository.rootURL,
+          repositoryRootURL: repository.rootURL
+        )
+      }
+    }
+    return nil
   }
 
   private static func selectCLIWorktreeContext(

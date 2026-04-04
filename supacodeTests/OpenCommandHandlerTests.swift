@@ -127,13 +127,14 @@ struct OpenCommandHandlerTests {
 
     let data = try #require(response.data)
     let payload = try data.decode(as: OpenCommandData.self)
+    let target = try #require(payload.target)
     #expect(payload.resolution == "no-argument")
     #expect(payload.invocation == "bare")
     #expect(payload.requestedPath == nil)
     #expect(payload.resolvedPath == nil)
     #expect(payload.broughtToFront == true)
     #expect(payload.appLaunched == false)
-    #expect(payload.target.worktree.id == "Prowl:/Users/test/Projects/Prowl")
+    #expect(target.worktree.id == "Prowl:/Users/test/Projects/Prowl")
 
     let json = try jsonObject(from: response)
     #expect(json.keys.contains("requested_path"))
@@ -141,6 +142,24 @@ struct OpenCommandHandlerTests {
     #expect(json["requested_path"] is NSNull)
     #expect(json["resolved_path"] is NSNull)
     #expect((json["target"] as? [String: Any]) != nil)
+  }
+
+  @MainActor
+  @Test func openWithNoPathSucceedsEvenWhenNoFocusedSurfaceCanBeResolved() async throws {
+    let handler = makeHandler(
+      resolveTarget: { _ in nil }
+    )
+
+    let envelope = CommandEnvelope(output: .json, command: .open(OpenInput()))
+    let response = await handler.handle(envelope: envelope)
+
+    #expect(response.ok == true)
+
+    let json = try jsonObject(from: response)
+    #expect(json["resolution"] as? String == "no-argument")
+    #expect(json["created_tab"] as? Bool == false)
+    #expect(json.keys.contains("target"))
+    #expect(json["target"] is NSNull)
   }
 
   // MARK: - Exact root
@@ -179,29 +198,82 @@ struct OpenCommandHandlerTests {
 
     let exactRootData = try #require(response.data)
     let payload = try exactRootData.decode(as: OpenCommandData.self)
+    let target = try #require(payload.target)
     #expect(payload.resolution == "exact-root")
     #expect(payload.invocation == "open-subcommand")
     #expect(payload.requestedPath == "/Users/test/Projects/Prowl")
     #expect(payload.resolvedPath == "/Users/test/Projects/Prowl")
     #expect(payload.createdTab == false)
     #expect(payload.broughtToFront == true)
-    #expect(payload.target.worktree.id == "Prowl:/Users/test/Projects/Prowl")
-    #expect(payload.target.tab.id == "0E2A7C03-9C01-4BC1-9327-6C1C7B629A52")
-    #expect(payload.target.pane.id == "0FB4DDB4-A797-4315-A00E-8AAFB32BFC95")
+    #expect(target.worktree.id == "Prowl:/Users/test/Projects/Prowl")
+    #expect(target.tab.id == "0E2A7C03-9C01-4BC1-9327-6C1C7B629A52")
+    #expect(target.pane.id == "0FB4DDB4-A797-4315-A00E-8AAFB32BFC95")
 
     let json = try jsonObject(from: response)
     #expect(Set(json.keys) == [
       "invocation", "requested_path", "resolved_path", "resolution",
       "app_launched", "brought_to_front", "created_tab", "target"
     ])
-    let target = try #require(json["target"] as? [String: Any])
-    #expect(Set(target.keys) == ["worktree", "tab", "pane"])
-    let worktree = try #require(target["worktree"] as? [String: Any])
+    let jsonTarget = try #require(json["target"] as? [String: Any])
+    #expect(Set(jsonTarget.keys) == ["worktree", "tab", "pane"])
+    let worktree = try #require(jsonTarget["worktree"] as? [String: Any])
     #expect(Set(worktree.keys) == ["id", "name", "path", "root_path", "kind"])
-    let tab = try #require(target["tab"] as? [String: Any])
+    let tab = try #require(jsonTarget["tab"] as? [String: Any])
     #expect(Set(tab.keys) == ["id", "title", "cwd"])
-    let pane = try #require(target["pane"] as? [String: Any])
+    let pane = try #require(jsonTarget["pane"] as? [String: Any])
     #expect(Set(pane.keys) == ["id", "title", "cwd"])
+  }
+
+  @MainActor
+  @Test func openExactRootCreatesNewTabWhenSelectedWorktreeHasNoVisibleSurface() async throws {
+    var selectedID: String?
+    var createdTabFor: String?
+    var createdTabAtPath: String?
+    let created = MutableBox(false)
+    let rootPath = "/Users/test/Projects/Prowl"
+
+    let handler = makeHandler(
+      resolver: { _ in
+        OpenResolverResult(
+          resolution: .exactRoot,
+          worktreeID: "Prowl:/Users/test/Projects/Prowl",
+          worktreeName: "Prowl",
+          worktreePath: rootPath,
+          rootPath: rootPath,
+          worktreeKind: "git",
+          resolvedPath: rootPath
+        )
+      },
+      selectWorktree: { selectedID = $0 },
+      createTabAtPath: { worktreeID, path in
+        createdTabFor = worktreeID
+        createdTabAtPath = path
+        created.value = true
+      },
+      resolveTarget: { selector in
+        guard created.value, case .worktree(let value) = selector else { return nil }
+        return makeResolvedTarget(worktreeID: value, tabCWD: rootPath, paneCWD: rootPath)
+      },
+      waitTimeoutNanoseconds: 3
+    )
+
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: rootPath, invocation: "open-subcommand"))
+    )
+    let response = await handler.handle(envelope: envelope)
+
+    #expect(response.ok == true)
+    #expect(selectedID == "Prowl:/Users/test/Projects/Prowl")
+    #expect(createdTabFor == "Prowl:/Users/test/Projects/Prowl")
+    #expect(createdTabAtPath == rootPath)
+
+    let json = try jsonObject(from: response)
+    #expect(json["resolution"] as? String == "exact-root")
+    #expect(json["created_tab"] as? Bool == true)
+    let target = try #require(json["target"] as? [String: Any])
+    let pane = try #require(target["pane"] as? [String: Any])
+    #expect(pane["cwd"] as? String == rootPath)
   }
 
   // MARK: - Inside root
@@ -250,13 +322,14 @@ struct OpenCommandHandlerTests {
 
     let insideRootData = try #require(response.data)
     let payload = try insideRootData.decode(as: OpenCommandData.self)
+    let target = try #require(payload.target)
     #expect(payload.resolution == "inside-root")
     #expect(payload.invocation == "implicit-open")
     #expect(payload.requestedPath == subpath)
     #expect(payload.resolvedPath == subpath)
     #expect(payload.createdTab == true)
-    #expect(payload.target.tab.cwd == subpath)
-    #expect(payload.target.pane.cwd == subpath)
+    #expect(target.tab.cwd == subpath)
+    #expect(target.pane.cwd == subpath)
   }
 
   // MARK: - New root
@@ -306,7 +379,7 @@ struct OpenCommandHandlerTests {
           managed.value = true
         }
       },
-      waitTimeoutNanoseconds: 10_000_000
+      waitTimeoutNanoseconds: 3
     )
 
     let envelope = CommandEnvelope(
@@ -320,10 +393,91 @@ struct OpenCommandHandlerTests {
 
     let newRootData = try #require(response.data)
     let payload = try newRootData.decode(as: OpenCommandData.self)
+    let target = try #require(payload.target)
     #expect(payload.resolution == "new-root")
     #expect(payload.requestedPath == "/Users/test/NewProject")
     #expect(payload.createdTab == true)
-    #expect(payload.target.worktree.id == "NewProject:/Users/test/NewProject")
+    #expect(target.worktree.id == "NewProject:/Users/test/NewProject")
+  }
+
+  @MainActor
+  @Test func openNewRootCreatesTabWhenRepositoryBecomesManagedWithoutVisibleSurface() async throws {
+    var addedURL: URL?
+    var createdTabFor: String?
+    var createdTabAtPath: String?
+    let managed = MutableBox(false)
+    let created = MutableBox(false)
+    let rootPath = "/Users/test/NewProject"
+    let worktreeID = "NewProject:/Users/test/NewProject"
+
+    let handler = makeHandler(
+      resolver: { _ in
+        if managed.value {
+          return OpenResolverResult(
+            resolution: .exactRoot,
+            worktreeID: worktreeID,
+            worktreeName: "NewProject",
+            worktreePath: rootPath,
+            rootPath: rootPath,
+            worktreeKind: "git",
+            resolvedPath: rootPath
+          )
+        }
+        return OpenResolverResult(
+          resolution: .newRoot,
+          worktreeID: nil,
+          worktreeName: nil,
+          worktreePath: nil,
+          rootPath: nil,
+          worktreeKind: nil,
+          resolvedPath: rootPath
+        )
+      },
+      addAndOpen: { url in addedURL = url },
+      createTabAtPath: { id, path in
+        createdTabFor = id
+        createdTabAtPath = path
+        created.value = true
+      },
+      resolveTarget: { selector in
+        guard created.value, case .worktree(let value) = selector else { return nil }
+        return makeResolvedTarget(
+          worktreeID: value,
+          worktreeName: "NewProject",
+          worktreePath: rootPath,
+          worktreeRootPath: rootPath,
+          tabCWD: rootPath,
+          paneCWD: rootPath
+        )
+      },
+      sleep: { _ in
+        await MainActor.run {
+          managed.value = true
+        }
+      },
+      waitTimeoutNanoseconds: 3
+    )
+
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: rootPath, invocation: "implicit-open"))
+    )
+    let response = await handler.handle(envelope: envelope)
+
+    #expect(response.ok == true)
+    #expect(
+      addedURL?.standardizedFileURL.path(percentEncoded: false)
+        == URL(fileURLWithPath: rootPath, isDirectory: true).standardizedFileURL.path(percentEncoded: false)
+    )
+    #expect(createdTabFor == worktreeID)
+    #expect(createdTabAtPath == rootPath)
+
+    let json = try jsonObject(from: response)
+    #expect(json["resolution"] as? String == "new-root")
+    #expect(json["created_tab"] as? Bool == true)
+    let target = try #require(json["target"] as? [String: Any])
+    let pane = try #require(target["pane"] as? [String: Any])
+    #expect(pane["cwd"] as? String == rootPath)
   }
 
   // MARK: - Readiness gating
@@ -448,7 +602,9 @@ struct OpenCommandHandlerTests {
           worktreeID: value,
           worktreeName: "test",
           worktreePath: "/tmp/test",
-          worktreeRootPath: "/tmp/test"
+          worktreeRootPath: "/tmp/test",
+          tabCWD: "/tmp/test",
+          paneCWD: "/tmp/test"
         )
       },
       sleep: { _ in
@@ -456,7 +612,7 @@ struct OpenCommandHandlerTests {
           managed.value = true
         }
       },
-      waitTimeoutNanoseconds: 10_000_000
+      waitTimeoutNanoseconds: 3
     )
     let envelope = CommandEnvelope(output: .json, command: .open(OpenInput(path: "/tmp/test")))
     let response = await handler.handle(envelope: envelope)
