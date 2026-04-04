@@ -99,6 +99,7 @@ struct SettingsFeature {
     case clearTerminalLayoutSnapshotButtonTapped
     case installCLIButtonTapped
     case uninstallCLIButtonTapped
+    case cliInstallCompleted(Result<String, CLIInstallError>)
     case refreshCLIInstallStatus
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
@@ -117,8 +118,7 @@ struct SettingsFeature {
     case settingsChanged(GlobalSettings)
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
-    case installCLIRequested
-    case uninstallCLIRequested
+    case cliInstallStatusChanged
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
@@ -214,10 +214,63 @@ struct SettingsFeature {
         }
 
       case .installCLIButtonTapped:
-        return .send(.delegate(.installCLIRequested))
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.install(installPath)
+            let path = installPath.path(percentEncoded: false)
+            await send(.cliInstallCompleted(.success(path)))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
 
       case .uninstallCLIButtonTapped:
-        return .send(.delegate(.uninstallCLIRequested))
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.uninstall(installPath)
+            await send(.cliInstallCompleted(.success("")))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
+
+      case .cliInstallCompleted(.success(let path)):
+        if path.isEmpty {
+          state.alert = AlertState {
+            TextState("Command Line Tool Uninstalled")
+          } actions: {
+            ButtonState(action: .dismiss) { TextState("OK") }
+          } message: {
+            TextState("The prowl command line tool has been removed.")
+          }
+        } else {
+          state.alert = AlertState {
+            TextState("Command Line Tool Installed")
+          } actions: {
+            ButtonState(action: .dismiss) { TextState("OK") }
+          } message: {
+            TextState("The prowl command is now available at \(path).")
+          }
+        }
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .send(.delegate(.cliInstallStatusChanged))
+
+      case .cliInstallCompleted(.failure(let error)):
+        state.alert = AlertState {
+          TextState("Command Line Tool Error")
+        } actions: {
+          ButtonState(action: .dismiss) { TextState("OK") }
+        } message: {
+          TextState(error.message)
+        }
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .send(.delegate(.cliInstallStatusChanged))
 
       case .refreshCLIInstallStatus:
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
