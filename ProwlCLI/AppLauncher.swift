@@ -21,14 +21,46 @@ enum AppLauncher {
     canConnect(to: ProwlSocket.defaultPath)
   }
 
-  /// Launch Prowl.app using `/usr/bin/open` and wait for the CLI socket
-  /// to become available. Throws `ExitError` on failure.
-  static func launchAndWaitForSocket() throws {
+  /// Ensure the app is running and the socket is ready.
+  /// Returns `true` only when the app was not running and had to be launched.
+  static func ensureAppRunning() throws -> Bool {
+    // Fast path: socket already available, app is running.
+    if isSocketAvailable() {
+      return false
+    }
+
+    // Socket not available — distinguish "app not running" from "app running, socket not ready yet".
+    if isAppProcessRunning() {
+      // App is running but socket isn't ready. Wait for it without launching.
+      try waitForSocket()
+      return false
+    }
+
+    // App is genuinely not running. Launch and wait.
     try launchApp()
     try waitForSocket()
+    return true
   }
 
-  // MARK: - Private
+  // MARK: - Process detection
+
+  /// Check whether a Prowl process is currently running via `pgrep`.
+  private static func isAppProcessRunning() -> Bool {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    process.arguments = ["-x", "Prowl"]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do {
+      try process.run()
+      process.waitUntilExit()
+    } catch {
+      return false
+    }
+    return process.terminationStatus == 0
+  }
+
+  // MARK: - App launch
 
   private static func launchApp() throws {
     let process = Process()
@@ -53,6 +85,8 @@ enum AppLauncher {
     }
   }
 
+  // MARK: - Socket readiness
+
   private static func waitForSocket() throws {
     let socketPath = ProwlSocket.defaultPath
     let deadline = Date().addingTimeInterval(socketTimeoutSeconds)
@@ -64,7 +98,7 @@ enum AppLauncher {
     }
     throw ExitError(
       code: CLIErrorCode.launchFailed,
-      message: "Prowl launched but CLI socket did not become available within \(Int(socketTimeoutSeconds))s."
+      message: "Prowl CLI socket did not become available within \(Int(socketTimeoutSeconds))s."
     )
   }
 

@@ -36,13 +36,9 @@ struct OpenCommand: ParsableCommand {
   }
 
   /// Check if Prowl is reachable via socket; if not, launch it.
-  /// Returns `true` if the app had to be launched.
+  /// Returns `true` only when the app was not running and had to be launched.
   private static func ensureAppRunning() throws -> Bool {
-    if AppLauncher.isSocketAvailable() {
-      return false
-    }
-    try AppLauncher.launchAndWaitForSocket()
-    return true
+    try AppLauncher.ensureAppRunning()
   }
 
   private static func deriveInvocation(path: String?) -> String {
