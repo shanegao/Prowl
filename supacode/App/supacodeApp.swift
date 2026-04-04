@@ -192,6 +192,19 @@ struct SupacodeApp: App {
     )
   }
 
+  private static func makeTargetResolver(
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) -> TargetResolver {
+    TargetResolver {
+      TargetResolutionSnapshotBuilder.makeSnapshot(
+        repositoriesState: appStore.state.repositories,
+        terminalManager: terminalManager
+      )
+    }
+  }
+
+  // swiftlint:disable:next function_body_length
   private static func makeCLISocketServer(
     appStore: StoreOf<AppFeature>,
     terminalManager: WorktreeTerminalManager
@@ -277,10 +290,31 @@ struct SupacodeApp: App {
         )
       }
     )
+    let keyHandler = KeyCommandHandler(
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+        return resolver.resolve(selector).map { KeyResolvedTarget(from: $0) }
+      },
+      keyDelivery: { target, token, repeatCount in
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else {
+          return KeyDeliveryResult(attempted: repeatCount, delivered: 0)
+        }
+        let delivered = (0..<repeatCount).count { _ in
+          state.sendKeyToken(token, in: target.paneID)
+        }
+        return KeyDeliveryResult(attempted: repeatCount, delivered: delivered)
+      }
+    )
     let cliRouter = CLICommandRouter(
       listHandler: listHandler,
       focusHandler: focusHandler,
       sendHandler: sendHandler,
+      keyHandler: keyHandler,
       readHandler: readHandler
     )
     let cliServer = CLISocketServer(router: cliRouter)
