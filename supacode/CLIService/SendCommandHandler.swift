@@ -191,7 +191,7 @@ final class SendCommandHandler: CommandHandler {
     let postText = post.screenText ?? post.viewportText
 
     // Trim trailing whitespace-only lines from both snapshots (screen buffer padding)
-    var preLines = trimTrailingBlankLines(splitLines(preText))
+    let preLines = trimTrailingBlankLines(splitLines(preText))
     let postLines = trimTrailingBlankLines(splitLines(postText))
 
     // If post has fewer lines than pre, the screen was cleared — return all of post as truncated
