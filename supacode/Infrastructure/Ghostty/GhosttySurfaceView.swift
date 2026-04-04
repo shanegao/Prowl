@@ -1780,6 +1780,113 @@ extension GhosttySurfaceView: NSTextInputClient {
     keyUp(with: keyUpEvent)
     return true
   }
+
+  // MARK: - CLI key token delivery
+
+  /// Send a single key event for a canonical CLI token (e.g. "enter", "ctrl-c", "pageup").
+  /// Creates synthetic keyDown/keyUp NSEvents matching the token spec.
+  @discardableResult
+  func sendCLIKeyToken(_ token: String) -> Bool {
+    guard surface != nil else { return false }
+    guard let spec = CLIKeySpec.from(token: token) else { return false }
+    let timestamp = ProcessInfo.processInfo.systemUptime
+    let windowNumber = window?.windowNumber ?? 0
+    guard
+      let keyDownEvent = NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: spec.modifiers,
+        timestamp: timestamp,
+        windowNumber: windowNumber,
+        context: nil,
+        characters: spec.characters,
+        charactersIgnoringModifiers: spec.charactersIgnoringModifiers,
+        isARepeat: false,
+        keyCode: spec.keyCode
+      ),
+      let keyUpEvent = NSEvent.keyEvent(
+        with: .keyUp,
+        location: .zero,
+        modifierFlags: spec.modifiers,
+        timestamp: timestamp,
+        windowNumber: windowNumber,
+        context: nil,
+        characters: spec.characters,
+        charactersIgnoringModifiers: spec.charactersIgnoringModifiers,
+        isARepeat: false,
+        keyCode: spec.keyCode
+      )
+    else {
+      return false
+    }
+    keyDown(with: keyDownEvent)
+    keyUp(with: keyUpEvent)
+    return true
+  }
+}
+
+// MARK: - CLI Key Spec
+
+/// Maps canonical CLI key tokens to macOS NSEvent parameters.
+struct CLIKeySpec {
+  let keyCode: UInt16
+  let characters: String
+  let charactersIgnoringModifiers: String
+  let modifiers: NSEvent.ModifierFlags
+
+  // swiftlint:disable:next cyclomatic_complexity
+  static func from(token: String) -> CLIKeySpec? {
+    switch token {
+    case "enter":
+      return CLIKeySpec(keyCode: 36, characters: "\r", charactersIgnoringModifiers: "\r", modifiers: [])
+    case "esc":
+      return CLIKeySpec(keyCode: 53, characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", modifiers: [])
+    case "tab":
+      return CLIKeySpec(keyCode: 48, characters: "\t", charactersIgnoringModifiers: "\t", modifiers: [])
+    case "backspace":
+      return CLIKeySpec(keyCode: 51, characters: "\u{7F}", charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+    case "up":
+      return CLIKeySpec(
+        keyCode: 126, characters: "\u{F700}", charactersIgnoringModifiers: "\u{F700}", modifiers: [.function]
+      )
+    case "down":
+      return CLIKeySpec(
+        keyCode: 125, characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}", modifiers: [.function]
+      )
+    case "left":
+      return CLIKeySpec(
+        keyCode: 123, characters: "\u{F702}", charactersIgnoringModifiers: "\u{F702}", modifiers: [.function]
+      )
+    case "right":
+      return CLIKeySpec(
+        keyCode: 124, characters: "\u{F703}", charactersIgnoringModifiers: "\u{F703}", modifiers: [.function]
+      )
+    case "pageup":
+      return CLIKeySpec(
+        keyCode: 116, characters: "\u{F72C}", charactersIgnoringModifiers: "\u{F72C}", modifiers: [.function]
+      )
+    case "pagedown":
+      return CLIKeySpec(
+        keyCode: 121, characters: "\u{F72D}", charactersIgnoringModifiers: "\u{F72D}", modifiers: [.function]
+      )
+    case "home":
+      return CLIKeySpec(
+        keyCode: 115, characters: "\u{F729}", charactersIgnoringModifiers: "\u{F729}", modifiers: [.function]
+      )
+    case "end":
+      return CLIKeySpec(
+        keyCode: 119, characters: "\u{F72B}", charactersIgnoringModifiers: "\u{F72B}", modifiers: [.function]
+      )
+    case "ctrl-c":
+      return CLIKeySpec(keyCode: 8, characters: "\u{3}", charactersIgnoringModifiers: "c", modifiers: [.control])
+    case "ctrl-d":
+      return CLIKeySpec(keyCode: 2, characters: "\u{4}", charactersIgnoringModifiers: "d", modifiers: [.control])
+    case "ctrl-l":
+      return CLIKeySpec(keyCode: 37, characters: "\u{C}", charactersIgnoringModifiers: "l", modifiers: [.control])
+    default:
+      return nil
+    }
+  }
 }
 
 extension GhosttySurfaceView: NSServicesMenuRequestor {
