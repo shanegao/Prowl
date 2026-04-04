@@ -377,13 +377,8 @@ struct SupacodeApp: App {
         guard let worktree = resolveCLITerminalWorktree(id: worktreeID, repositories: repositories) else {
           return
         }
-        let quotedPath = shellQuote(path)
         terminalManager.handleCommand(
-          .createTabWithInput(
-            worktree,
-            input: "cd -- \(quotedPath)",
-            runSetupScriptIfNew: false
-          )
+          .createTabInDirectory(worktree, directory: URL(fileURLWithPath: path, isDirectory: true))
         )
       },
       resolveTarget: { selector in
