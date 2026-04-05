@@ -1,4 +1,5 @@
 import Foundation
+import GhosttyKit
 import Testing
 
 @testable import supacode
@@ -30,6 +31,135 @@ struct GhosttySurfaceViewTests {
     #expect(desired == nil)
     #expect(firstApply)
     #expect(!secondApply)
+  }
+
+  @Test func occlusionStateStoresDesiredValueWithoutMarkingItApplied() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    let firstApply = state.prepareToApply(true)
+    let secondApply = state.prepareToApply(true)
+
+    #expect(firstApply)
+    #expect(!secondApply)
+  }
+
+  @Test func occlusionStateUsesLatestDeferredDesiredValue() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    state.setDesired(false)
+    let applyDeferredValue = state.prepareToApply(false)
+    let secondApply = state.prepareToApply(false)
+
+    #expect(applyDeferredValue)
+    #expect(!secondApply)
+  }
+
+  @Test func occlusionStateAppliesLatestValueAfterAttachmentInvalidation() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    let firstApply = state.prepareToApply(true)
+    let desiredAfterAttachmentChange = state.invalidateForAttachmentChange()
+    #expect(firstApply)
+    #expect(desiredAfterAttachmentChange == true)
+
+    state.setDesired(false)
+    let applyLatestValue = state.prepareToApply(false)
+    let duplicateApply = state.prepareToApply(false)
+
+    #expect(applyLatestValue)
+    #expect(!duplicateApply)
+  }
+
+  @Test func occlusionStateRetainsLatestDesiredValueAcrossMultipleAttachmentChanges() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    let desiredAfterFirstAttachmentChange = state.invalidateForAttachmentChange()
+    #expect(desiredAfterFirstAttachmentChange == true)
+    state.setDesired(false)
+    let desiredAfterSecondAttachmentChange = state.invalidateForAttachmentChange()
+    #expect(desiredAfterSecondAttachmentChange == false)
+
+    let applyLatestValue = state.prepareToApply(false)
+    let duplicateApply = state.prepareToApply(false)
+
+    #expect(applyLatestValue)
+    #expect(!duplicateApply)
+  }
+
+  @Test func occlusionDoesNotApplyUntilViewHasSuperviewAndWindow() async {
+    let runtime = GhosttyRuntime()
+    let surfaceView = GhosttySurfaceView(
+      runtime: runtime,
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    var appliedValues: [Bool] = []
+    surfaceView.onOcclusionAppliedForTesting = { appliedValues.append($0) }
+    var attachmentState = (hasSuperview: false, hasWindow: false)
+    surfaceView.attachmentStateForTesting = { attachmentState }
+
+    surfaceView.setOcclusion(true)
+    await drainMainQueue()
+    #expect(appliedValues.isEmpty)
+
+    attachmentState = (hasSuperview: true, hasWindow: false)
+    surfaceView.handleAttachmentChangeForTesting()
+    await drainMainQueue()
+    #expect(appliedValues.isEmpty)
+
+    attachmentState = (hasSuperview: true, hasWindow: true)
+    surfaceView.handleAttachmentChangeForTesting()
+    await drainMainQueue()
+    #expect(appliedValues == [true])
+  }
+
+  @Test func occlusionAppliesLatestDeferredValueAfterWindowReattachment() async {
+    let runtime = GhosttyRuntime()
+    let surfaceView = GhosttySurfaceView(
+      runtime: runtime,
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    var appliedValues: [Bool] = []
+    surfaceView.onOcclusionAppliedForTesting = { appliedValues.append($0) }
+    var attachmentState = (hasSuperview: true, hasWindow: true)
+    surfaceView.attachmentStateForTesting = { attachmentState }
+
+    surfaceView.handleAttachmentChangeForTesting()
+    await drainMainQueue()
+    #expect(appliedValues.isEmpty)
+
+    surfaceView.setOcclusion(true)
+    await drainMainQueue()
+    #expect(appliedValues == [true])
+
+    attachmentState = (hasSuperview: false, hasWindow: false)
+    surfaceView.handleAttachmentChangeForTesting()
+    await drainMainQueue()
+
+    surfaceView.setOcclusion(false)
+    surfaceView.setOcclusion(true)
+    surfaceView.setOcclusion(false)
+    await drainMainQueue()
+    #expect(appliedValues == [true])
+
+    attachmentState = (hasSuperview: true, hasWindow: true)
+    surfaceView.handleAttachmentChangeForTesting()
+    await drainMainQueue()
+    #expect(appliedValues == [true, false])
+  }
+
+  private func drainMainQueue() async {
+    await withCheckedContinuation { continuation in
+      DispatchQueue.main.async {
+        continuation.resume()
+      }
+    }
   }
 
   @Test func normalizedWorkingDirectoryPathRemovesTrailingSlashForNonRootPath() {
