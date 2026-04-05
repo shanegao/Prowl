@@ -12,7 +12,6 @@
 #   APPLE_TEAM_ID                   Apple Team ID (inferred from identity if unset)
 #   APPLE_NOTARY_KEYCHAIN_PROFILE   Keychain profile for notarytool (default: supacode-notary)
 #   SPARKLE_PRIVATE_KEY_FILE        Path to EdDSA private key file (default: ~/.prowl-sparkle-private-key)
-#   PROWL_SITE_DIR                  Path to Prowl-Site repo (default: ../Prowl-Site)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -82,8 +81,6 @@ IDENTITY_SHA="$(signing_identity_sha "$SIGNING_IDENTITY")"
 SPARKLE_KEY_FILE="${SPARKLE_PRIVATE_KEY_FILE:-$HOME/.prowl-sparkle-private-key}"
 [[ -f "$SPARKLE_KEY_FILE" ]] || die "Sparkle private key not found: $SPARKLE_KEY_FILE"
 
-PROWL_SITE="${PROWL_SITE_DIR:-$PROJECT_DIR/../Prowl-Site}"
-
 NOTES_FILE="build/release-notes.md"
 [[ -s "$NOTES_FILE" ]] || die "$NOTES_FILE not found — run release-notes.sh first"
 
@@ -124,6 +121,34 @@ if git rev-parse "$TAG" >/dev/null 2>&1; then
 else
   log "bumping version in project..."
   make bump-version VERSION="$VERSION" BUILD="$BUILD"
+fi
+
+# ── Update CHANGELOG ────────────────────────────────────────────────────────
+
+CHANGELOG="CHANGELOG.md"
+ENTRY_HEADER="## [$VERSION](https://github.com/$REPO/releases/tag/$TAG)"
+
+if [[ -f "$CHANGELOG" ]] && grep -qF "$ENTRY_HEADER" "$CHANGELOG"; then
+  log "CHANGELOG already contains entry for $VERSION, skipping"
+else
+  log "updating CHANGELOG.md..."
+  {
+    echo "# Changelog"
+    echo ""
+    echo "$ENTRY_HEADER"
+    echo ""
+    cat "$NOTES_FILE"
+    echo ""
+    if [[ -f "$CHANGELOG" ]]; then
+      # Skip the "# Changelog" header and leading blank line
+      tail -n +3 "$CHANGELOG"
+    fi
+  } > "${CHANGELOG}.tmp"
+  mv "${CHANGELOG}.tmp" "$CHANGELOG"
+  git add "$CHANGELOG"
+  git commit -m "Update CHANGELOG for $VERSION"
+  # Move tag to include the CHANGELOG commit
+  git tag -f "$TAG" HEAD
 fi
 
 # ── Show release notes ───────────────────────────────────────────────────────
@@ -261,8 +286,8 @@ ARCHIVE_BASE="$(basename "$ZIP_PATH" .zip)"
 cp "$ZIP_PATH" "$STAGING/"
 cp "$NOTES_FILE" "$STAGING/$ARCHIVE_BASE.md"
 
-# Fetch existing appcast for history
-curl -fsSL "https://prowl.onev.cat/appcast.xml" -o "$STAGING/appcast.xml" 2>/dev/null || true
+# Fetch existing appcast from the latest GitHub release for version history
+curl -fsSL "https://github.com/$REPO/releases/latest/download/appcast.xml" -o "$STAGING/appcast.xml" 2>/dev/null || true
 
 "$PROJECT_DIR/bins/generate_appcast" \
   --ed-key-file "$SPARKLE_KEY_FILE" \
@@ -302,26 +327,14 @@ gh release create "$TAG" "${UPLOAD_FILES[@]}" \
 RELEASE_URL="https://github.com/$REPO/releases/tag/$TAG"
 log "release created: $RELEASE_URL"
 
-# ── Update Prowl-Site ────────────────────────────────────────────────────────
+# ── Trigger Prowl-Site rebuild ───────────────────────────────────────────────
 
-if [[ -d "$PROWL_SITE" ]]; then
-  log "updating Prowl-Site appcast..."
-  mkdir -p "$PROWL_SITE/public"
-  cp build/appcast.xml "$PROWL_SITE/public/appcast.xml"
-  pushd "$PROWL_SITE" >/dev/null
-  if [[ -n "$(git status --porcelain)" ]]; then
-    git add public/appcast.xml
-    git commit -m "Update appcast for Prowl $VERSION"
-    git push
-    log "Prowl-Site pushed (Netlify deploy will follow)"
-  else
-    log "Prowl-Site appcast unchanged"
-  fi
-  popd >/dev/null
-else
-  log "Prowl-Site not found at $PROWL_SITE — skipping appcast deploy"
-  log "copy build/appcast.xml manually or set PROWL_SITE_DIR"
-fi
+log "triggering Prowl-Site rebuild..."
+gh api repos/onevcat/Prowl-Site/dispatches \
+  -f event_type=changelog-updated \
+  -f "client_payload[version]=$VERSION" 2>/dev/null \
+  && log "Prowl-Site rebuild triggered" \
+  || log "Prowl-Site dispatch failed (non-critical)"
 
 echo
 log "done! Release: $RELEASE_URL"
