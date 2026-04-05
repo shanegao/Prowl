@@ -3,6 +3,7 @@
 
 import ArgumentParser
 import Foundation
+import ProwlCLIShared
 
 struct ProwlCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
@@ -19,10 +20,4 @@ struct ProwlCommand: ParsableCommand {
     ],
     defaultSubcommand: OpenCommand.self
   )
-}
-
-// MARK: - Version
-
-enum ProwlVersion {
-  static let current = "1.0.0-dev"
 }
