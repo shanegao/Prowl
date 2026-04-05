@@ -32,6 +32,29 @@ struct GhosttySurfaceViewTests {
     #expect(!secondApply)
   }
 
+  @Test func occlusionStateStoresDesiredValueWithoutMarkingItApplied() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    let firstApply = state.prepareToApply(true)
+    let secondApply = state.prepareToApply(true)
+
+    #expect(firstApply)
+    #expect(!secondApply)
+  }
+
+  @Test func occlusionStateUsesLatestDeferredDesiredValue() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    state.setDesired(false)
+    let applyDeferredValue = state.prepareToApply(false)
+    let secondApply = state.prepareToApply(false)
+
+    #expect(applyDeferredValue)
+    #expect(!secondApply)
+  }
+
   @Test func normalizedWorkingDirectoryPathRemovesTrailingSlashForNonRootPath() {
     #expect(
       GhosttySurfaceView.normalizedWorkingDirectoryPath("/Users/onevcat/Sync/github/supacode/")
