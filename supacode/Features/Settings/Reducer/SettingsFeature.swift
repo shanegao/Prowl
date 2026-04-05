@@ -113,12 +113,18 @@ struct SettingsFeature {
     case openSystemNotificationSettings
   }
 
+  enum CLIInstallResultMessage: Equatable {
+    case installed(path: String)
+    case uninstalled
+    case failed(message: String)
+  }
+
   @CasePathable
   enum Delegate: Equatable {
     case settingsChanged(GlobalSettings)
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
-    case cliInstallStatusChanged
+    case cliInstallCompleted(CLIInstallResultMessage)
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
@@ -259,7 +265,8 @@ struct SettingsFeature {
           }
         }
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
-        return .send(.delegate(.cliInstallStatusChanged))
+        let result: CLIInstallResultMessage = path.isEmpty ? .uninstalled : .installed(path: path)
+        return .send(.delegate(.cliInstallCompleted(result)))
 
       case .cliInstallCompleted(.failure(let error)):
         state.alert = AlertState {
@@ -270,7 +277,7 @@ struct SettingsFeature {
           TextState(error.message)
         }
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
-        return .send(.delegate(.cliInstallStatusChanged))
+        return .send(.delegate(.cliInstallCompleted(.failed(message: error.message))))
 
       case .refreshCLIInstallStatus:
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)

@@ -472,8 +472,15 @@ struct AppFeature {
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
 
-      case .settings(.delegate(.cliInstallStatusChanged)):
-        return .none
+      case .settings(.delegate(.cliInstallCompleted(let result))):
+        switch result {
+        case .installed(let path):
+          return .send(.repositories(.showToast(.success("prowl installed at \(path)"))))
+        case .uninstalled:
+          return .send(.repositories(.showToast(.success("prowl command line tool removed"))))
+        case .failed(let message):
+          return .send(.repositories(.showToast(.warning("CLI install failed: \(message)"))))
+        }
 
       case .settings(.delegate(.terminalLayoutSnapshotCleared(let success))):
         if success {
