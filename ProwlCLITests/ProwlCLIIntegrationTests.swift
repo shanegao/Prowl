@@ -17,7 +17,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
   func testHelpAndVersionSmoke() throws {
     let version = try runProwl(args: ["--version"])
     XCTAssertEqual(version.exitCode, 0)
-    XCTAssertTrue(version.stdout.contains("1.0.0-dev"))
+    XCTAssertTrue(version.stdout.contains(ProwlVersion.current))
 
     let help = try runProwl(args: ["--help"])
     XCTAssertEqual(help.exitCode, 0)
