@@ -1878,57 +1878,253 @@ struct CLIKeySpec {
   let charactersIgnoringModifiers: String
   let modifiers: NSEvent.ModifierFlags
 
-  // swiftlint:disable:next cyclomatic_complexity
   static func from(token: String) -> CLIKeySpec? {
-    switch token {
-    case "enter":
-      return CLIKeySpec(keyCode: 36, characters: "\r", charactersIgnoringModifiers: "\r", modifiers: [])
-    case "esc":
-      return CLIKeySpec(keyCode: 53, characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", modifiers: [])
-    case "tab":
-      return CLIKeySpec(keyCode: 48, characters: "\t", charactersIgnoringModifiers: "\t", modifiers: [])
-    case "backspace":
-      return CLIKeySpec(keyCode: 51, characters: "\u{7F}", charactersIgnoringModifiers: "\u{7F}", modifiers: [])
-    case "up":
-      return CLIKeySpec(
-        keyCode: 126, characters: "\u{F700}", charactersIgnoringModifiers: "\u{F700}", modifiers: [.function]
-      )
-    case "down":
-      return CLIKeySpec(
-        keyCode: 125, characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}", modifiers: [.function]
-      )
-    case "left":
-      return CLIKeySpec(
-        keyCode: 123, characters: "\u{F702}", charactersIgnoringModifiers: "\u{F702}", modifiers: [.function]
-      )
-    case "right":
-      return CLIKeySpec(
-        keyCode: 124, characters: "\u{F703}", charactersIgnoringModifiers: "\u{F703}", modifiers: [.function]
-      )
-    case "pageup":
-      return CLIKeySpec(
-        keyCode: 116, characters: "\u{F72C}", charactersIgnoringModifiers: "\u{F72C}", modifiers: [.function]
-      )
-    case "pagedown":
-      return CLIKeySpec(
-        keyCode: 121, characters: "\u{F72D}", charactersIgnoringModifiers: "\u{F72D}", modifiers: [.function]
-      )
-    case "home":
-      return CLIKeySpec(
-        keyCode: 115, characters: "\u{F729}", charactersIgnoringModifiers: "\u{F729}", modifiers: [.function]
-      )
-    case "end":
-      return CLIKeySpec(
-        keyCode: 119, characters: "\u{F72B}", charactersIgnoringModifiers: "\u{F72B}", modifiers: [.function]
-      )
-    case "ctrl-c":
-      return CLIKeySpec(keyCode: 8, characters: "\u{3}", charactersIgnoringModifiers: "c", modifiers: [.control])
-    case "ctrl-d":
-      return CLIKeySpec(keyCode: 2, characters: "\u{4}", charactersIgnoringModifiers: "d", modifiers: [.control])
-    case "ctrl-l":
-      return CLIKeySpec(keyCode: 37, characters: "\u{C}", charactersIgnoringModifiers: "l", modifiers: [.control])
-    default:
+    guard let descriptor = KeyTokens.descriptor(for: token),
+      let base = baseSpec(for: descriptor.baseToken)
+    else {
       return nil
+    }
+
+    var modifierFlags = eventModifiers(from: descriptor.modifiers)
+    if base.usesFunctionModifier {
+      modifierFlags.insert(.function)
+    }
+
+    let charactersIgnoringModifiers = base.charactersIgnoringModifiers
+    let characters: String
+    if descriptor.modifiers == [.ctrl], let controlCharacter = controlCharacter(for: descriptor.baseToken) {
+      characters = controlCharacter
+    } else if descriptor.modifiers.contains(.shift) {
+      characters = shiftedCharacters(for: descriptor.baseToken) ?? charactersIgnoringModifiers
+    } else {
+      characters = charactersIgnoringModifiers
+    }
+
+    return CLIKeySpec(
+      keyCode: base.keyCode,
+      characters: characters,
+      charactersIgnoringModifiers: charactersIgnoringModifiers,
+      modifiers: modifierFlags
+    )
+  }
+
+  private struct BaseSpec {
+    let keyCode: UInt16
+    let charactersIgnoringModifiers: String
+    let usesFunctionModifier: Bool
+  }
+
+  private static let namedBaseSpecs: [String: BaseSpec] = [
+    "enter": BaseSpec(keyCode: UInt16(kVK_Return), charactersIgnoringModifiers: "\r", usesFunctionModifier: false),
+    "esc": BaseSpec(keyCode: UInt16(kVK_Escape), charactersIgnoringModifiers: "\u{1B}", usesFunctionModifier: false),
+    "tab": BaseSpec(keyCode: UInt16(kVK_Tab), charactersIgnoringModifiers: "\t", usesFunctionModifier: false),
+    "backspace": BaseSpec(keyCode: UInt16(kVK_Delete), charactersIgnoringModifiers: "\u{7F}", usesFunctionModifier: false),
+    "delete-forward": BaseSpec(
+      keyCode: UInt16(kVK_ForwardDelete),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSDeleteFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "insert": BaseSpec(
+      keyCode: UInt16(kVK_Help),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSInsertFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "up": BaseSpec(
+      keyCode: UInt16(kVK_UpArrow),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSUpArrowFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "down": BaseSpec(
+      keyCode: UInt16(kVK_DownArrow),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSDownArrowFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "left": BaseSpec(
+      keyCode: UInt16(kVK_LeftArrow),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSLeftArrowFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "right": BaseSpec(
+      keyCode: UInt16(kVK_RightArrow),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSRightArrowFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "pageup": BaseSpec(
+      keyCode: UInt16(kVK_PageUp),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSPageUpFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "pagedown": BaseSpec(
+      keyCode: UInt16(kVK_PageDown),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSPageDownFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "home": BaseSpec(
+      keyCode: UInt16(kVK_Home),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSHomeFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+    "end": BaseSpec(
+      keyCode: UInt16(kVK_End),
+      charactersIgnoringModifiers: String(UnicodeScalar(NSEndFunctionKey)!),
+      usesFunctionModifier: true
+    ),
+  ]
+
+  private static let functionKeyMap: [String: (UInt16, Int)] = [
+    "f1": (UInt16(kVK_F1), NSF1FunctionKey),
+    "f2": (UInt16(kVK_F2), NSF2FunctionKey),
+    "f3": (UInt16(kVK_F3), NSF3FunctionKey),
+    "f4": (UInt16(kVK_F4), NSF4FunctionKey),
+    "f5": (UInt16(kVK_F5), NSF5FunctionKey),
+    "f6": (UInt16(kVK_F6), NSF6FunctionKey),
+    "f7": (UInt16(kVK_F7), NSF7FunctionKey),
+    "f8": (UInt16(kVK_F8), NSF8FunctionKey),
+    "f9": (UInt16(kVK_F9), NSF9FunctionKey),
+    "f10": (UInt16(kVK_F10), NSF10FunctionKey),
+    "f11": (UInt16(kVK_F11), NSF11FunctionKey),
+    "f12": (UInt16(kVK_F12), NSF12FunctionKey),
+  ]
+
+  private static func eventModifiers(from modifiers: [KeyModifier]) -> NSEvent.ModifierFlags {
+    modifiers.reduce(into: NSEvent.ModifierFlags()) { result, modifier in
+      switch modifier {
+      case .cmd: result.insert(.command)
+      case .shift: result.insert(.shift)
+      case .opt: result.insert(.option)
+      case .ctrl: result.insert(.control)
+      }
+    }
+  }
+
+  private static func baseSpec(for token: String) -> BaseSpec? {
+    if let base = namedBaseSpecs[token] { return base }
+    if let (keyCode, scalar) = functionKeyMap[token] {
+      return BaseSpec(keyCode: keyCode, charactersIgnoringModifiers: String(UnicodeScalar(scalar)!), usesFunctionModifier: true)
+    }
+    return printableBaseSpec(for: token)
+  }
+
+  private static func printableBaseSpec(for token: String) -> BaseSpec? {
+    guard let character = printableCharacter(for: token), let keyCode = printableKeyCode(for: token) else { return nil }
+    return BaseSpec(keyCode: keyCode, charactersIgnoringModifiers: String(character), usesFunctionModifier: false)
+  }
+
+  private static func printableCharacter(for token: String) -> Character? {
+    switch token {
+    case "space": return " "
+    case "minus": return "-"
+    case "equal": return "="
+    case "comma": return ","
+    case "period": return "."
+    case "slash": return "/"
+    case "backslash": return "\\"
+    case "semicolon": return ";"
+    case "quote": return "'"
+    case "grave": return "`"
+    default:
+      guard token.count == 1 else { return nil }
+      return token.first
+    }
+  }
+
+  private static func printableKeyCode(for token: String) -> UInt16? {
+    switch token {
+    case "a": return UInt16(kVK_ANSI_A)
+    case "b": return UInt16(kVK_ANSI_B)
+    case "c": return UInt16(kVK_ANSI_C)
+    case "d": return UInt16(kVK_ANSI_D)
+    case "e": return UInt16(kVK_ANSI_E)
+    case "f": return UInt16(kVK_ANSI_F)
+    case "g": return UInt16(kVK_ANSI_G)
+    case "h": return UInt16(kVK_ANSI_H)
+    case "i": return UInt16(kVK_ANSI_I)
+    case "j": return UInt16(kVK_ANSI_J)
+    case "k": return UInt16(kVK_ANSI_K)
+    case "l": return UInt16(kVK_ANSI_L)
+    case "m": return UInt16(kVK_ANSI_M)
+    case "n": return UInt16(kVK_ANSI_N)
+    case "o": return UInt16(kVK_ANSI_O)
+    case "p": return UInt16(kVK_ANSI_P)
+    case "q": return UInt16(kVK_ANSI_Q)
+    case "r": return UInt16(kVK_ANSI_R)
+    case "s": return UInt16(kVK_ANSI_S)
+    case "t": return UInt16(kVK_ANSI_T)
+    case "u": return UInt16(kVK_ANSI_U)
+    case "v": return UInt16(kVK_ANSI_V)
+    case "w": return UInt16(kVK_ANSI_W)
+    case "x": return UInt16(kVK_ANSI_X)
+    case "y": return UInt16(kVK_ANSI_Y)
+    case "z": return UInt16(kVK_ANSI_Z)
+    case "0": return UInt16(kVK_ANSI_0)
+    case "1": return UInt16(kVK_ANSI_1)
+    case "2": return UInt16(kVK_ANSI_2)
+    case "3": return UInt16(kVK_ANSI_3)
+    case "4": return UInt16(kVK_ANSI_4)
+    case "5": return UInt16(kVK_ANSI_5)
+    case "6": return UInt16(kVK_ANSI_6)
+    case "7": return UInt16(kVK_ANSI_7)
+    case "8": return UInt16(kVK_ANSI_8)
+    case "9": return UInt16(kVK_ANSI_9)
+    case "space": return UInt16(kVK_Space)
+    case "minus": return UInt16(kVK_ANSI_Minus)
+    case "equal": return UInt16(kVK_ANSI_Equal)
+    case ",", "comma": return UInt16(kVK_ANSI_Comma)
+    case ".", "period": return UInt16(kVK_ANSI_Period)
+    case "/", "slash": return UInt16(kVK_ANSI_Slash)
+    case "\\", "backslash": return UInt16(kVK_ANSI_Backslash)
+    case ";", "semicolon": return UInt16(kVK_ANSI_Semicolon)
+    case "'", "quote": return UInt16(kVK_ANSI_Quote)
+    case "`", "grave": return UInt16(kVK_ANSI_Grave)
+    case "[": return UInt16(kVK_ANSI_LeftBracket)
+    case "]": return UInt16(kVK_ANSI_RightBracket)
+    default: return nil
+    }
+  }
+
+  private static func shiftedCharacters(for token: String) -> String? {
+    if token.count == 1, let character = token.first, character.isLetter {
+      return String(character).uppercased()
+    }
+
+    switch token {
+    case "1": return "!"
+    case "2": return "@"
+    case "3": return "#"
+    case "4": return "$"
+    case "5": return "%"
+    case "6": return "^"
+    case "7": return "&"
+    case "8": return "*"
+    case "9": return "("
+    case "0": return ")"
+    case "minus": return "_"
+    case "equal": return "+"
+    case ",", "comma": return "<"
+    case ".", "period": return ">"
+    case "/", "slash": return "?"
+    case "\\", "backslash": return "|"
+    case ";", "semicolon": return ":"
+    case "'", "quote": return "\""
+    case "`", "grave": return "~"
+    case "[": return "{"
+    case "]": return "}"
+    default: return nil
+    }
+  }
+
+  private static func controlCharacter(for token: String) -> String? {
+    if token.count == 1, let scalar = token.unicodeScalars.first, scalar.properties.isAlphabetic {
+      return String(UnicodeScalar(scalar.value & 0x1F)!)
+    }
+
+    switch token {
+    case "[": return String(UnicodeScalar(27)!)
+    case "\\", "backslash": return String(UnicodeScalar(28)!)
+    case "]": return String(UnicodeScalar(29)!)
+    case "6": return String(UnicodeScalar(30)!)
+    case "minus": return String(UnicodeScalar(31)!)
+    default: return nil
     }
   }
 }

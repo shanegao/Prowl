@@ -8,9 +8,11 @@ This file defines the **input/output contract** for:
 
 ## What changed in this revision
 
-Compared with the initial draft, this version makes `key` safer and more script-friendly:
+Compared with the initial draft, this version makes `key` broader and more script-friendly:
 
-- define a strict input grammar with aliases (`return` -> `enter`, `escape` -> `esc`, `pgup` -> `pageup`, ...)
+- normalize aliases (`return` -> `enter`, `escape` -> `esc`, `pgup` -> `pageup`, ...)
+- accept modifier prefixes and combinations such as `cmd-c`, `shift-tab`, `opt-enter`, `cmd-shift-k`
+- accept additional named keys such as `delete-forward`, `insert`, and `f1`...`f12`
 - add `--repeat <n>` as first-class input instead of forcing shell loops
 - split `requested` vs `normalized` in output so callers can debug token normalization
 - add `delivery` counters for machine verification (`attempted` / `delivered`)
@@ -60,21 +62,14 @@ Rules:
 
 ### Canonical tokens
 
-- `enter`
-- `esc`
-- `tab`
-- `backspace`
-- `up`
-- `down`
-- `left`
-- `right`
-- `pageup`
-- `pagedown`
-- `home`
-- `end`
-- `ctrl-c`
-- `ctrl-d`
-- `ctrl-l`
+Canonical normalized tokens now include:
+
+- navigation keys such as `tab`, `up`, `down`, `left`, `right`, `pageup`, `pagedown`, `home`, `end`
+- editing keys such as `enter`, `backspace`, `delete-forward`, `insert`
+- printable keys such as letters, digits, and common punctuation
+- control combinations such as `ctrl-c`, `ctrl-d`, `ctrl-l`, `ctrl-z`
+- shortcut combinations such as `cmd-c`, `cmd-shift-k`, `shift-tab`, `opt-enter`
+- function keys `f1`...`f12`
 
 ### Accepted aliases (normalized to canonical)
 
@@ -86,9 +81,11 @@ Rules:
 - `arrow-right` -> `right`
 - `pgup` -> `pageup`
 - `pgdn` -> `pagedown`
-- `ctrl+c` -> `ctrl-c`
-- `ctrl+d` -> `ctrl-d`
-- `ctrl+l` -> `ctrl-l`
+- `forward-delete` / `deleteforward` -> `delete-forward`
+- `ins` -> `insert`
+- `command-*` -> `cmd-*`
+- `alt-*` / `option-*` -> `opt-*`
+- `ctrl+*` -> `ctrl-*`
 
 ### `--repeat`
 
@@ -162,7 +159,7 @@ Rules:
 - `normalized`: string
   - canonical token used by runtime
   - must be one of the canonical tokens listed above
-- `category`: `"navigation"` | `"editing"` | `"control"`
+- `category`: `"navigation"` | `"editing"` | `"control"` | `"shortcut"` | `"function"`
 
 ### `delivery`
 
@@ -216,9 +213,9 @@ Same shape used by other CLI contracts:
   "schema_version": "prowl.cli.key.v1",
   "error": {
     "code": "UNSUPPORTED_KEY",
-    "message": "The key token 'ctrl-z' is not supported in v1",
+    "message": "The key token 'hyper-k' is not supported.",
     "details": {
-      "token": "ctrl-z"
+      "token": "hyper-k"
     }
   }
 }

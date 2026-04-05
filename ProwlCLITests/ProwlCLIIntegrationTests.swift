@@ -808,7 +808,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
   }
 
   func testKeyCommandRejectUnsupportedKey() throws {
-    let result = try runProwl(args: ["key", "ctrl-z", "--json"])
+    let result = try runProwl(args: ["key", "hyper-k", "--json"])
     XCTAssertNotEqual(result.exitCode, 0)
     let payload = try jsonObject(from: result.stdout)
     XCTAssertEqual(payload["ok"] as? Bool, false)
@@ -963,6 +963,41 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         XCTAssertEqual(input.rawToken, alias, "rawToken should preserve '\(alias)'")
       } else {
         XCTFail("Expected key command envelope for alias '\(alias)'")
+      }
+    }
+  }
+
+  func testKeyCommandExpandedTokensAccepted() throws {
+    let tokenCases: [(raw: String, normalized: String)] = [
+      ("cmd-c", "cmd-c"),
+      ("command-shift-k", "cmd-shift-k"),
+      ("alt-enter", "opt-enter"),
+      ("ctrl-z", "ctrl-z"),
+      ("deleteforward", "delete-forward"),
+      ("f12", "f12"),
+    ]
+
+    for (raw, normalized) in tokenCases {
+      let socketPath = temporarySocketPath(suffix: "key-expanded-\(normalized.replacingOccurrences(of: "-", with: "_"))")
+      let response = CommandResponse(
+        ok: true,
+        command: "key",
+        schemaVersion: "prowl.cli.key.v1"
+      )
+
+      let (requestData, result) = try runWithMockServer(
+        socketPath: socketPath,
+        response: response,
+        args: ["key", raw, "--json"]
+      )
+
+      XCTAssertEqual(result.exitCode, 0, "Token '\(raw)' should be accepted")
+      let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+      if case .key(let input) = envelope.command {
+        XCTAssertEqual(input.token, normalized)
+        XCTAssertEqual(input.rawToken, raw)
+      } else {
+        XCTFail("Expected key command envelope for token '\(raw)'")
       }
     }
   }

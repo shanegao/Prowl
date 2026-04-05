@@ -7,7 +7,7 @@ import ProwlCLIShared
 struct KeyCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "key",
-    abstract: "Send a key event to a terminal pane.",
+    abstract: "Send a user key event to a terminal pane.",
     discussion: """
       With one positional argument, the key is sent to the current pane.
       With two positional arguments, the first is the target (auto-resolved) and
@@ -61,7 +61,7 @@ struct KeyCommand: ParsableCommand {
       guard let normalized = KeyTokens.normalize(rawToken) else {
         throw ExitError(
           code: CLIErrorCode.unsupportedKey,
-          message: "The key token '\(rawToken.lowercased())' is not supported in v1."
+          message: "The key token '\(rawToken.lowercased())' is not supported."
         )
       }
 
