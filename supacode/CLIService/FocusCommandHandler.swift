@@ -130,7 +130,10 @@ final class FocusCommandHandler: CommandHandler {
     }
   }
 
-  private func makeResolvedVia(from selector: TargetSelector, requestedTarget: FocusResolvedTarget) -> FocusResolvedVia {
+  private func makeResolvedVia(
+    from selector: TargetSelector,
+    requestedTarget: FocusResolvedTarget
+  ) -> FocusResolvedVia {
     switch selector {
     case .worktree:
       return .worktree
