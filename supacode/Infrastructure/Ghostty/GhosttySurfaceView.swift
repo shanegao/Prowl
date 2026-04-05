@@ -1915,10 +1915,26 @@ struct CLIKeySpec {
   }
 
   private static let namedBaseSpecs: [String: BaseSpec] = [
-    "enter": BaseSpec(keyCode: UInt16(kVK_Return), charactersIgnoringModifiers: "\r", usesFunctionModifier: false),
-    "esc": BaseSpec(keyCode: UInt16(kVK_Escape), charactersIgnoringModifiers: "\u{1B}", usesFunctionModifier: false),
-    "tab": BaseSpec(keyCode: UInt16(kVK_Tab), charactersIgnoringModifiers: "\t", usesFunctionModifier: false),
-    "backspace": BaseSpec(keyCode: UInt16(kVK_Delete), charactersIgnoringModifiers: "\u{7F}", usesFunctionModifier: false),
+    "enter": BaseSpec(
+      keyCode: UInt16(kVK_Return),
+      charactersIgnoringModifiers: "\r",
+      usesFunctionModifier: false
+    ),
+    "esc": BaseSpec(
+      keyCode: UInt16(kVK_Escape),
+      charactersIgnoringModifiers: "\u{1B}",
+      usesFunctionModifier: false
+    ),
+    "tab": BaseSpec(
+      keyCode: UInt16(kVK_Tab),
+      charactersIgnoringModifiers: "\t",
+      usesFunctionModifier: false
+    ),
+    "backspace": BaseSpec(
+      keyCode: UInt16(kVK_Delete),
+      charactersIgnoringModifiers: "\u{7F}",
+      usesFunctionModifier: false
+    ),
     "delete-forward": BaseSpec(
       keyCode: UInt16(kVK_ForwardDelete),
       charactersIgnoringModifiers: String(UnicodeScalar(NSDeleteFunctionKey)!),
@@ -1986,6 +2002,94 @@ struct CLIKeySpec {
     "f12": (UInt16(kVK_F12), NSF12FunctionKey),
   ]
 
+  private static let printableKeyCodes: [String: UInt16] = [
+    "a": UInt16(kVK_ANSI_A),
+    "b": UInt16(kVK_ANSI_B),
+    "c": UInt16(kVK_ANSI_C),
+    "d": UInt16(kVK_ANSI_D),
+    "e": UInt16(kVK_ANSI_E),
+    "f": UInt16(kVK_ANSI_F),
+    "g": UInt16(kVK_ANSI_G),
+    "h": UInt16(kVK_ANSI_H),
+    "i": UInt16(kVK_ANSI_I),
+    "j": UInt16(kVK_ANSI_J),
+    "k": UInt16(kVK_ANSI_K),
+    "l": UInt16(kVK_ANSI_L),
+    "m": UInt16(kVK_ANSI_M),
+    "n": UInt16(kVK_ANSI_N),
+    "o": UInt16(kVK_ANSI_O),
+    "p": UInt16(kVK_ANSI_P),
+    "q": UInt16(kVK_ANSI_Q),
+    "r": UInt16(kVK_ANSI_R),
+    "s": UInt16(kVK_ANSI_S),
+    "t": UInt16(kVK_ANSI_T),
+    "u": UInt16(kVK_ANSI_U),
+    "v": UInt16(kVK_ANSI_V),
+    "w": UInt16(kVK_ANSI_W),
+    "x": UInt16(kVK_ANSI_X),
+    "y": UInt16(kVK_ANSI_Y),
+    "z": UInt16(kVK_ANSI_Z),
+    "0": UInt16(kVK_ANSI_0),
+    "1": UInt16(kVK_ANSI_1),
+    "2": UInt16(kVK_ANSI_2),
+    "3": UInt16(kVK_ANSI_3),
+    "4": UInt16(kVK_ANSI_4),
+    "5": UInt16(kVK_ANSI_5),
+    "6": UInt16(kVK_ANSI_6),
+    "7": UInt16(kVK_ANSI_7),
+    "8": UInt16(kVK_ANSI_8),
+    "9": UInt16(kVK_ANSI_9),
+    "space": UInt16(kVK_Space),
+    "minus": UInt16(kVK_ANSI_Minus),
+    "equal": UInt16(kVK_ANSI_Equal),
+    ",": UInt16(kVK_ANSI_Comma),
+    "comma": UInt16(kVK_ANSI_Comma),
+    ".": UInt16(kVK_ANSI_Period),
+    "period": UInt16(kVK_ANSI_Period),
+    "/": UInt16(kVK_ANSI_Slash),
+    "slash": UInt16(kVK_ANSI_Slash),
+    "\\": UInt16(kVK_ANSI_Backslash),
+    "backslash": UInt16(kVK_ANSI_Backslash),
+    ";": UInt16(kVK_ANSI_Semicolon),
+    "semicolon": UInt16(kVK_ANSI_Semicolon),
+    "'": UInt16(kVK_ANSI_Quote),
+    "quote": UInt16(kVK_ANSI_Quote),
+    "`": UInt16(kVK_ANSI_Grave),
+    "grave": UInt16(kVK_ANSI_Grave),
+    "[": UInt16(kVK_ANSI_LeftBracket),
+    "]": UInt16(kVK_ANSI_RightBracket),
+  ]
+
+  private static let shiftedCharacterMap: [String: String] = [
+    "1": "!",
+    "2": "@",
+    "3": "#",
+    "4": "$",
+    "5": "%",
+    "6": "^",
+    "7": "&",
+    "8": "*",
+    "9": "(",
+    "0": ")",
+    "minus": "_",
+    "equal": "+",
+    ",": "<",
+    "comma": "<",
+    ".": ">",
+    "period": ">",
+    "/": "?",
+    "slash": "?",
+    "\\": "|",
+    "backslash": "|",
+    ";": ":",
+    "semicolon": ":",
+    "'": "\"",
+    "quote": "\"",
+    "`": "~",
+    "[": "{",
+    "]": "}",
+  ]
+
   private static func eventModifiers(from modifiers: [KeyModifier]) -> NSEvent.ModifierFlags {
     modifiers.reduce(into: NSEvent.ModifierFlags()) { result, modifier in
       switch modifier {
@@ -2000,14 +2104,25 @@ struct CLIKeySpec {
   private static func baseSpec(for token: String) -> BaseSpec? {
     if let base = namedBaseSpecs[token] { return base }
     if let (keyCode, scalar) = functionKeyMap[token] {
-      return BaseSpec(keyCode: keyCode, charactersIgnoringModifiers: String(UnicodeScalar(scalar)!), usesFunctionModifier: true)
+      return BaseSpec(
+        keyCode: keyCode,
+        charactersIgnoringModifiers: String(UnicodeScalar(scalar)!),
+        usesFunctionModifier: true
+      )
     }
     return printableBaseSpec(for: token)
   }
 
   private static func printableBaseSpec(for token: String) -> BaseSpec? {
-    guard let character = printableCharacter(for: token), let keyCode = printableKeyCode(for: token) else { return nil }
-    return BaseSpec(keyCode: keyCode, charactersIgnoringModifiers: String(character), usesFunctionModifier: false)
+    guard let character = printableCharacter(for: token),
+      let keyCode = printableKeyCode(for: token)
+    else { return nil }
+
+    return BaseSpec(
+      keyCode: keyCode,
+      charactersIgnoringModifiers: String(character),
+      usesFunctionModifier: false
+    )
   }
 
   private static func printableCharacter(for token: String) -> Character? {
@@ -2029,57 +2144,7 @@ struct CLIKeySpec {
   }
 
   private static func printableKeyCode(for token: String) -> UInt16? {
-    switch token {
-    case "a": return UInt16(kVK_ANSI_A)
-    case "b": return UInt16(kVK_ANSI_B)
-    case "c": return UInt16(kVK_ANSI_C)
-    case "d": return UInt16(kVK_ANSI_D)
-    case "e": return UInt16(kVK_ANSI_E)
-    case "f": return UInt16(kVK_ANSI_F)
-    case "g": return UInt16(kVK_ANSI_G)
-    case "h": return UInt16(kVK_ANSI_H)
-    case "i": return UInt16(kVK_ANSI_I)
-    case "j": return UInt16(kVK_ANSI_J)
-    case "k": return UInt16(kVK_ANSI_K)
-    case "l": return UInt16(kVK_ANSI_L)
-    case "m": return UInt16(kVK_ANSI_M)
-    case "n": return UInt16(kVK_ANSI_N)
-    case "o": return UInt16(kVK_ANSI_O)
-    case "p": return UInt16(kVK_ANSI_P)
-    case "q": return UInt16(kVK_ANSI_Q)
-    case "r": return UInt16(kVK_ANSI_R)
-    case "s": return UInt16(kVK_ANSI_S)
-    case "t": return UInt16(kVK_ANSI_T)
-    case "u": return UInt16(kVK_ANSI_U)
-    case "v": return UInt16(kVK_ANSI_V)
-    case "w": return UInt16(kVK_ANSI_W)
-    case "x": return UInt16(kVK_ANSI_X)
-    case "y": return UInt16(kVK_ANSI_Y)
-    case "z": return UInt16(kVK_ANSI_Z)
-    case "0": return UInt16(kVK_ANSI_0)
-    case "1": return UInt16(kVK_ANSI_1)
-    case "2": return UInt16(kVK_ANSI_2)
-    case "3": return UInt16(kVK_ANSI_3)
-    case "4": return UInt16(kVK_ANSI_4)
-    case "5": return UInt16(kVK_ANSI_5)
-    case "6": return UInt16(kVK_ANSI_6)
-    case "7": return UInt16(kVK_ANSI_7)
-    case "8": return UInt16(kVK_ANSI_8)
-    case "9": return UInt16(kVK_ANSI_9)
-    case "space": return UInt16(kVK_Space)
-    case "minus": return UInt16(kVK_ANSI_Minus)
-    case "equal": return UInt16(kVK_ANSI_Equal)
-    case ",", "comma": return UInt16(kVK_ANSI_Comma)
-    case ".", "period": return UInt16(kVK_ANSI_Period)
-    case "/", "slash": return UInt16(kVK_ANSI_Slash)
-    case "\\", "backslash": return UInt16(kVK_ANSI_Backslash)
-    case ";", "semicolon": return UInt16(kVK_ANSI_Semicolon)
-    case "'", "quote": return UInt16(kVK_ANSI_Quote)
-    case "`", "grave": return UInt16(kVK_ANSI_Grave)
-    case "[": return UInt16(kVK_ANSI_LeftBracket)
-    case "]": return UInt16(kVK_ANSI_RightBracket)
-    default: return nil
-    }
+    printableKeyCodes[token]
   }
 
   private static func shiftedCharacters(for token: String) -> String? {
@@ -2087,30 +2152,7 @@ struct CLIKeySpec {
       return String(character).uppercased()
     }
 
-    switch token {
-    case "1": return "!"
-    case "2": return "@"
-    case "3": return "#"
-    case "4": return "$"
-    case "5": return "%"
-    case "6": return "^"
-    case "7": return "&"
-    case "8": return "*"
-    case "9": return "("
-    case "0": return ")"
-    case "minus": return "_"
-    case "equal": return "+"
-    case ",", "comma": return "<"
-    case ".", "period": return ">"
-    case "/", "slash": return "?"
-    case "\\", "backslash": return "|"
-    case ";", "semicolon": return ":"
-    case "'", "quote": return "\""
-    case "`", "grave": return "~"
-    case "[": return "{"
-    case "]": return "}"
-    default: return nil
-    }
+    return shiftedCharacterMap[token]
   }
 
   private static func controlCharacter(for token: String) -> String? {

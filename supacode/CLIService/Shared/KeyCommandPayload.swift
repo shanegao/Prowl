@@ -172,6 +172,61 @@ private struct KeyBaseDescriptor {
 /// Shared token definitions for the `key` command.
 /// Used by CLI for validation and by app for response building.
 public enum KeyTokens {
+  private static let namedBaseDescriptors: [String: KeyBaseDescriptor] = [
+    "enter": KeyBaseDescriptor(canonical: "enter", category: .editing),
+    "return": KeyBaseDescriptor(canonical: "enter", category: .editing),
+    "esc": KeyBaseDescriptor(canonical: "esc", category: .control),
+    "escape": KeyBaseDescriptor(canonical: "esc", category: .control),
+    "tab": KeyBaseDescriptor(canonical: "tab", category: .navigation),
+    "backspace": KeyBaseDescriptor(canonical: "backspace", category: .editing),
+    "delete": KeyBaseDescriptor(canonical: "backspace", category: .editing),
+    "del": KeyBaseDescriptor(canonical: "backspace", category: .editing),
+    "delete-forward": KeyBaseDescriptor(canonical: "delete-forward", category: .editing),
+    "forward-delete": KeyBaseDescriptor(canonical: "delete-forward", category: .editing),
+    "deleteforward": KeyBaseDescriptor(canonical: "delete-forward", category: .editing),
+    "forwarddelete": KeyBaseDescriptor(canonical: "delete-forward", category: .editing),
+    "insert": KeyBaseDescriptor(canonical: "insert", category: .editing),
+    "ins": KeyBaseDescriptor(canonical: "insert", category: .editing),
+    "up": KeyBaseDescriptor(canonical: "up", category: .navigation),
+    "arrow-up": KeyBaseDescriptor(canonical: "up", category: .navigation),
+    "down": KeyBaseDescriptor(canonical: "down", category: .navigation),
+    "arrow-down": KeyBaseDescriptor(canonical: "down", category: .navigation),
+    "left": KeyBaseDescriptor(canonical: "left", category: .navigation),
+    "arrow-left": KeyBaseDescriptor(canonical: "left", category: .navigation),
+    "right": KeyBaseDescriptor(canonical: "right", category: .navigation),
+    "arrow-right": KeyBaseDescriptor(canonical: "right", category: .navigation),
+    "pageup": KeyBaseDescriptor(canonical: "pageup", category: .navigation),
+    "page-up": KeyBaseDescriptor(canonical: "pageup", category: .navigation),
+    "pgup": KeyBaseDescriptor(canonical: "pageup", category: .navigation),
+    "pagedown": KeyBaseDescriptor(canonical: "pagedown", category: .navigation),
+    "page-down": KeyBaseDescriptor(canonical: "pagedown", category: .navigation),
+    "pgdn": KeyBaseDescriptor(canonical: "pagedown", category: .navigation),
+    "home": KeyBaseDescriptor(canonical: "home", category: .navigation),
+    "end": KeyBaseDescriptor(canonical: "end", category: .navigation),
+    "space": KeyBaseDescriptor(canonical: "space", category: .editing),
+    "minus": KeyBaseDescriptor(canonical: "minus", category: .editing),
+    "hyphen": KeyBaseDescriptor(canonical: "minus", category: .editing),
+    "dash": KeyBaseDescriptor(canonical: "minus", category: .editing),
+    "equal": KeyBaseDescriptor(canonical: "equal", category: .editing),
+    "equals": KeyBaseDescriptor(canonical: "equal", category: .editing),
+    "comma": KeyBaseDescriptor(canonical: "comma", category: .editing),
+    "period": KeyBaseDescriptor(canonical: "period", category: .editing),
+    "dot": KeyBaseDescriptor(canonical: "period", category: .editing),
+    "slash": KeyBaseDescriptor(canonical: "slash", category: .editing),
+    "backslash": KeyBaseDescriptor(canonical: "backslash", category: .editing),
+    "semicolon": KeyBaseDescriptor(canonical: "semicolon", category: .editing),
+    "quote": KeyBaseDescriptor(canonical: "quote", category: .editing),
+    "apostrophe": KeyBaseDescriptor(canonical: "quote", category: .editing),
+    "grave": KeyBaseDescriptor(canonical: "grave", category: .editing),
+    "backtick": KeyBaseDescriptor(canonical: "grave", category: .editing),
+    "left-bracket": KeyBaseDescriptor(canonical: "[", category: .editing),
+    "leftbracket": KeyBaseDescriptor(canonical: "[", category: .editing),
+    "lbracket": KeyBaseDescriptor(canonical: "[", category: .editing),
+    "right-bracket": KeyBaseDescriptor(canonical: "]", category: .editing),
+    "rightbracket": KeyBaseDescriptor(canonical: "]", category: .editing),
+    "rbracket": KeyBaseDescriptor(canonical: "]", category: .editing),
+  ]
+
   public static func normalize(_ raw: String) -> String? {
     descriptor(for: raw)?.normalized
   }
@@ -193,30 +248,36 @@ public enum KeyTokens {
       .map(String.init)
     guard !parts.isEmpty, !parts.contains(where: \.isEmpty) else { return nil }
 
-    for baseLength in [2, 1] where parts.count >= baseLength {
+    return descriptor(for: parts, baseLengths: [2, 1])
+  }
+
+  private static func descriptor(for parts: [String], baseLengths: [Int]) -> KeyTokenDescriptor? {
+    for baseLength in baseLengths where parts.count >= baseLength {
       let baseRaw = parts.suffix(baseLength).joined(separator: "-")
       guard let base = baseDescriptor(for: baseRaw) else { continue }
+      guard let modifiers = modifiers(from: parts.dropLast(baseLength)) else { return nil }
 
-      let modifierParts = parts.dropLast(baseLength)
-      var modifierSet = Set<KeyModifier>()
-      for modifierRaw in modifierParts {
-        guard let modifier = KeyModifier.resolve(modifierRaw), modifierSet.insert(modifier).inserted else {
-          return nil
-        }
-      }
-
-      let modifiers = KeyModifier.canonicalOrder.filter { modifierSet.contains($0) }
       let normalized = (modifiers.map(\.rawValue) + [base.canonical]).joined(separator: "-")
-      let category = category(for: base, modifiers: modifiers)
       return KeyTokenDescriptor(
         normalized: normalized,
         baseToken: base.canonical,
         modifiers: modifiers,
-        category: category
+        category: category(for: base, modifiers: modifiers)
       )
     }
 
     return nil
+  }
+
+  private static func modifiers(from parts: ArraySlice<String>) -> [KeyModifier]? {
+    var modifierSet = Set<KeyModifier>()
+    for modifierRaw in parts {
+      guard let modifier = KeyModifier.resolve(modifierRaw), modifierSet.insert(modifier).inserted else {
+        return nil
+      }
+    }
+
+    return KeyModifier.canonicalOrder.filter { modifierSet.contains($0) }
   }
 
   private static func category(for base: KeyBaseDescriptor, modifiers: [KeyModifier]) -> KeyCategory {
@@ -228,62 +289,7 @@ public enum KeyTokens {
   }
 
   private static func baseDescriptor(for raw: String) -> KeyBaseDescriptor? {
-    switch raw {
-    case "enter", "return":
-      return KeyBaseDescriptor(canonical: "enter", category: .editing)
-    case "esc", "escape":
-      return KeyBaseDescriptor(canonical: "esc", category: .control)
-    case "tab":
-      return KeyBaseDescriptor(canonical: "tab", category: .navigation)
-    case "backspace", "delete", "del":
-      return KeyBaseDescriptor(canonical: "backspace", category: .editing)
-    case "delete-forward", "forward-delete", "deleteforward", "forwarddelete":
-      return KeyBaseDescriptor(canonical: "delete-forward", category: .editing)
-    case "insert", "ins":
-      return KeyBaseDescriptor(canonical: "insert", category: .editing)
-    case "up", "arrow-up":
-      return KeyBaseDescriptor(canonical: "up", category: .navigation)
-    case "down", "arrow-down":
-      return KeyBaseDescriptor(canonical: "down", category: .navigation)
-    case "left", "arrow-left":
-      return KeyBaseDescriptor(canonical: "left", category: .navigation)
-    case "right", "arrow-right":
-      return KeyBaseDescriptor(canonical: "right", category: .navigation)
-    case "pageup", "page-up", "pgup":
-      return KeyBaseDescriptor(canonical: "pageup", category: .navigation)
-    case "pagedown", "page-down", "pgdn":
-      return KeyBaseDescriptor(canonical: "pagedown", category: .navigation)
-    case "home":
-      return KeyBaseDescriptor(canonical: "home", category: .navigation)
-    case "end":
-      return KeyBaseDescriptor(canonical: "end", category: .navigation)
-    case "space":
-      return KeyBaseDescriptor(canonical: "space", category: .editing)
-    case "minus", "hyphen", "dash":
-      return KeyBaseDescriptor(canonical: "minus", category: .editing)
-    case "equal", "equals":
-      return KeyBaseDescriptor(canonical: "equal", category: .editing)
-    case "comma":
-      return KeyBaseDescriptor(canonical: "comma", category: .editing)
-    case "period", "dot":
-      return KeyBaseDescriptor(canonical: "period", category: .editing)
-    case "slash":
-      return KeyBaseDescriptor(canonical: "slash", category: .editing)
-    case "backslash":
-      return KeyBaseDescriptor(canonical: "backslash", category: .editing)
-    case "semicolon":
-      return KeyBaseDescriptor(canonical: "semicolon", category: .editing)
-    case "quote", "apostrophe":
-      return KeyBaseDescriptor(canonical: "quote", category: .editing)
-    case "grave", "backtick":
-      return KeyBaseDescriptor(canonical: "grave", category: .editing)
-    case "left-bracket", "leftbracket", "lbracket":
-      return KeyBaseDescriptor(canonical: "[", category: .editing)
-    case "right-bracket", "rightbracket", "rbracket":
-      return KeyBaseDescriptor(canonical: "]", category: .editing)
-    default:
-      break
-    }
+    if let base = namedBaseDescriptors[raw] { return base }
 
     if raw.count == 1, let scalar = raw.unicodeScalars.first, scalar.isASCII, !scalar.properties.isWhitespace {
       return KeyBaseDescriptor(canonical: raw, category: .editing)
