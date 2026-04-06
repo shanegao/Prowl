@@ -160,6 +160,7 @@ struct RepositorySectionView: View {
     }
     .frame(maxWidth: .infinity)
     .frame(height: headerCellHeight, alignment: .center)
+    .padding(.top, showsTopSeparator ? 4 : 0)
     .contentShape(.interaction, .rect)
     .background {
       if Self.debugHeaderLayers {
@@ -172,9 +173,9 @@ struct RepositorySectionView: View {
       }
     }
     .overlay(alignment: .top) {
-      if showsTopSeparator && !isPlainFolderSelected {
+      if showsTopSeparator && !isPlainFolderSelected && Self.debugHeaderLayers {
         Rectangle()
-          .fill(Self.debugHeaderLayers ? .blue : .secondary)
+          .fill(.blue)
           .frame(height: 1)
           .frame(maxWidth: .infinity)
           .accessibilityHidden(true)
@@ -220,7 +221,7 @@ struct RepositorySectionView: View {
   }
 
   private var headerCellHeight: CGFloat {
-    34
+    26
   }
 
   static func openTabCount(

@@ -80,24 +80,6 @@ struct WorktreeRow: View {
             .help("Run script active")
             .accessibilityLabel("Run script active")
         }
-        if hasChangeCounts, let displayAddedLines, let displayRemovedLines {
-          Button {
-            onDiffTap?()
-          } label: {
-            WorktreeRowChangeCountView(
-              addedLines: displayAddedLines,
-              removedLines: displayRemovedLines,
-              isSelected: isSelected,
-            )
-          }
-          .buttonStyle(.plain)
-          .help(
-            AppShortcuts.helpText(
-              title: "Show Diff",
-              commandID: AppShortcuts.CommandID.showDiff,
-              in: resolvedKeybindings
-            ))
-        }
         if isHovered {
           Button {
             pinAction?()
@@ -120,6 +102,24 @@ struct WorktreeRow: View {
           .buttonStyle(.plain)
           .help("Archive Worktree")
           .disabled(archiveAction == nil)
+        }
+        if hasChangeCounts, let displayAddedLines, let displayRemovedLines {
+          Button {
+            onDiffTap?()
+          } label: {
+            WorktreeRowChangeCountView(
+              addedLines: displayAddedLines,
+              removedLines: displayRemovedLines,
+              isSelected: isSelected,
+            )
+          }
+          .buttonStyle(.plain)
+          .help(
+            AppShortcuts.helpText(
+              title: "Show Diff",
+              commandID: AppShortcuts.CommandID.showDiff,
+              in: resolvedKeybindings
+            ))
         }
       }
       WorktreeRowInfoView(
@@ -146,7 +146,7 @@ struct WorktreeRow: View {
   }
 
   private var worktreeRowHeight: CGFloat {
-    42
+    36
   }
 }
 
@@ -208,6 +208,88 @@ private struct WorktreeRowInfoView: View {
   }
 }
 
+// MARK: - Previews
+
+@MainActor
+private struct WorktreeRowPreview: View {
+  @State private var hoveredID: String?
+
+  var body: some View {
+    List {
+      row(id: "main", name: "main", worktreeName: "Default", isMainWorktree: true)
+      row(
+        id: "diff", name: "feature/sidebar-redesign", worktreeName: "sidebar-redesign",
+        addedLines: 120, removedLines: 45
+      )
+      row(id: "pinned", name: "feature/pinned-branch", worktreeName: "pinned-branch", isPinned: true)
+      row(id: "running", name: "feature/auth-flow", worktreeName: "auth-flow", taskStatus: .running)
+      row(id: "loading", name: "creating-worktree...", worktreeName: "Setting up", isLoading: true)
+      row(id: "notif", name: "feature/notifications", worktreeName: "notifications", showsNotificationIndicator: true)
+      row(id: "script", name: "feature/run-script", worktreeName: "run-script", isRunScriptRunning: true)
+      row(id: "hint", name: "feature/shortcuts", worktreeName: "shortcuts", shortcutHint: "⌘1")
+      row(id: "selected", name: "feature/selected", worktreeName: "selected", isSelected: true)
+    }
+    .listStyle(.sidebar)
+    .scrollIndicators(.never)
+    .frame(width: 280, height: 550)
+  }
+
+  private func row(
+    id: String,
+    name: String,
+    worktreeName: String,
+    isPinned: Bool = false,
+    isMainWorktree: Bool = false,
+    isLoading: Bool = false,
+    taskStatus: WorktreeTaskStatus? = nil,
+    isRunScriptRunning: Bool = false,
+    showsNotificationIndicator: Bool = false,
+    addedLines: Int? = nil,
+    removedLines: Int? = nil,
+    isSelected: Bool = false,
+    shortcutHint: String? = nil
+  ) -> some View {
+    let info: WorktreeInfoEntry? =
+      if let addedLines, let removedLines {
+        WorktreeInfoEntry(addedLines: addedLines, removedLines: removedLines, pullRequest: nil)
+      } else {
+        nil
+      }
+    let isHovered = hoveredID == id
+    return WorktreeRow(
+      name: name,
+      worktreeName: worktreeName,
+      info: info,
+      showsPullRequestInfo: false,
+      isHovered: isHovered,
+      isPinned: isPinned,
+      isMainWorktree: isMainWorktree,
+      isLoading: isLoading,
+      taskStatus: taskStatus,
+      isRunScriptRunning: isRunScriptRunning,
+      showsNotificationIndicator: showsNotificationIndicator,
+      notifications: [],
+      onFocusNotification: { _ in },
+      shortcutHint: shortcutHint,
+      pinAction: {},
+      isSelected: isSelected,
+      archiveAction: {},
+      onDiffTap: addedLines != nil ? {} : nil
+    )
+    .listRowInsets(EdgeInsets())
+    .listRowSeparator(.hidden)
+    .onHover { hovering in
+      hoveredID = hovering ? id : nil
+    }
+  }
+}
+
+#Preview("WorktreeRow") {
+  WorktreeRowPreview()
+}
+
+// MARK: - Subviews
+
 private struct WorktreeRowChangeCountView: View {
   let addedLines: Int
   let removedLines: Int
@@ -219,6 +301,7 @@ private struct WorktreeRowChangeCountView: View {
         .foregroundStyle(.green)
       Text("-\(removedLines)")
         .foregroundStyle(.red)
+        .baselineOffset(-1)
     }
     .font(.caption)
     .lineLimit(1)

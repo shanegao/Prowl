@@ -223,3 +223,84 @@ struct SidebarListView: View {
     }
   }
 }
+
+// MARK: - Previews
+
+#if DEBUG
+  @MainActor
+  private struct SidebarLayoutPreview: View {
+    @State private var expandedRepoIDs: Set<Repository.ID>
+    @State private var sidebarSelections: Set<SidebarSelection> = []
+    private let store: StoreOf<RepositoriesFeature>
+    private let terminalManager: WorktreeTerminalManager = .preview
+
+    init() {
+      let state = Self.mockState
+      _expandedRepoIDs = State(initialValue: Set(state.repositories.map(\.id)))
+      store = Store(initialState: state) { EmptyReducer() }
+    }
+
+    var body: some View {
+      SidebarListView(
+        store: store,
+        expandedRepoIDs: $expandedRepoIDs,
+        sidebarSelections: $sidebarSelections,
+        terminalManager: terminalManager
+      )
+      .environment(CommandKeyObserver())
+      .frame(width: 280, height: 500)
+    }
+
+    private static var mockState: RepositoriesFeature.State {
+      let repo1Root = URL(fileURLWithPath: "/tmp/supacode")
+      let repo1Worktrees: IdentifiedArrayOf<Worktree> = [
+        Worktree(
+          id: repo1Root.path, name: "main", detail: ".",
+          workingDirectory: repo1Root, repositoryRootURL: repo1Root
+        ),
+        Worktree(
+          id: "/tmp/wt/sidebar", name: "feature/sidebar-redesign", detail: "/tmp/wt/sidebar",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/sidebar"), repositoryRootURL: repo1Root
+        ),
+        Worktree(
+          id: "/tmp/wt/auth", name: "feature/auth", detail: "/tmp/wt/auth",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/auth"), repositoryRootURL: repo1Root
+        ),
+        Worktree(
+          id: "/tmp/wt/crash", name: "fix/crash", detail: "/tmp/wt/crash",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/crash"), repositoryRootURL: repo1Root
+        ),
+      ]
+      let repo1 = Repository(
+        id: repo1Root.path, rootURL: repo1Root, name: "supacode", worktrees: repo1Worktrees
+      )
+
+      let repo2Root = URL(fileURLWithPath: "/tmp/ghostty")
+      let repo2Worktrees: IdentifiedArrayOf<Worktree> = [
+        Worktree(
+          id: repo2Root.path, name: "main", detail: ".",
+          workingDirectory: repo2Root, repositoryRootURL: repo2Root
+        ),
+        Worktree(
+          id: "/tmp/wt/renderer", name: "feature/renderer", detail: "/tmp/wt/renderer",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/renderer"), repositoryRootURL: repo2Root
+        ),
+      ]
+      let repo2 = Repository(
+        id: repo2Root.path, rootURL: repo2Root, name: "ghostty", worktrees: repo2Worktrees
+      )
+
+      var state = RepositoriesFeature.State()
+      state.repositories = [repo1, repo2]
+      state.pinnedWorktreeIDs = ["/tmp/wt/auth"]
+      state.worktreeInfoByID = [
+        "/tmp/wt/sidebar": WorktreeInfoEntry(addedLines: 120, removedLines: 45, pullRequest: nil),
+      ]
+      return state
+    }
+  }
+
+  #Preview("Sidebar Layout") {
+    SidebarLayoutPreview()
+  }
+#endif

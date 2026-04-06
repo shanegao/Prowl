@@ -36,3 +36,14 @@ struct RepoHeaderRow: View {
     }
   }
 }
+
+// MARK: - Previews
+
+#Preview("RepoHeaderRow") {
+  VStack(alignment: .leading, spacing: 12) {
+    RepoHeaderRow(name: "supacode", isRemoving: false, tabCount: 3)
+    RepoHeaderRow(name: "ghostty", isRemoving: false, tabCount: 0)
+    RepoHeaderRow(name: "removing-repo", isRemoving: true, tabCount: 1)
+  }
+  .padding()
+}

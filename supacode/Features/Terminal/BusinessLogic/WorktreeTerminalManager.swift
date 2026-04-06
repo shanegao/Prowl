@@ -8,7 +8,7 @@ private let layoutRestoreFailureMessage = "Saved terminal layout was invalid and
 @MainActor
 @Observable
 final class WorktreeTerminalManager {
-  private let runtime: GhosttyRuntime
+  private let runtime: GhosttyRuntime?
   private let layoutPersistence: TerminalLayoutPersistenceClient
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
   private var notificationsEnabled = true
@@ -189,7 +189,7 @@ final class WorktreeTerminalManager {
     }
     let runSetupScript = runSetupScriptIfNew()
     let state = WorktreeTerminalState(
-      runtime: runtime,
+      runtime: runtime!,
       worktree: worktree,
       runSetupScript: runSetupScript,
       defaultFontSize: preferredFontSize
@@ -361,7 +361,7 @@ final class WorktreeTerminalManager {
   }
 
   func surfaceBackgroundOpacity() -> Double {
-    runtime.backgroundOpacity()
+    runtime?.backgroundOpacity() ?? 1.0
   }
 
   func syncPreferredFontSize(from worktreeID: Worktree.ID) {
@@ -524,4 +524,19 @@ final class WorktreeTerminalManager {
     terminalLogger.info("[LayoutRestore] apply: successfully restored \(restoredStates.count) worktree(s)")
     return true
   }
+
+  #if DEBUG
+    /// Inert instance for SwiftUI previews — no GhosttyRuntime, all reads return defaults.
+    static let preview: WorktreeTerminalManager = {
+      let manager = WorktreeTerminalManager(preview: ())
+      return manager
+    }()
+
+    private init(preview: Void) {
+      self.runtime = nil
+      self.layoutPersistence = .liveValue
+      self.preferredFontSize = nil
+      self.baselineFontSize = 13
+    }
+  #endif
 }
