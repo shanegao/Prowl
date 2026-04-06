@@ -301,6 +301,7 @@ private struct WorktreeRowChangeCountView: View {
         .foregroundStyle(.green)
       Text("-\(removedLines)")
         .foregroundStyle(.red)
+        .baselineOffset(-1)
     }
     .font(.caption)
     .lineLimit(1)
