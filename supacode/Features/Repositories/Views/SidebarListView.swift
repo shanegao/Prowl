@@ -282,8 +282,8 @@ private struct SidebarLayoutPreview: View {
       RepoHeaderRow(name: name, isRemoving: false, tabCount: tabCount)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .frame(height: 28, alignment: .center)
-    .padding(.top, isFirst ? 0 : 8)
+    .frame(height: 26, alignment: .center)
+    .padding(.top, isFirst ? 0 : 4)
     .listRowInsets(EdgeInsets())
     .listRowSeparator(.hidden)
   }

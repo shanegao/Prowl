@@ -160,7 +160,7 @@ struct RepositorySectionView: View {
     }
     .frame(maxWidth: .infinity)
     .frame(height: headerCellHeight, alignment: .center)
-    .padding(.top, showsTopSeparator ? 8 : 0)
+    .padding(.top, showsTopSeparator ? 4 : 0)
     .contentShape(.interaction, .rect)
     .background {
       if Self.debugHeaderLayers {
@@ -221,7 +221,7 @@ struct RepositorySectionView: View {
   }
 
   private var headerCellHeight: CGFloat {
-    28
+    26
   }
 
   static func openTabCount(
