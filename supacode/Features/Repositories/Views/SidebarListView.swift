@@ -255,9 +255,13 @@ private struct SidebarLayoutPreview: View {
           .font(.callout)
         Spacer()
         Image(systemName: "questionmark.circle")
+          .accessibilityHidden(true)
         Image(systemName: "arrow.clockwise")
+          .accessibilityHidden(true)
         Image(systemName: "archivebox")
+          .accessibilityHidden(true)
         Image(systemName: "gearshape")
+          .accessibilityHidden(true)
       }
       .buttonStyle(.plain)
       .font(.callout)
