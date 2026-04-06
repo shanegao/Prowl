@@ -22,6 +22,7 @@ struct RepoHeaderRow: View {
           .padding(.horizontal, 5)
           .padding(.vertical, 1)
           .background(.quaternary, in: .capsule)
+          .help("\(tabCount) active \(tabCount == 1 ? "tab" : "tabs")")
       }
     }
     .background {
