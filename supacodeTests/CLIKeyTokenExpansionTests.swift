@@ -31,6 +31,13 @@ struct CLIKeyTokenExpansionTests {
     #expect(KeyTokens.normalize("cmd-A") == "cmd-shift-a")
   }
 
+  @Test func normalizesMixedCaseControlTokensWithUppercaseSemantics() {
+    #expect(KeyTokens.normalize("Ctrl-A") == "shift-ctrl-a")
+    #expect(KeyTokens.normalize("CTRL-A") == "shift-ctrl-a")
+    #expect(KeyTokens.normalize("ctrl-a") == "ctrl-a")
+    #expect(KeyTokens.category(for: "Ctrl-A") == .control)
+  }
+
   @Test func rejectsUnsupportedShiftedSymbolLiterals() {
     #expect(KeyTokens.normalize("!") == nil)
     #expect(KeyTokens.normalize("@") == nil)
@@ -78,6 +85,15 @@ struct CLIKeyTokenExpansionTests {
     #expect(spec.keyCode == UInt16(kVK_ANSI_A))
     #expect(spec.modifiers == [.shift])
     #expect(spec.characters == "A")
+    #expect(spec.charactersIgnoringModifiers == "a")
+  }
+
+  @Test func cliKeySpecBuildsMixedCaseControlLetterEvent() throws {
+    let spec = try #require(CLIKeySpec.from(token: "Ctrl-A"))
+
+    #expect(spec.keyCode == UInt16(kVK_ANSI_A))
+    #expect(spec.modifiers == [.control, .shift])
+    #expect(spec.characters == String(UnicodeScalar(1)!))
     #expect(spec.charactersIgnoringModifiers == "a")
   }
 

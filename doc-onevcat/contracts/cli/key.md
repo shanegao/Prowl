@@ -59,9 +59,11 @@ prowl key [target selectors] <token> [--repeat <n>] [--json]
 Rules:
 
 - exactly one positional `<token>` is required
-- parsing is case-insensitive
 - surrounding spaces are ignored
 - canonical token form is lowercase kebab-case
+- modifier names and named-key aliases are parsed case-insensitively
+- single printable letters preserve case semantics: lowercase stays plain (`a`), uppercase implies `shift` (`A` -> `shift-a`)
+- mixed-case modifier combos keep that printable-letter rule, for example `Cmd-A` -> `cmd-shift-a` and `Ctrl-A` -> `shift-ctrl-a`
 
 ### Canonical tokens
 

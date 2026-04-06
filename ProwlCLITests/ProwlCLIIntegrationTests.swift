@@ -974,6 +974,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       ("alt-enter", "opt-enter"),
       ("ctrl-z", "ctrl-z"),
       ("A", "shift-a"),
+      ("Ctrl-A", "shift-ctrl-a"),
+      ("CTRL-A", "shift-ctrl-a"),
       ("ctrl-left-bracket", "ctrl-left-bracket"),
       ("ctrl-backslash", "ctrl-backslash"),
       ("ctrl-right-bracket", "ctrl-right-bracket"),
