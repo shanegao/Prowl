@@ -169,6 +169,11 @@ private struct KeyBaseDescriptor {
   let category: KeyCategory
 }
 
+private struct ResolvedKeyBaseDescriptor {
+  let base: KeyBaseDescriptor
+  let implicitModifiers: Set<KeyModifier>
+}
+
 /// Shared token definitions for the `key` command.
 /// Used by CLI for validation and by app for response building.
 public enum KeyTokens {
@@ -286,8 +291,7 @@ public enum KeyTokens {
   public static func descriptor(for raw: String) -> KeyTokenDescriptor? {
     let normalizedInput = raw
       .trimmingCharacters(in: .whitespacesAndNewlines)
-      .lowercased()
-      .replacingOccurrences(of: "+", with: "-")
+      .replacing("+", with: "-")
 
     guard !normalizedInput.isEmpty else { return nil }
 
@@ -302,52 +306,86 @@ public enum KeyTokens {
   private static func descriptor(for parts: [String], baseLengths: [Int]) -> KeyTokenDescriptor? {
     for baseLength in baseLengths where parts.count >= baseLength {
       let baseRaw = parts.suffix(baseLength).joined(separator: "-")
-      guard let base = baseDescriptor(for: baseRaw) else { continue }
-      guard let modifiers = modifiers(from: parts.dropLast(baseLength)) else { return nil }
+      guard let resolvedBase = baseDescriptor(for: baseRaw) else { continue }
+      guard let modifiers = modifiers(
+        from: parts.dropLast(baseLength),
+        implicitModifiers: resolvedBase.implicitModifiers
+      ) else {
+        return nil
+      }
 
-      let normalized = (modifiers.map(\.rawValue) + [base.canonical]).joined(separator: "-")
+      let normalized = (modifiers.map(\.rawValue) + [resolvedBase.base.canonical]).joined(separator: "-")
       return KeyTokenDescriptor(
         normalized: normalized,
-        baseToken: base.canonical,
+        baseToken: resolvedBase.base.canonical,
         modifiers: modifiers,
-        category: category(for: base, modifiers: modifiers)
+        category: category(for: resolvedBase.base, modifiers: modifiers)
       )
     }
 
     return nil
   }
 
-  private static func modifiers(from parts: ArraySlice<String>) -> [KeyModifier]? {
+  private static func modifiers(from parts: ArraySlice<String>, implicitModifiers: Set<KeyModifier>) -> [KeyModifier]? {
     var modifierSet = Set<KeyModifier>()
     for modifierRaw in parts {
-      guard let modifier = KeyModifier.resolve(modifierRaw), modifierSet.insert(modifier).inserted else {
+      guard let modifier = KeyModifier.resolve(modifierRaw.lowercased()), modifierSet.insert(modifier).inserted else {
         return nil
       }
     }
 
+    modifierSet.formUnion(implicitModifiers)
     return KeyModifier.canonicalOrder.filter { modifierSet.contains($0) }
   }
 
   private static func category(for base: KeyBaseDescriptor, modifiers: [KeyModifier]) -> KeyCategory {
     guard !modifiers.isEmpty else { return base.category }
-    if modifiers == [.ctrl] {
+    if usesControlCategory(for: modifiers) {
       return .control
     }
     return .shortcut
   }
 
-  private static func baseDescriptor(for raw: String) -> KeyBaseDescriptor? {
-    if let base = namedBaseDescriptors[raw] { return base }
-    if let base = singleCharacterBaseDescriptors[raw] { return base }
+  private static func baseDescriptor(for raw: String) -> ResolvedKeyBaseDescriptor? {
+    let lowered = raw.lowercased()
+    if let base = namedBaseDescriptors[lowered] {
+      return ResolvedKeyBaseDescriptor(base: base, implicitModifiers: [])
+    }
 
-    if raw.count >= 2,
-      raw.first == "f",
-      let number = Int(raw.dropFirst()),
+    if let base = singleCharacterBaseDescriptor(for: raw) {
+      return base
+    }
+
+    if lowered.count >= 2,
+      lowered.first == "f",
+      let number = Int(lowered.dropFirst()),
       (1...12).contains(number)
     {
-      return KeyBaseDescriptor(canonical: raw, category: .function)
+      return ResolvedKeyBaseDescriptor(
+        base: KeyBaseDescriptor(canonical: lowered, category: .function),
+        implicitModifiers: []
+      )
     }
 
     return nil
+  }
+
+  private static func singleCharacterBaseDescriptor(for raw: String) -> ResolvedKeyBaseDescriptor? {
+    guard raw.count == 1 else { return nil }
+
+    if let character = raw.first, character.isLetter {
+      let canonical = String(character).lowercased()
+      guard let base = singleCharacterBaseDescriptors[canonical] else { return nil }
+      let implicitModifiers: Set<KeyModifier> = character.isUppercase ? [.shift] : []
+      return ResolvedKeyBaseDescriptor(base: base, implicitModifiers: implicitModifiers)
+    }
+
+    guard let base = singleCharacterBaseDescriptors[raw] else { return nil }
+    return ResolvedKeyBaseDescriptor(base: base, implicitModifiers: [])
+  }
+
+  private static func usesControlCategory(for modifiers: [KeyModifier]) -> Bool {
+    let modifierSet = Set(modifiers)
+    return modifierSet.contains(.ctrl) && modifierSet.isSubset(of: [.ctrl, .shift])
   }
 }
