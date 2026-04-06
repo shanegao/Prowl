@@ -74,9 +74,6 @@ struct WorktreeRow: View {
           .foregroundStyle(nameColor)
           .lineLimit(1)
         Spacer(minLength: 4)
-        if isRunScriptRunning {
-          RunScriptIndicator(onStop: onStopRunScript)
-        }
         if isHovered {
           Button {
             pinAction?()
@@ -99,6 +96,9 @@ struct WorktreeRow: View {
           .buttonStyle(.plain)
           .help("Archive Worktree")
           .disabled(archiveAction == nil)
+        }
+        if isRunScriptRunning {
+          RunScriptIndicator(onStop: onStopRunScript)
         }
         if hasChangeCounts, let displayAddedLines, let displayRemovedLines {
           Button {
