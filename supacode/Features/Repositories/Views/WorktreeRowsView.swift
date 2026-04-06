@@ -275,6 +275,9 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
     }
+    Button("Reveal in Finder") {
+      NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: worktree.workingDirectory.path)
+    }
     if !row.isMainWorktree || isBulkSelection {
       Button(archiveTitle) {
         archiveWorktrees(archiveTargets)
