@@ -223,3 +223,120 @@ struct SidebarListView: View {
     }
   }
 }
+
+// MARK: - Previews
+
+/// Composed sidebar preview using leaf views only (no TCA store or GhosttyRuntime needed).
+@MainActor
+private struct SidebarLayoutPreview: View {
+  @State private var hoveredID: String?
+
+  var body: some View {
+    List {
+      sectionHeader(name: "supacode", tabCount: 4)
+      row(id: "sc-main", name: "main", worktreeName: "Default", isMainWorktree: true)
+      row(
+        id: "sc-sidebar", name: "feature/sidebar-redesign", worktreeName: "sidebar-redesign",
+        addedLines: 120, removedLines: 45
+      )
+      row(id: "sc-pinned", name: "feature/auth", worktreeName: "auth", isPinned: true)
+      row(id: "sc-running", name: "fix/crash", worktreeName: "crash", taskStatus: .running)
+
+      sectionHeader(name: "ghostty", tabCount: 1, showsTopSeparator: true)
+      row(id: "gh-main", name: "main", worktreeName: "Default", isMainWorktree: true)
+      row(id: "gh-feat", name: "feature/renderer", worktreeName: "renderer", isLoading: true)
+    }
+    .listStyle(.sidebar)
+    .scrollIndicators(.never)
+    .frame(width: 280, height: 500)
+    .safeAreaInset(edge: .bottom) {
+      HStack {
+        Label("Add Repository", systemImage: "folder.badge.plus")
+          .font(.callout)
+        Spacer()
+        Image(systemName: "questionmark.circle")
+        Image(systemName: "arrow.clockwise")
+        Image(systemName: "archivebox")
+        Image(systemName: "gearshape")
+      }
+      .buttonStyle(.plain)
+      .font(.callout)
+      .foregroundStyle(.secondary)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .background(Color(nsColor: .windowBackgroundColor))
+      .overlay(alignment: .top) { Divider() }
+    }
+  }
+
+  private func sectionHeader(
+    name: String,
+    tabCount: Int,
+    showsTopSeparator: Bool = false
+  ) -> some View {
+    HStack {
+      RepoHeaderRow(name: name, isRemoving: false, tabCount: tabCount)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .frame(height: 34, alignment: .center)
+    .listRowInsets(EdgeInsets())
+    .listRowSeparator(.hidden)
+    .overlay(alignment: .top) {
+      if showsTopSeparator {
+        Rectangle()
+          .fill(.secondary)
+          .frame(height: 1)
+          .frame(maxWidth: .infinity)
+      }
+    }
+  }
+
+  private func row(
+    id: String,
+    name: String,
+    worktreeName: String,
+    isPinned: Bool = false,
+    isMainWorktree: Bool = false,
+    isLoading: Bool = false,
+    taskStatus: WorktreeTaskStatus? = nil,
+    addedLines: Int? = nil,
+    removedLines: Int? = nil
+  ) -> some View {
+    let info: WorktreeInfoEntry? =
+      if let addedLines, let removedLines {
+        WorktreeInfoEntry(addedLines: addedLines, removedLines: removedLines, pullRequest: nil)
+      } else {
+        nil
+      }
+    let isHovered = hoveredID == id
+    return WorktreeRow(
+      name: name,
+      worktreeName: worktreeName,
+      info: info,
+      showsPullRequestInfo: false,
+      isHovered: isHovered,
+      isPinned: isPinned,
+      isMainWorktree: isMainWorktree,
+      isLoading: isLoading,
+      taskStatus: taskStatus,
+      isRunScriptRunning: false,
+      showsNotificationIndicator: false,
+      notifications: [],
+      onFocusNotification: { _ in },
+      shortcutHint: nil,
+      pinAction: {},
+      isSelected: false,
+      archiveAction: {},
+      onDiffTap: addedLines != nil ? {} : nil
+    )
+    .listRowInsets(EdgeInsets())
+    .listRowSeparator(.hidden)
+    .onHover { hovering in
+      hoveredID = hovering ? id : nil
+    }
+  }
+}
+
+#Preview("Sidebar Layout") {
+  SidebarLayoutPreview()
+}
