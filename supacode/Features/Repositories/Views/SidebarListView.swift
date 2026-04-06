@@ -226,114 +226,81 @@ struct SidebarListView: View {
 
 // MARK: - Previews
 
-/// Composed sidebar preview using leaf views only (no TCA store or GhosttyRuntime needed).
-@MainActor
-private struct SidebarLayoutPreview: View {
-  @State private var hoveredID: String?
+#if DEBUG
+  @MainActor
+  private struct SidebarLayoutPreview: View {
+    @State private var expandedRepoIDs: Set<Repository.ID>
+    @State private var sidebarSelections: Set<SidebarSelection> = []
+    private let store: StoreOf<RepositoriesFeature>
+    private let terminalManager: WorktreeTerminalManager = .preview
 
-  var body: some View {
-    List {
-      sectionHeader(name: "supacode", tabCount: 4)
-      row(id: "sc-main", name: "main", worktreeName: "Default", isMainWorktree: true)
-      row(
-        id: "sc-sidebar", name: "feature/sidebar-redesign", worktreeName: "sidebar-redesign",
-        addedLines: 120, removedLines: 45
+    init() {
+      let state = Self.mockState
+      _expandedRepoIDs = State(initialValue: Set(state.repositories.map(\.id)))
+      store = Store(initialState: state) { EmptyReducer() }
+    }
+
+    var body: some View {
+      SidebarListView(
+        store: store,
+        expandedRepoIDs: $expandedRepoIDs,
+        sidebarSelections: $sidebarSelections,
+        terminalManager: terminalManager
       )
-      row(id: "sc-pinned", name: "feature/auth", worktreeName: "auth", isPinned: true)
-      row(id: "sc-running", name: "fix/crash", worktreeName: "crash", taskStatus: .running)
-
-      sectionHeader(name: "ghostty", tabCount: 1, isFirst: false)
-      row(id: "gh-main", name: "main", worktreeName: "Default", isMainWorktree: true)
-      row(id: "gh-feat", name: "feature/renderer", worktreeName: "renderer", isLoading: true)
+      .environment(CommandKeyObserver())
+      .frame(width: 280, height: 500)
     }
-    .listStyle(.sidebar)
-    .scrollIndicators(.never)
-    .frame(width: 280, height: 500)
-    .safeAreaInset(edge: .bottom) {
-      HStack {
-        Label("Add Repository", systemImage: "folder.badge.plus")
-          .font(.callout)
-        Spacer()
-        Image(systemName: "questionmark.circle")
-          .accessibilityHidden(true)
-        Image(systemName: "arrow.clockwise")
-          .accessibilityHidden(true)
-        Image(systemName: "archivebox")
-          .accessibilityHidden(true)
-        Image(systemName: "gearshape")
-          .accessibilityHidden(true)
-      }
-      .buttonStyle(.plain)
-      .font(.callout)
-      .foregroundStyle(.secondary)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
-      .background(Color(nsColor: .windowBackgroundColor))
-      .overlay(alignment: .top) { Divider() }
-    }
-  }
 
-  private func sectionHeader(
-    name: String,
-    tabCount: Int,
-    isFirst: Bool = true
-  ) -> some View {
-    HStack {
-      RepoHeaderRow(name: name, isRemoving: false, tabCount: tabCount)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    .frame(height: 26, alignment: .center)
-    .padding(.top, isFirst ? 0 : 4)
-    .listRowInsets(EdgeInsets())
-    .listRowSeparator(.hidden)
-  }
+    private static var mockState: RepositoriesFeature.State {
+      let repo1Root = URL(fileURLWithPath: "/tmp/supacode")
+      let repo1Worktrees: IdentifiedArrayOf<Worktree> = [
+        Worktree(
+          id: repo1Root.path, name: "main", detail: ".",
+          workingDirectory: repo1Root, repositoryRootURL: repo1Root
+        ),
+        Worktree(
+          id: "/tmp/wt/sidebar", name: "feature/sidebar-redesign", detail: "/tmp/wt/sidebar",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/sidebar"), repositoryRootURL: repo1Root
+        ),
+        Worktree(
+          id: "/tmp/wt/auth", name: "feature/auth", detail: "/tmp/wt/auth",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/auth"), repositoryRootURL: repo1Root
+        ),
+        Worktree(
+          id: "/tmp/wt/crash", name: "fix/crash", detail: "/tmp/wt/crash",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/crash"), repositoryRootURL: repo1Root
+        ),
+      ]
+      let repo1 = Repository(
+        id: repo1Root.path, rootURL: repo1Root, name: "supacode", worktrees: repo1Worktrees
+      )
 
-  private func row(
-    id: String,
-    name: String,
-    worktreeName: String,
-    isPinned: Bool = false,
-    isMainWorktree: Bool = false,
-    isLoading: Bool = false,
-    taskStatus: WorktreeTaskStatus? = nil,
-    addedLines: Int? = nil,
-    removedLines: Int? = nil
-  ) -> some View {
-    let info: WorktreeInfoEntry? =
-      if let addedLines, let removedLines {
-        WorktreeInfoEntry(addedLines: addedLines, removedLines: removedLines, pullRequest: nil)
-      } else {
-        nil
-      }
-    let isHovered = hoveredID == id
-    return WorktreeRow(
-      name: name,
-      worktreeName: worktreeName,
-      info: info,
-      showsPullRequestInfo: false,
-      isHovered: isHovered,
-      isPinned: isPinned,
-      isMainWorktree: isMainWorktree,
-      isLoading: isLoading,
-      taskStatus: taskStatus,
-      isRunScriptRunning: false,
-      showsNotificationIndicator: false,
-      notifications: [],
-      onFocusNotification: { _ in },
-      shortcutHint: nil,
-      pinAction: {},
-      isSelected: false,
-      archiveAction: {},
-      onDiffTap: addedLines != nil ? {} : nil
-    )
-    .listRowInsets(EdgeInsets())
-    .listRowSeparator(.hidden)
-    .onHover { hovering in
-      hoveredID = hovering ? id : nil
+      let repo2Root = URL(fileURLWithPath: "/tmp/ghostty")
+      let repo2Worktrees: IdentifiedArrayOf<Worktree> = [
+        Worktree(
+          id: repo2Root.path, name: "main", detail: ".",
+          workingDirectory: repo2Root, repositoryRootURL: repo2Root
+        ),
+        Worktree(
+          id: "/tmp/wt/renderer", name: "feature/renderer", detail: "/tmp/wt/renderer",
+          workingDirectory: URL(fileURLWithPath: "/tmp/wt/renderer"), repositoryRootURL: repo2Root
+        ),
+      ]
+      let repo2 = Repository(
+        id: repo2Root.path, rootURL: repo2Root, name: "ghostty", worktrees: repo2Worktrees
+      )
+
+      var state = RepositoriesFeature.State()
+      state.repositories = [repo1, repo2]
+      state.pinnedWorktreeIDs = ["/tmp/wt/auth"]
+      state.worktreeInfoByID = [
+        "/tmp/wt/sidebar": WorktreeInfoEntry(addedLines: 120, removedLines: 45, pullRequest: nil),
+      ]
+      return state
     }
   }
-}
 
-#Preview("Sidebar Layout") {
-  SidebarLayoutPreview()
-}
+  #Preview("Sidebar Layout") {
+    SidebarLayoutPreview()
+  }
+#endif
