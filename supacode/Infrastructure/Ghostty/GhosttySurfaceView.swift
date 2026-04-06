@@ -1892,7 +1892,9 @@ struct CLIKeySpec {
 
     let charactersIgnoringModifiers = base.charactersIgnoringModifiers
     let characters: String
-    if descriptor.modifiers == [.ctrl], let controlCharacter = controlCharacter(for: descriptor.baseToken) {
+    if usesControlCharacter(for: descriptor.modifiers),
+      let controlCharacter = controlCharacter(for: descriptor.baseToken)
+    {
       characters = controlCharacter
     } else if descriptor.modifiers.contains(.shift) {
       characters = shiftedCharacters(for: descriptor.baseToken) ?? charactersIgnoringModifiers
@@ -2142,6 +2144,11 @@ struct CLIKeySpec {
     }
 
     return shiftedCharacterMap[token]
+  }
+
+  private static func usesControlCharacter(for modifiers: [KeyModifier]) -> Bool {
+    let modifierSet = Set(modifiers)
+    return modifierSet.contains(.ctrl) && modifierSet.isSubset(of: [.ctrl, .shift])
   }
 
   private static func controlCharacter(for token: String) -> String? {
