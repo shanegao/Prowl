@@ -4,7 +4,7 @@ import SwiftUI
 struct RepositorySectionView: View {
   private static let debugHeaderLayers = false
   let repository: Repository
-  let showsTopSeparator: Bool
+  let hasTopSpacing: Bool
   let isDragActive: Bool
   let hotkeyRows: [WorktreeRowModel]
   let selectedWorktreeIDs: Set<Worktree.ID>
@@ -19,9 +19,6 @@ struct RepositorySectionView: View {
     let state = store.state
     let isExpanded = expandedRepoIDs.contains(repository.id)
     let isRemovingRepository = state.isRemovingRepository(repository)
-    let isPlainFolderSelected =
-      repository.kind == .plain
-      && state.selectedRepositoryID == repository.id
     let openRepoSettings = {
       _ = store.send(.repositoryManagement(.openRepositorySettings(repository.id)))
     }
@@ -44,7 +41,10 @@ struct RepositorySectionView: View {
         tabCount: Self.openTabCount(
           for: repository,
           terminalManager: terminalManager
-        )
+        ),
+        nameTooltip: repository.capabilities.supportsWorktrees
+          ? (isExpanded ? "Collapse" : "Expand")
+          : "Open terminal in folder"
       )
       .frame(maxWidth: .infinity, alignment: .leading)
       .background {
@@ -158,9 +158,9 @@ struct RepositorySectionView: View {
         }
       }
     }
-    .frame(maxWidth: .infinity)
-    .frame(height: headerCellHeight, alignment: .center)
-    .padding(.top, showsTopSeparator ? 4 : 0)
+    .frame(maxWidth: .infinity, minHeight: headerCellHeight, maxHeight: .infinity, alignment: .center)
+    .padding(.top, hasTopSpacing ? 4 : 0)
+    .padding(.bottom, hasTopSpacing && !repository.capabilities.supportsWorktrees ? 4 : 0)
     .contentShape(.interaction, .rect)
     .background {
       if Self.debugHeaderLayers {
@@ -172,22 +172,8 @@ struct RepositorySectionView: View {
           }
       }
     }
-    .overlay(alignment: .top) {
-      if showsTopSeparator && !isPlainFolderSelected && Self.debugHeaderLayers {
-        Rectangle()
-          .fill(.blue)
-          .frame(height: 1)
-          .frame(maxWidth: .infinity)
-          .accessibilityHidden(true)
-      }
-    }
     .onHover { isHovering = $0 }
     .contentShape(.rect)
-    .help(
-      repository.capabilities.supportsWorktrees
-        ? (isExpanded ? "Collapse" : "Expand")
-        : "Open folder terminal"
-    )
     .contextMenu {
       Button("Repo Settings") {
         openRepoSettings()

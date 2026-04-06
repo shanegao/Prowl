@@ -127,6 +127,10 @@ struct WorktreeRowsView: View {
         resolvedKeybindings: resolvedKeybindings
       )
     }
+    let onStopRunScript: (() -> Void)? =
+      terminalManager.isRunScriptRunning(for: row.id)
+      ? { _ = terminalManager.stateIfExists(for: row.id)?.stopRunScript() }
+      : nil
     let config = WorktreeRowViewConfig(
       displayName: displayName,
       worktreeName: worktreeName(for: row),
@@ -138,6 +142,7 @@ struct WorktreeRowsView: View {
       pinAction: pinAction,
       archiveAction: archiveAction,
       onDiffTap: onDiffTap,
+      onStopRunScript: onStopRunScript,
       moveDisabled: moveDisabled,
     )
     let baseRow = worktreeRowView(row, config: config)
@@ -192,6 +197,7 @@ struct WorktreeRowsView: View {
     let pinAction: (() -> Void)?
     let archiveAction: (() -> Void)?
     let onDiffTap: (() -> Void)?
+    let onStopRunScript: (() -> Void)?
     let moveDisabled: Bool
   }
 
@@ -218,6 +224,7 @@ struct WorktreeRowsView: View {
       isSelected: isSelected,
       archiveAction: config.archiveAction,
       onDiffTap: config.onDiffTap,
+      onStopRunScript: config.onStopRunScript,
     )
     .tag(SidebarSelection.worktree(row.id))
     .typeSelectEquivalent("")
@@ -241,12 +248,15 @@ struct WorktreeRowsView: View {
           repositoryID: $0.repositoryID
         )
       }
-    let deleteTargets = contextRows.map {
-      RepositoriesFeature.DeleteWorktreeTarget(
-        worktreeID: $0.id,
-        repositoryID: $0.repositoryID
-      )
-    }
+    let deleteTargets =
+      contextRows
+      .filter { !$0.isMainWorktree }
+      .map {
+        RepositoriesFeature.DeleteWorktreeTarget(
+          worktreeID: $0.id,
+          repositoryID: $0.repositoryID
+        )
+      }
     let archiveTitle =
       isBulkSelection
       ? "Archive Selected Worktrees"
@@ -272,19 +282,21 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
     }
-    Button(archiveTitle) {
-      archiveWorktrees(archiveTargets)
+    Button("Reveal in Finder") {
+      NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: worktree.workingDirectory.path)
     }
-    .help(
-      archiveTargets.isEmpty
-        ? "Main worktree can't be archived"
-        : archiveTitle
-    )
-    .disabled(archiveTargets.isEmpty)
-    Button(deleteTitle, role: .destructive) {
-      deleteWorktrees(deleteTargets)
+    if !row.isMainWorktree || isBulkSelection {
+      Button(archiveTitle) {
+        archiveWorktrees(archiveTargets)
+      }
+      .help(archiveTitle)
+      .disabled(archiveTargets.isEmpty)
+      Button(deleteTitle, role: .destructive) {
+        deleteWorktrees(deleteTargets)
+      }
+      .help(deleteTitle)
+      .disabled(deleteTargets.isEmpty)
     }
-    .help(deleteTitle)
   }
 
   private func worktreeShortcutHint(for index: Int?) -> String? {

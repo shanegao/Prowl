@@ -5,10 +5,12 @@ struct RepoHeaderRow: View {
   let name: String
   let isRemoving: Bool
   let tabCount: Int
+  var nameTooltip: String?
   var body: some View {
     HStack {
       Text(name)
         .foregroundStyle(.secondary)
+        .help(nameTooltip ?? "")
       if isRemoving {
         Text("Removing...")
           .font(.caption)
@@ -22,6 +24,7 @@ struct RepoHeaderRow: View {
           .padding(.horizontal, 5)
           .padding(.vertical, 1)
           .background(.quaternary, in: .capsule)
+          .help("\(tabCount) active \(tabCount == 1 ? "tab" : "tabs")")
       }
     }
     .background {

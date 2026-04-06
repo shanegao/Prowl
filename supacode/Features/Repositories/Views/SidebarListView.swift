@@ -93,7 +93,7 @@ struct SidebarListView: View {
         ForEach(Array(repositories.enumerated()), id: \.element.id) { index, repository in
           RepositorySectionView(
             repository: repository,
-            showsTopSeparator: index > 0,
+            hasTopSpacing: index > 0,
             isDragActive: isDragActive,
             hotkeyRows: hotkeyRows,
             selectedWorktreeIDs: selectedWorktreeIDs,
@@ -143,7 +143,7 @@ struct SidebarListView: View {
           } else if let repository = repositoriesByID[repositoryID] {
             RepositorySectionView(
               repository: repository,
-              showsTopSeparator: index > 0,
+              hasTopSpacing: index > 0,
               isDragActive: isDragActive,
               hotkeyRows: hotkeyRows,
               selectedWorktreeIDs: selectedWorktreeIDs,
