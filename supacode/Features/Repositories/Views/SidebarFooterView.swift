@@ -31,7 +31,20 @@ struct SidebarFooterView: View {
         ))
       Spacer()
       Menu {
-        Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {
+        Button("Homepage", systemImage: "house") {
+          if let url = URL(string: "https://prowl.onev.cat/") {
+            openURL(url)
+          }
+        }
+        .help("Open Prowl homepage")
+        Button("Release Notes", systemImage: "note.text") {
+          if let url = URL(string: "https://prowl.onev.cat/releases/") {
+            openURL(url)
+          }
+        }
+        .help("View release notes")
+        Divider()
+        Button("Submit GitHub Issue", systemImage: "exclamationmark.bubble") {
           if let url = URL(string: "https://github.com/onevcat/supacode/issues/new") {
             openURL(url)
           }

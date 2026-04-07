@@ -622,6 +622,18 @@ struct SupacodeApp: App {
         }
         .help("Install the prowl command line tool to /usr/local/bin")
       }
+      CommandGroup(replacing: .help) {
+        Button("Homepage", systemImage: "house") {
+          if let url = URL(string: "https://prowl.onev.cat/") {
+            NSWorkspace.shared.open(url)
+          }
+        }
+        Button("Release Notes", systemImage: "note.text") {
+          if let url = URL(string: "https://prowl.onev.cat/releases/") {
+            NSWorkspace.shared.open(url)
+          }
+        }
+      }
       CommandGroup(replacing: .appTermination) {
         Button("Quit Prowl") {
           store.send(.requestQuit)
