@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.4.7](https://github.com/onevcat/Prowl/releases/tag/v2026.4.7)
+
+**Fixed**
+
+- When using a transparent background (`background-opacity < 1`) in dark mode on macOS 26, the titlebar and window border now correctly appear dark-tinted instead of showing an unwanted light glass effect.
+- The sidebar footer now displays a proper frosted glass effect when the background is transparent, rather than a plain semi-transparent fill that let the wallpaper bleed through without blur.
+- When creating a worktree, the base branch picker now includes local branches alongside their upstream counterparts. Previously, tracked local branches were omitted, making the picker appear to only support remote refs.
+
 ## [2026.4.6](https://github.com/onevcat/Prowl/releases/tag/v2026.4.6)
 
 This release brings a redesigned sidebar with a modern, cleaner, and more compact layout, along with reliability fixes across the terminal surface and CLI.
