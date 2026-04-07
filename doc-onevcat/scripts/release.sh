@@ -12,11 +12,19 @@
 #   APPLE_TEAM_ID                   Apple Team ID (inferred from identity if unset)
 #   APPLE_NOTARY_KEYCHAIN_PROFILE   Keychain profile for notarytool (default: supacode-notary)
 #   SPARKLE_PRIVATE_KEY_FILE        Path to EdDSA private key file (default: ~/.prowl-sparkle-private-key)
+#   NETLIFY_BUILD_HOOK              Netlify Build Hook URL for Prowl-Site rebuild
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_DIR"
+
+# Load .env if present (not committed to repo)
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+  set -a
+  source "$PROJECT_DIR/.env"
+  set +a
+fi
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -330,11 +338,13 @@ log "release created: $RELEASE_URL"
 # ── Trigger Prowl-Site rebuild ───────────────────────────────────────────────
 
 log "triggering Prowl-Site rebuild..."
-gh api repos/onevcat/Prowl-Site/dispatches \
-  -f event_type=changelog-updated \
-  -f "client_payload[version]=$VERSION" 2>/dev/null \
-  && log "Prowl-Site rebuild triggered" \
-  || log "Prowl-Site dispatch failed (non-critical)"
+if [[ -n "${NETLIFY_BUILD_HOOK:-}" ]]; then
+  curl -fsSL -X POST "$NETLIFY_BUILD_HOOK" 2>/dev/null \
+    && log "Prowl-Site rebuild triggered" \
+    || log "Prowl-Site rebuild trigger failed (non-critical)"
+else
+  log "NETLIFY_BUILD_HOOK not set, skipping Prowl-Site rebuild"
+fi
 
 echo
 log "done! Release: $RELEASE_URL"
