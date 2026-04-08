@@ -880,10 +880,11 @@ struct RepositoriesFeatureTests {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
         repositoryName: repository.name,
-        automaticBaseRefLabel: "Automatic (origin/main)",
+        automaticBaseRef: "origin/main",
         baseRefOptions: ["origin/dev", "origin/main"],
         branchName: "",
         selectedBaseRef: nil,
+        fetchOrigin: true,
         validationMessage: nil
       )
     }
@@ -897,10 +898,11 @@ struct RepositoriesFeatureTests {
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
       repositoryName: repository.name,
-      automaticBaseRefLabel: "Automatic (origin/main)",
+      automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
       branchName: "feature/new-branch",
       selectedBaseRef: nil,
+      fetchOrigin: true,
       validationMessage: nil
     )
     let store = TestStore(initialState: state) {
@@ -921,10 +923,11 @@ struct RepositoriesFeatureTests {
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
       repositoryName: repository.name,
-      automaticBaseRefLabel: "Automatic (origin/main)",
+      automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
       branchName: "feature/existing",
       selectedBaseRef: nil,
+      fetchOrigin: true,
       validationMessage: nil
     )
     let store = TestStore(initialState: state) {
@@ -938,7 +941,8 @@ struct RepositoriesFeatureTests {
         .startPromptedWorktreeCreation(
           repositoryID: repository.id,
           branchName: "feature/existing",
-          baseRef: nil
+          baseRef: nil,
+          fetchOrigin: true
         ))
     ) {
       $0.worktreeCreationPrompt?.validationMessage = nil
@@ -1003,10 +1007,11 @@ struct RepositoriesFeatureTests {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repoB.id,
         repositoryName: repoB.name,
-        automaticBaseRefLabel: "Automatic (origin/main)",
+        automaticBaseRef: "origin/main",
         baseRefOptions: ["origin/main"],
         branchName: "",
         selectedBaseRef: nil,
+        fetchOrigin: true,
         validationMessage: nil
       )
     }
@@ -1022,10 +1027,11 @@ struct RepositoriesFeatureTests {
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
       repositoryName: repository.name,
-      automaticBaseRefLabel: "Automatic (origin/main)",
+      automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
       branchName: "feature/new-branch",
       selectedBaseRef: nil,
+      fetchOrigin: true,
       validationMessage: nil
     )
     let store = TestStore(initialState: state) {
@@ -1042,7 +1048,8 @@ struct RepositoriesFeatureTests {
         .startPromptedWorktreeCreation(
           repositoryID: repository.id,
           branchName: "feature/new-branch",
-          baseRef: nil
+          baseRef: nil,
+          fetchOrigin: true
         ))
     ) {
       $0.worktreeCreationPrompt?.validationMessage = nil
@@ -1084,7 +1091,8 @@ struct RepositoriesFeatureTests {
         .createWorktreeInRepository(
           repositoryID: repository.id,
           nameSource: .explicit("../../Desktop"),
-          baseRefSource: .repositorySetting
+          baseRefSource: .repositorySetting,
+          fetchOrigin: true
         ))
     )
     await store.receive(\.worktreeCreation.createRandomWorktreeFailed) {
