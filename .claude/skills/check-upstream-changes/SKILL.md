@@ -1,3 +1,10 @@
+---
+name: check-upstream-changes
+description: Check upstream (supabitapp/supacode) for new changes since the last reviewed baseline.
+---
+
+# Check Upstream Changes
+
 Check upstream (supabitapp/supacode) for new changes since the last reviewed baseline.
 
 Follow these steps:
