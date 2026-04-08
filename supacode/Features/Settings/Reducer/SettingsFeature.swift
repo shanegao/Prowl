@@ -22,6 +22,7 @@ struct SettingsFeature {
     var githubIntegrationEnabled: Bool
     var deleteBranchOnDeleteWorktree: Bool
     var automaticallyArchiveMergedWorktrees: Bool
+    var autoDeleteArchivedWorktreesAfterDays: AutoDeletePeriod?
     var promptForWorktreeCreation: Bool
     var defaultWorktreeBaseDirectoryPath: String
     var restoreTerminalLayoutOnLaunch: Bool
@@ -52,6 +53,7 @@ struct SettingsFeature {
       githubIntegrationEnabled = settings.githubIntegrationEnabled
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
       automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
+      autoDeleteArchivedWorktreesAfterDays = settings.autoDeleteArchivedWorktreesAfterDays
       promptForWorktreeCreation = settings.promptForWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
         SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
@@ -84,6 +86,7 @@ struct SettingsFeature {
           defaultWorktreeBaseDirectoryPath
         ),
         restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
+        autoDeleteArchivedWorktreesAfterDays: autoDeleteArchivedWorktreesAfterDays,
         terminalFontSize: terminalFontSize,
         keybindingUserOverrides: keybindingUserOverrides
       )
@@ -175,6 +178,7 @@ struct SettingsFeature {
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
         state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
+        state.autoDeleteArchivedWorktreesAfterDays = normalizedSettings.autoDeleteArchivedWorktreesAfterDays
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
         state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch

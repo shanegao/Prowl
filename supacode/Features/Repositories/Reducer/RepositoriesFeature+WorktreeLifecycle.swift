@@ -215,13 +215,13 @@ extension RepositoriesFeature {
           }
           didUpdateWorktreeOrder = true
         }
-        state.archivedWorktreeIDs.append(worktreeID)
+        state.archivedWorktrees.append(ArchivedWorktree(id: worktreeID, archivedAt: now))
         if selectionWasRemoved {
           let nextWorktreeID = nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
           state.selection = nextWorktreeID.map(SidebarSelection.worktree)
         }
       }
-      let archivedWorktreeIDs = state.archivedWorktreeIDs
+      let archivedWorktrees = state.archivedWorktrees
       let repositories = state.repositories
       let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
       let selectionChanged = selectionDidChange(
@@ -233,7 +233,7 @@ extension RepositoriesFeature {
       var effects: [Effect<Action>] = [
         .send(.delegate(.repositoriesChanged(repositories))),
         .run { _ in
-          await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+          await repositoryPersistence.saveArchivedWorktrees(archivedWorktrees)
         },
       ]
       if wasPinned {
@@ -262,14 +262,14 @@ extension RepositoriesFeature {
         return .none
       }
       withAnimation {
-        state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
+        state.archivedWorktrees.removeAll { $0.id == worktreeID }
       }
-      let archivedWorktreeIDs = state.archivedWorktreeIDs
+      let archivedWorktrees = state.archivedWorktrees
       let repositories = state.repositories
       return .merge(
         .send(.delegate(.repositoriesChanged(repositories))),
         .run { _ in
-          await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+          await repositoryPersistence.saveArchivedWorktrees(archivedWorktrees)
         }
       )
 
@@ -423,7 +423,7 @@ extension RepositoriesFeature {
         state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
         state.worktreeInfoByID.removeValue(forKey: worktreeID)
         state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
-        state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
+        state.archivedWorktrees.removeAll { $0.id == worktreeID }
         if var order = state.worktreeOrderByRepository[repositoryID] {
           order.removeAll { $0 == worktreeID }
           if order.isEmpty {
@@ -467,10 +467,10 @@ extension RepositoriesFeature {
         )
       }
       if wasArchived {
-        let archivedWorktreeIDs = state.archivedWorktreeIDs
+        let archivedWorktrees = state.archivedWorktrees
         followupEffects.append(
           .run { _ in
-            await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+            await repositoryPersistence.saveArchivedWorktrees(archivedWorktrees)
           }
         )
       }

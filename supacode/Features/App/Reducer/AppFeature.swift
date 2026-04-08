@@ -418,6 +418,13 @@ struct AppFeature {
           ),
           .send(
             .repositories(
+              .setAutoDeleteArchivedWorktreesAfterDays(
+                settings.autoDeleteArchivedWorktreesAfterDays
+              )
+            )
+          ),
+          .send(
+            .repositories(
               .worktreeOrdering(
                 .setMoveNotifiedWorktreeToTop(
                   settings.moveNotifiedWorktreeToTop
