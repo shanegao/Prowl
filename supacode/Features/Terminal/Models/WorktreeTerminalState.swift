@@ -628,7 +628,7 @@ final class WorktreeTerminalState {
         return nil
       }
       // Skip title/icon for blocking-script tabs as they are transient.
-      let isBlockingScriptTab = tab.isTitleLocked
+      let isBlockingScriptTab = tab.id == runScriptTabId
       snapshotTabs.append(
         TerminalLayoutSnapshotPayload.SnapshotTab(
           tabID: tab.id.rawValue.uuidString,
@@ -720,7 +720,8 @@ final class WorktreeTerminalState {
         TerminalTabItem(
           id: entry.tabID,
           title: entry.snapshotTab.title ?? "\(worktree.name) \(index + 1)",
-          icon: entry.snapshotTab.icon ?? "terminal"
+          icon: entry.snapshotTab.icon ?? "terminal",
+          isTitleLocked: entry.snapshotTab.title != nil
         )
       )
     }
