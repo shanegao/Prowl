@@ -7,12 +7,17 @@ struct WorktreeCreationPromptFeature {
   struct State: Equatable {
     let repositoryID: Repository.ID
     let repositoryName: String
-    let automaticBaseRefLabel: String
+    let automaticBaseRef: String
     let baseRefOptions: [String]
     var branchName: String
     var selectedBaseRef: String?
+    var fetchOrigin: Bool
     var validationMessage: String?
     var isValidating = false
+
+    var automaticBaseRefLabel: String {
+      automaticBaseRef.isEmpty ? "Automatic" : "Automatic (\(automaticBaseRef))"
+    }
   }
 
   enum Action: BindableAction, Equatable {
@@ -27,7 +32,7 @@ struct WorktreeCreationPromptFeature {
   @CasePathable
   enum Delegate: Equatable {
     case cancel
-    case submit(repositoryID: Repository.ID, branchName: String, baseRef: String?)
+    case submit(repositoryID: Repository.ID, branchName: String, baseRef: String?, fetchOrigin: Bool)
   }
 
   var body: some Reducer<State, Action> {
@@ -57,7 +62,8 @@ struct WorktreeCreationPromptFeature {
             .submit(
               repositoryID: state.repositoryID,
               branchName: trimmed,
-              baseRef: state.selectedBaseRef
+              baseRef: state.selectedBaseRef,
+              fetchOrigin: state.fetchOrigin
             )
           )
         )

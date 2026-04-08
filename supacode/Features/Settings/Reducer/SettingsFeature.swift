@@ -23,6 +23,7 @@ struct SettingsFeature {
     var deleteBranchOnDeleteWorktree: Bool
     var automaticallyArchiveMergedWorktrees: Bool
     var promptForWorktreeCreation: Bool
+    var fetchOriginBeforeWorktreeCreation: Bool
     var defaultWorktreeBaseDirectoryPath: String
     var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
@@ -53,6 +54,7 @@ struct SettingsFeature {
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
       automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
       promptForWorktreeCreation = settings.promptForWorktreeCreation
+      fetchOriginBeforeWorktreeCreation = settings.fetchOriginBeforeWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
         SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
       restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
@@ -80,6 +82,7 @@ struct SettingsFeature {
         deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
         automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees,
         promptForWorktreeCreation: promptForWorktreeCreation,
+        fetchOriginBeforeWorktreeCreation: fetchOriginBeforeWorktreeCreation,
         defaultWorktreeBaseDirectoryPath: SupacodePaths.normalizedWorktreeBaseDirectoryPath(
           defaultWorktreeBaseDirectoryPath
         ),
@@ -176,6 +179,7 @@ struct SettingsFeature {
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
         state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
+        state.fetchOriginBeforeWorktreeCreation = normalizedSettings.fetchOriginBeforeWorktreeCreation
         state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
         state.terminalFontSize = normalizedSettings.terminalFontSize

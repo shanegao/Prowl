@@ -22,6 +22,8 @@ enum GitOperation: String {
   case untrackedFilePaths = "untracked_file_paths"
   case showFile = "show_file"
   case remoteInfo = "remote_info"
+  case remoteList = "remote_list"
+  case fetchOrigin = "fetch_origin"
 }
 
 enum GitClientError: LocalizedError {
@@ -528,6 +530,27 @@ struct GitClient {
       }
     }
     return nil
+  }
+
+  nonisolated func remoteNames(for repoRoot: URL) async throws -> [String] {
+    let path = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
+      operation: .remoteList,
+      arguments: ["-C", path, "remote"]
+    )
+    return
+      output
+      .split(whereSeparator: \.isNewline)
+      .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+  }
+
+  nonisolated func fetchRemote(_ remote: String, for repoRoot: URL) async throws {
+    let path = repoRoot.path(percentEncoded: false)
+    _ = try await runGit(
+      operation: .fetchOrigin,
+      arguments: ["-C", path, "fetch", remote]
+    )
   }
 
   nonisolated func removeWorktree(_ worktree: Worktree, deleteBranch: Bool) async throws -> URL {

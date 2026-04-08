@@ -70,7 +70,8 @@ extension RepositoriesFeature {
               .createWorktreeInRepository(
                 repositoryID: repository.id,
                 nameSource: .random,
-                baseRefSource: .repositorySetting
+                baseRefSource: .repositorySetting,
+                fetchOrigin: settingsFile.global.fetchOriginBeforeWorktreeCreation
               )
             )
           )
@@ -115,14 +116,12 @@ extension RepositoriesFeature {
         guard !Task.isCancelled else {
           return
         }
-        let automaticBaseRefLabel =
-          automaticBaseRef.isEmpty ? "Automatic" : "Automatic (\(automaticBaseRef))"
         await send(
           .worktreeCreation(
             .promptedWorktreeCreationDataLoaded(
               repositoryID: repositoryID,
               baseRefOptions: baseRefOptions,
-              automaticBaseRefLabel: automaticBaseRefLabel,
+              automaticBaseRef: automaticBaseRef,
               selectedBaseRef: selectedBaseRef
             )
           )
@@ -133,24 +132,26 @@ extension RepositoriesFeature {
     case .promptedWorktreeCreationDataLoaded(
       let repositoryID,
       let baseRefOptions,
-      let automaticBaseRefLabel,
+      let automaticBaseRef,
       let selectedBaseRef
     ):
       guard let repository = state.repositories[id: repositoryID] else {
         return .none
       }
+      @Shared(.settingsFile) var settingsFile
       state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
         repositoryName: repository.name,
-        automaticBaseRefLabel: automaticBaseRefLabel,
+        automaticBaseRef: automaticBaseRef,
         baseRefOptions: baseRefOptions,
         branchName: "",
         selectedBaseRef: selectedBaseRef,
+        fetchOrigin: settingsFile.global.fetchOriginBeforeWorktreeCreation,
         validationMessage: nil
       )
       return .none
 
-    case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef):
+    case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef, let fetchOrigin):
       guard let repository = state.repositories[id: repositoryID] else {
         state.worktreeCreationPrompt = nil
         state.alert = messageAlert(
@@ -181,6 +182,7 @@ extension RepositoriesFeature {
               repositoryID: repositoryID,
               branchName: branchName,
               baseRef: baseRef,
+              fetchOrigin: fetchOrigin,
               duplicateMessage: duplicateMessage
             )
           )
@@ -192,6 +194,7 @@ extension RepositoriesFeature {
       let repositoryID,
       let branchName,
       let baseRef,
+      let fetchOrigin,
       let duplicateMessage
     ):
       guard let prompt = state.worktreeCreationPrompt, prompt.repositoryID == repositoryID else {
@@ -208,12 +211,13 @@ extension RepositoriesFeature {
           .createWorktreeInRepository(
             repositoryID: repositoryID,
             nameSource: .explicit(branchName),
-            baseRefSource: .explicit(baseRef)
+            baseRefSource: .explicit(baseRef),
+            fetchOrigin: fetchOrigin
           )
         )
       )
 
-    case .createWorktreeInRepository(let repositoryID, let nameSource, let baseRefSource):
+    case .createWorktreeInRepository(let repositoryID, let nameSource, let baseRefSource, let fetchOrigin):
       guard let repository = state.repositories[id: repositoryID] else {
         state.alert = messageAlert(
           title: "Unable to create worktree",
@@ -411,6 +415,28 @@ extension RepositoriesFeature {
             }
           }
           progress.baseRef = resolvedBaseRef
+          if fetchOrigin, !resolvedBaseRef.isEmpty {
+            do {
+              let remotes = try await gitClient.remoteNames(repository.rootURL)
+              if let matchedRemote = resolvedBaseRef.matchingRemote(from: remotes) {
+                progress.fetchRemoteName = matchedRemote
+                progress.stage = .fetchingOrigin
+                await send(
+                  .worktreeCreation(
+                    .pendingWorktreeProgressUpdated(
+                      id: pendingID,
+                      progress: progress
+                    )
+                  )
+                )
+                try await gitClient.fetchRemote(matchedRemote, repository.rootURL)
+              }
+            } catch {
+              let errorMessage = "git fetch failed: \(error.localizedDescription)"
+              worktreeCreationLogger.warning(errorMessage)
+              progress.appendOutputLine(errorMessage, maxLines: worktreeCreationProgressLineLimit)
+            }
+          }
           progress.copyIgnored = copyIgnored
           progress.copyUntracked = copyUntracked
           progress.ignoredFilesToCopyCount =
@@ -615,5 +641,15 @@ extension RepositoriesFeature {
       }
       return reduceWorktreeCreation(state: &state, action: action)
     }
+  }
+}
+
+private nonisolated let worktreeCreationLogger = SupaLogger("WorktreeCreation")
+
+extension String {
+  fileprivate nonisolated func matchingRemote(from remotes: [String]) -> String? {
+    remotes
+      .sorted { $0.count > $1.count }
+      .first { hasPrefix("\($0)/") }
   }
 }
