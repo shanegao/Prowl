@@ -6,6 +6,7 @@ struct SidebarListView: View {
   @Binding var expandedRepoIDs: Set<Repository.ID>
   @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
+  @FocusState private var isSidebarFocused: Bool
   @State private var isDragActive = false
 
   var body: some View {
@@ -87,6 +88,9 @@ struct SidebarListView: View {
       }
     )
     let repositoriesByID = Dictionary(uniqueKeysWithValues: store.repositories.map { ($0.id, $0) })
+    let pendingSidebarReveal = state.pendingSidebarReveal
+
+    ScrollViewReader { scrollProxy in
     List(selection: selection) {
       if orderedRoots.isEmpty {
         let repositories = store.repositories
@@ -221,6 +225,27 @@ struct SidebarListView: View {
       terminalState.focusAndInsertText(keyPress.characters)
       return .handled
     }
+    .focused($isSidebarFocused)
+    .task(id: pendingSidebarReveal?.id) {
+      await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
+    }
+    }  // ScrollViewReader
+  }
+
+  @MainActor
+  private func revealPendingSidebarWorktree(
+    _ pendingSidebarReveal: PendingSidebarReveal?,
+    with scrollProxy: ScrollViewProxy
+  ) async {
+    guard let pendingSidebarReveal else { return }
+    // Give SwiftUI time to materialize newly expanded section rows before scrolling.
+    await Task.yield()
+    await Task.yield()
+    isSidebarFocused = true
+    withAnimation(.easeOut(duration: 0.2)) {
+      scrollProxy.scrollTo(pendingSidebarReveal.worktreeID, anchor: .center)
+    }
+    store.send(.consumePendingSidebarReveal(pendingSidebarReveal.id))
   }
 }
 
