@@ -62,10 +62,15 @@ extension RepositoryPersistenceClient: DependencyKey {
         if !archived.isEmpty {
           return normalizeArchivedWorktrees(archived)
         }
-        // Fall back to legacy format
+        // One-time migration from legacy format
         @Shared(.appStorage("archivedWorktreeIDs")) var legacyArchived: [Worktree.ID] = []
         let legacyIDs = RepositoryPathNormalizer.normalize(legacyArchived)
-        return legacyIDs.map { ArchivedWorktree(id: $0, archivedAt: .distantPast) }
+        guard !legacyIDs.isEmpty else { return [] }
+        let now = Date()
+        let migrated = legacyIDs.map { ArchivedWorktree(id: $0, archivedAt: now) }
+        $archived.withLock { $0 = migrated }
+        $legacyArchived.withLock { $0 = [] }
+        return migrated
       },
       saveArchivedWorktrees: { worktrees in
         @Shared(.appStorage("archivedWorktrees")) var sharedArchived: [ArchivedWorktree] = []

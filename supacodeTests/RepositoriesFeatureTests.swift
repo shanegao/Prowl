@@ -2948,6 +2948,93 @@ struct RepositoriesFeatureTests {
     expectNoDifference(store.state.archivedWorktrees, [])
   }
 
+  // MARK: - Auto-delete Archived Worktrees
+
+  @Test func autoDeleteExpiredArchivedWorktreesDeletesExpired() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let expiredWorktree = makeWorktree(id: "/tmp/repo/expired", name: "expired", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, expiredWorktree])
+    let fixedDate = Date(timeIntervalSince1970: 1_000_000)
+    let archivedAt = fixedDate.addingTimeInterval(-2 * 86_400)  // 2 days ago
+    var state = makeState(repositories: [repository])
+    state.archivedWorktrees = [ArchivedWorktree(id: expiredWorktree.id, archivedAt: archivedAt)]
+    state.autoDeleteArchivedWorktreesAfterDays = .oneDay
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date = .constant(fixedDate)
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.autoDeleteExpiredArchivedWorktrees)
+    await store.receive(\.worktreeLifecycle.deleteWorktreeConfirmed) {
+      $0.deletingWorktreeIDs = [expiredWorktree.id]
+    }
+  }
+
+  @Test func autoDeleteKeepsUnexpiredArchivedWorktrees() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let recentWorktree = makeWorktree(id: "/tmp/repo/recent", name: "recent", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, recentWorktree])
+    let fixedDate = Date(timeIntervalSince1970: 1_000_000)
+    let archivedAt = fixedDate.addingTimeInterval(-1 * 86_400)  // 1 day ago
+    var state = makeState(repositories: [repository])
+    state.archivedWorktrees = [ArchivedWorktree(id: recentWorktree.id, archivedAt: archivedAt)]
+    state.autoDeleteArchivedWorktreesAfterDays = .sevenDays
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date = .constant(fixedDate)
+    }
+
+    await store.send(.autoDeleteExpiredArchivedWorktrees)
+    // No effects — worktree is not expired yet
+  }
+
+  @Test func autoDeleteNilPeriodDoesNothing() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, worktree])
+    let fixedDate = Date(timeIntervalSince1970: 1_000_000)
+    var state = makeState(repositories: [repository])
+    state.archivedWorktrees = [
+      ArchivedWorktree(id: worktree.id, archivedAt: .distantPast),
+    ]
+    state.autoDeleteArchivedWorktreesAfterDays = nil
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date = .constant(fixedDate)
+    }
+
+    await store.send(.autoDeleteExpiredArchivedWorktrees)
+    // No effects — auto-delete is disabled
+  }
+
+  @Test func autoDeleteSkipsMainWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let fixedDate = Date(timeIntervalSince1970: 1_000_000)
+    var state = makeState(repositories: [repository])
+    state.archivedWorktrees = [
+      ArchivedWorktree(id: mainWorktree.id, archivedAt: .distantPast),
+    ]
+    state.autoDeleteArchivedWorktreesAfterDays = .oneDay
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date = .constant(fixedDate)
+    }
+
+    await store.send(.autoDeleteExpiredArchivedWorktrees)
+    // No effects — main worktree must not be deleted
+  }
+
   // MARK: - Select Next/Previous Worktree
 
   @Test func selectNextWorktreeWrapsForward() async {
