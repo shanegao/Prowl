@@ -536,6 +536,20 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func consumePendingSidebarRevealIgnoresStaleRequest() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.nextPendingSidebarRevealID = 2
+    initialState.pendingSidebarReveal = .init(id: 2, worktreeID: worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    // Stale ID should be ignored, pendingSidebarReveal remains unchanged.
+    await store.send(.consumePendingSidebarReveal(1))
+  }
+
   @Test func openRepositoriesDoesNotDowngradeFoldersOnUnexpectedProbeError() async {
     let repoSelection = "/tmp/repo/subdir"
     let repoRoot = "/tmp/repo"
