@@ -20,6 +20,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var defaultWorktreeBaseDirectoryPath: String?
   var restoreTerminalLayoutOnLaunch: Bool
   var terminalFontSize: Float32?
+  var archivedAutoDeletePeriod: AutoDeletePeriod?
   var keybindingUserOverrides: KeybindingUserOverrideStore
 
   static let `default` = GlobalSettings(
@@ -43,6 +44,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation: true,
     defaultWorktreeBaseDirectoryPath: nil,
     restoreTerminalLayoutOnLaunch: false,
+    archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
     keybindingUserOverrides: .empty
   )
@@ -68,6 +70,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation: Bool,
     defaultWorktreeBaseDirectoryPath: String? = nil,
     restoreTerminalLayoutOnLaunch: Bool = false,
+    archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty
   ) {
@@ -91,6 +94,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
+    self.archivedAutoDeletePeriod = archivedAutoDeletePeriod
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
   }
@@ -151,6 +155,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     restoreTerminalLayoutOnLaunch =
       try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
       ?? Self.default.restoreTerminalLayoutOnLaunch
+    if let rawAutoDelete = try container.decodeIfPresent(Int.self, forKey: .archivedAutoDeletePeriod) {
+      archivedAutoDeletePeriod = AutoDeletePeriod(rawValue: rawAutoDelete)
+    } else {
+      archivedAutoDeletePeriod = Self.default.archivedAutoDeletePeriod
+    }
     terminalFontSize =
       try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
       ?? Self.default.terminalFontSize

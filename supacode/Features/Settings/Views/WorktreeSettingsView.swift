@@ -46,6 +46,17 @@ struct WorktreeSettingsView: View {
           )
           .help("Archive worktrees automatically when their pull requests are merged.")
           VStack(alignment: .leading) {
+            Picker(selection: $store.archivedAutoDeletePeriod) {
+              Text("Never").tag(AutoDeletePeriod?.none)
+              ForEach(AutoDeletePeriod.allCases) { period in
+                Text(period.label).tag(AutoDeletePeriod?.some(period))
+              }
+            } label: {
+              Text("Auto-delete archived worktrees")
+              Text("Permanently removes archived worktrees after the selected period.")
+            }
+          }
+          VStack(alignment: .leading) {
             Toggle(
               "Prompt for branch name during creation",
               isOn: $store.promptForWorktreeCreation
