@@ -54,7 +54,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
       return "Checking repository mode"
     case .resolvingBaseReference:
       return "Resolving base reference (\(baseRefDisplay))"
-    case .fetchingOrigin:
+    case .fetchingRemote:
       if let fetchRemoteName, !fetchRemoteName.isEmpty {
         return "Fetching \(fetchRemoteName)"
       }
@@ -129,6 +129,6 @@ nonisolated enum WorktreeCreationStage: Hashable, Sendable {
   case choosingWorktreeName
   case checkingRepositoryMode
   case resolvingBaseReference
-  case fetchingOrigin
+  case fetchingRemote
   case creatingWorktree
 }

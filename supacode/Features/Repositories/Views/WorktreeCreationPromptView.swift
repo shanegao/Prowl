@@ -36,11 +36,11 @@ struct WorktreeCreationPromptView: View {
 
       VStack(alignment: .leading) {
         Toggle(
-          "Fetch remote branch",
-          isOn: $store.fetchOrigin
+          "Fetch remote before creating worktree",
+          isOn: $store.fetchRemote
         )
-        .help("Run git fetch before creating the worktree to ensure the base branch is up to date.")
-        Text("Runs git fetch to ensure the base branch is up to date.")
+        .help("Runs git fetch <remote> before creating the worktree.")
+        Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
           .font(.footnote)
           .foregroundStyle(.secondary)
       }

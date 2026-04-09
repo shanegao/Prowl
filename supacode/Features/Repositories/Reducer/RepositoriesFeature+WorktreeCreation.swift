@@ -71,7 +71,7 @@ extension RepositoriesFeature {
                 repositoryID: repository.id,
                 nameSource: .random,
                 baseRefSource: .repositorySetting,
-                fetchOrigin: settingsFile.global.fetchOriginBeforeWorktreeCreation
+                fetchRemote: settingsFile.global.fetchOriginBeforeWorktreeCreation
               )
             )
           )
@@ -146,12 +146,12 @@ extension RepositoriesFeature {
         baseRefOptions: baseRefOptions,
         branchName: "",
         selectedBaseRef: selectedBaseRef,
-        fetchOrigin: settingsFile.global.fetchOriginBeforeWorktreeCreation,
+        fetchRemote: settingsFile.global.fetchOriginBeforeWorktreeCreation,
         validationMessage: nil
       )
       return .none
 
-    case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef, let fetchOrigin):
+    case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef):
       guard let repository = state.repositories[id: repositoryID] else {
         state.worktreeCreationPrompt = nil
         state.alert = messageAlert(
@@ -160,6 +160,9 @@ extension RepositoriesFeature {
         )
         return .none
       }
+      @Shared(.settingsFile) var settingsFile
+      let fetchRemote =
+        state.worktreeCreationPrompt?.fetchRemote ?? settingsFile.global.fetchOriginBeforeWorktreeCreation
       state.worktreeCreationPrompt?.validationMessage = nil
       state.worktreeCreationPrompt?.isValidating = true
       let normalizedBranchName = branchName.lowercased()
@@ -182,7 +185,7 @@ extension RepositoriesFeature {
               repositoryID: repositoryID,
               branchName: branchName,
               baseRef: baseRef,
-              fetchOrigin: fetchOrigin,
+              fetchRemote: fetchRemote,
               duplicateMessage: duplicateMessage
             )
           )
@@ -194,7 +197,7 @@ extension RepositoriesFeature {
       let repositoryID,
       let branchName,
       let baseRef,
-      let fetchOrigin,
+      let fetchRemote,
       let duplicateMessage
     ):
       guard let prompt = state.worktreeCreationPrompt, prompt.repositoryID == repositoryID else {
@@ -212,12 +215,12 @@ extension RepositoriesFeature {
             repositoryID: repositoryID,
             nameSource: .explicit(branchName),
             baseRefSource: .explicit(baseRef),
-            fetchOrigin: fetchOrigin
+            fetchRemote: fetchRemote
           )
         )
       )
 
-    case .createWorktreeInRepository(let repositoryID, let nameSource, let baseRefSource, let fetchOrigin):
+    case .createWorktreeInRepository(let repositoryID, let nameSource, let baseRefSource, let fetchRemote):
       guard let repository = state.repositories[id: repositoryID] else {
         state.alert = messageAlert(
           title: "Unable to create worktree",
@@ -415,12 +418,12 @@ extension RepositoriesFeature {
             }
           }
           progress.baseRef = resolvedBaseRef
-          if fetchOrigin, !resolvedBaseRef.isEmpty {
+          if fetchRemote, !resolvedBaseRef.isEmpty {
             do {
               let remotes = try await gitClient.remoteNames(repository.rootURL)
-              if let matchedRemote = resolvedBaseRef.matchingRemote(from: remotes) {
+              if let matchedRemote = GitRemoteMatcher.matchingRemote(for: resolvedBaseRef, from: remotes) {
                 progress.fetchRemoteName = matchedRemote
-                progress.stage = .fetchingOrigin
+                progress.stage = .fetchingRemote
                 await send(
                   .worktreeCreation(
                     .pendingWorktreeProgressUpdated(
@@ -645,11 +648,3 @@ extension RepositoriesFeature {
 }
 
 private nonisolated let worktreeCreationLogger = SupaLogger("WorktreeCreation")
-
-extension String {
-  fileprivate nonisolated func matchingRemote(from remotes: [String]) -> String? {
-    remotes
-      .sorted { $0.count > $1.count }
-      .first { hasPrefix("\($0)/") }
-  }
-}

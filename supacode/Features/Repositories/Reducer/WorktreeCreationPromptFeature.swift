@@ -11,7 +11,7 @@ struct WorktreeCreationPromptFeature {
     let baseRefOptions: [String]
     var branchName: String
     var selectedBaseRef: String?
-    var fetchOrigin: Bool
+    var fetchRemote: Bool
     var validationMessage: String?
     var isValidating = false
 
@@ -32,7 +32,7 @@ struct WorktreeCreationPromptFeature {
   @CasePathable
   enum Delegate: Equatable {
     case cancel
-    case submit(repositoryID: Repository.ID, branchName: String, baseRef: String?, fetchOrigin: Bool)
+    case submit(repositoryID: Repository.ID, branchName: String, baseRef: String?)
   }
 
   var body: some Reducer<State, Action> {
@@ -62,8 +62,7 @@ struct WorktreeCreationPromptFeature {
             .submit(
               repositoryID: state.repositoryID,
               branchName: trimmed,
-              baseRef: state.selectedBaseRef,
-              fetchOrigin: state.fetchOrigin
+              baseRef: state.selectedBaseRef
             )
           )
         )

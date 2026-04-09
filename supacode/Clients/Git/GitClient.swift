@@ -23,7 +23,7 @@ enum GitOperation: String {
   case showFile = "show_file"
   case remoteInfo = "remote_info"
   case remoteList = "remote_list"
-  case fetchOrigin = "fetch_origin"
+  case fetchRemote = "fetch_remote"
 }
 
 enum GitClientError: LocalizedError {
@@ -43,6 +43,14 @@ enum GitClientError: LocalizedError {
 enum GitWorktreeCreateEvent: Equatable, Sendable {
   case outputLine(ShellStreamLine)
   case finished(Worktree)
+}
+
+nonisolated enum GitRemoteMatcher {
+  static func matchingRemote(for ref: String, from remotes: [String]) -> String? {
+    remotes
+      .sorted { $0.count > $1.count }
+      .first { ref.hasPrefix("\($0)/") }
+  }
 }
 
 struct GitClient {
@@ -548,7 +556,7 @@ struct GitClient {
   nonisolated func fetchRemote(_ remote: String, for repoRoot: URL) async throws {
     let path = repoRoot.path(percentEncoded: false)
     _ = try await runGit(
-      operation: .fetchOrigin,
+      operation: .fetchRemote,
       arguments: ["-C", path, "fetch", remote]
     )
   }

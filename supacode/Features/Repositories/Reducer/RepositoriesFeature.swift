@@ -70,7 +70,7 @@ struct RepositoriesFeature {
       repositoryID: Repository.ID,
       nameSource: WorktreeCreationNameSource,
       baseRefSource: WorktreeCreationBaseRefSource,
-      fetchOrigin: Bool
+      fetchRemote: Bool
     )
     case promptedWorktreeCreationDataLoaded(
       repositoryID: Repository.ID,
@@ -81,14 +81,13 @@ struct RepositoriesFeature {
     case startPromptedWorktreeCreation(
       repositoryID: Repository.ID,
       branchName: String,
-      baseRef: String?,
-      fetchOrigin: Bool
+      baseRef: String?
     )
     case promptedWorktreeCreationChecked(
       repositoryID: Repository.ID,
       branchName: String,
       baseRef: String?,
-      fetchOrigin: Bool,
+      fetchRemote: Bool,
       duplicateMessage: String?
     )
     case pendingWorktreeProgressUpdated(id: Worktree.ID, progress: WorktreeCreationProgress)
@@ -652,15 +651,14 @@ struct RepositoriesFeature {
           return .send(.worktreeCreation(.promptCanceled))
 
         case .worktreeCreationPrompt(
-          .presented(.delegate(.submit(let repositoryID, let branchName, let baseRef, let fetchOrigin)))
+          .presented(.delegate(.submit(let repositoryID, let branchName, let baseRef)))
         ):
           return .send(
             .worktreeCreation(
               .startPromptedWorktreeCreation(
                 repositoryID: repositoryID,
                 branchName: branchName,
-                baseRef: baseRef,
-                fetchOrigin: fetchOrigin
+                baseRef: baseRef
               )
             )
           )
