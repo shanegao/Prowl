@@ -1055,6 +1055,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
   func setOcclusion(_ visible: Bool) {
     guard let surface else {
       guard skipsSurfaceCreationForTesting else { return }
+      // Occluding (pausing render) is always safe, even without a view
+      // hierarchy. This handles restored surfaces that haven't been attached
+      // to a window yet.
+      if !visible {
+        guard occlusionState.prepareToApply(false) else { return }
+        onOcclusionAppliedForTesting?(false)
+        return
+      }
       guard isReadyToApplyOcclusion else {
         if occlusionState.desired != visible {
           surfaceLogger.info(
@@ -1067,6 +1075,15 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
       guard occlusionState.prepareToApply(visible) else { return }
       onOcclusionAppliedForTesting?(visible)
+      return
+    }
+    // Occluding (pausing render) is always safe, even without a view
+    // hierarchy. This stops restored surfaces from spinning the GPU when
+    // they are not displayed.
+    if !visible {
+      guard occlusionState.prepareToApply(false) else { return }
+      onOcclusionAppliedForTesting?(false)
+      ghostty_surface_set_occlusion(surface, false)
       return
     }
     guard isReadyToApplyOcclusion else {
