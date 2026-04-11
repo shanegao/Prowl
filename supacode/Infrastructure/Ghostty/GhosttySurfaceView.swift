@@ -121,6 +121,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var lastSurfaceFocus: Bool?
   private var eventMonitor: Any?
   private var notificationObservers: [NSObjectProtocol] = []
+  private var workspaceObservers: [NSObjectProtocol] = []
   private var prevPressureStage: Int = 0
   private var isBackgroundOpaqueOverride = false
   private lazy var cachedScreenContents = CachedValue<String>(duration: .milliseconds(500)) {
@@ -247,6 +248,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
     }
     registerForDraggedTypes(Array(Self.dropTypes))
+    registerWorkspaceObservers()
 
     eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp, .leftMouseDown]) {
       [weak self] event in
@@ -263,6 +265,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
       NSEvent.removeMonitor(eventMonitor)
     }
     clearNotificationObservers()
+    clearWorkspaceObservers()
     let id = ObjectIdentifier(self)
     MainActor.assumeIsolated {
       SecureInput.shared.removeScoped(id)
@@ -357,6 +360,50 @@ final class GhosttySurfaceView: NSView, Identifiable {
       })
   }
 
+  private func registerWorkspaceObservers() {
+    let center = NSWorkspace.shared.notificationCenter
+    workspaceObservers.append(
+      center.addObserver(
+        forName: NSWorkspace.willSleepNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.logLifecycleState("workspaceWillSleep")
+        }
+      })
+    workspaceObservers.append(
+      center.addObserver(
+        forName: NSWorkspace.didWakeNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.logLifecycleState("workspaceDidWake")
+        }
+      })
+    workspaceObservers.append(
+      center.addObserver(
+        forName: NSWorkspace.screensDidSleepNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.logLifecycleState("screensDidSleep")
+        }
+      })
+    workspaceObservers.append(
+      center.addObserver(
+        forName: NSWorkspace.screensDidWakeNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.logLifecycleState("screensDidWake")
+        }
+      })
+  }
+
   private func windowDidChangeScreen() {
     guard let surface, let screen = window?.screen else { return }
     let displayID =
@@ -375,6 +422,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
     notificationObservers.removeAll()
   }
 
+  private func clearWorkspaceObservers() {
+    let center = NSWorkspace.shared.notificationCenter
+    for observer in workspaceObservers {
+      center.removeObserver(observer)
+    }
+    workspaceObservers.removeAll()
+  }
+
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     if window == nil {
@@ -386,11 +441,13 @@ final class GhosttySurfaceView: NSView, Identifiable {
     updateContentScale()
     updateSurfaceSize()
     applyWindowBackgroundAppearance()
+    logLifecycleState("viewDidMoveToWindow")
     handleAttachmentChange()
   }
 
   override func viewDidMoveToSuperview() {
     super.viewDidMoveToSuperview()
+    logLifecycleState("viewDidMoveToSuperview")
     handleAttachmentChange()
   }
 
@@ -1054,6 +1111,21 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private func resumeDeferredOcclusionIfNeeded() {
     guard isReadyToApplyOcclusion else { return }
     reapplyOcclusionIfNeeded()
+  }
+
+  private func logLifecycleState(_ event: String) {
+    let windowVisible = window?.occlusionState.contains(.visible) ?? false
+    let windowKey = window?.isKeyWindow ?? false
+    let firstResponderMatches = window?.firstResponder === self
+    surfaceLogger.info(
+      "[TerminalWake] event=\(event) surface=\(debugID) hasSurface=\(surface != nil) "
+        + "attached=\(hasAttachedSuperview) window=\(hasAttachedWindow) "
+        + "desired=\(String(describing: occlusionState.desired)) "
+        + "focused=\(focused) firstResponder=\(firstResponderMatches) "
+        + "bounds=\(Int(bounds.width))x\(Int(bounds.height)) "
+        + "backing=\(Int(lastBackingSize.width))x\(Int(lastBackingSize.height)) "
+        + "windowVisible=\(windowVisible) windowKey=\(windowKey)"
+    )
   }
 
   private func reapplyOcclusionIfNeeded() {
