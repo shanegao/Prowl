@@ -63,6 +63,10 @@ final class GhosttyRuntime {
     }
     self.app = app
 
+    registerNotificationObservers()
+  }
+
+  private func registerNotificationObservers() {
     let center = NotificationCenter.default
     observers.append(
       center.addObserver(
