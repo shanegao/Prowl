@@ -81,6 +81,61 @@ struct RepositorySettingsKeyTests {
     #expect(settings.archiveScript.isEmpty)
   }
 
+  @Test(.dependencies) func loadNormalizesLegacyDefaultOverridesToInheritedValues() throws {
+    let globalStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let legacyData = Data(
+      """
+      {
+        "setupScript": "",
+        "archiveScript": "",
+        "runScript": "echo run",
+        "openActionID": "automatic",
+        "copyIgnoredOnWorktreeCreate": false,
+        "copyUntrackedOnWorktreeCreate": true,
+        "pullRequestMergeStrategy": "merge"
+      }
+      """.utf8
+    )
+
+    try localStorage.save(legacyData, at: localURL)
+
+    let loaded = withDependencies {
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.repositorySettings(rootURL)) var repositorySettings: RepositorySettings
+      return repositorySettings
+    }
+
+    #expect(loaded.copyIgnoredOnWorktreeCreate == nil)
+    #expect(loaded.copyUntrackedOnWorktreeCreate == true)
+    #expect(loaded.pullRequestMergeStrategy == nil)
+  }
+
+  @Test func decodeCurrentSchemaPreservesExplicitDefaultOverrides() throws {
+    let settings = RepositorySettings(
+      setupScript: "",
+      archiveScript: "",
+      runScript: "echo run",
+      openActionID: OpenWorktreeAction.automaticSettingsID,
+      worktreeBaseRef: nil,
+      copyIgnoredOnWorktreeCreate: false,
+      copyUntrackedOnWorktreeCreate: false,
+      pullRequestMergeStrategy: .merge,
+    )
+
+    let decoded = try JSONDecoder().decode(RepositorySettings.self, from: encode(settings))
+
+    #expect(decoded.copyIgnoredOnWorktreeCreate == false)
+    #expect(decoded.copyUntrackedOnWorktreeCreate == false)
+    #expect(decoded.pullRequestMergeStrategy == .merge)
+  }
+
   @Test(.dependencies) func loadPrefersLocalSupacodeJSONOverGlobalEntry() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()

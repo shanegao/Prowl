@@ -1,6 +1,11 @@
 import Foundation
 
 nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
+  private static let currentSchemaVersion = 2
+  private static let legacyCopyIgnoredDefault = false
+  private static let legacyCopyUntrackedDefault = false
+  private static let legacyMergeStrategyDefault: PullRequestMergeStrategy = .merge
+
   var setupScript: String
   var archiveScript: String
   var runScript: String
@@ -10,8 +15,10 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
   var copyIgnoredOnWorktreeCreate: Bool?
   var copyUntrackedOnWorktreeCreate: Bool?
   var pullRequestMergeStrategy: PullRequestMergeStrategy?
+  private var schemaVersion: Int
 
   private enum CodingKeys: String, CodingKey {
+    case schemaVersion
     case setupScript
     case archiveScript
     case runScript
@@ -55,10 +62,14 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     self.copyIgnoredOnWorktreeCreate = copyIgnoredOnWorktreeCreate
     self.copyUntrackedOnWorktreeCreate = copyUntrackedOnWorktreeCreate
     self.pullRequestMergeStrategy = pullRequestMergeStrategy
+    schemaVersion = Self.currentSchemaVersion
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    let decodedSchemaVersion =
+      try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+      ?? 1
     setupScript =
       try container.decodeIfPresent(String.self, forKey: .setupScript)
       ?? Self.default.setupScript
@@ -75,20 +86,55 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(String.self, forKey: .worktreeBaseRef)
     worktreeBaseDirectoryPath =
       try container.decodeIfPresent(String.self, forKey: .worktreeBaseDirectoryPath)
-    copyIgnoredOnWorktreeCreate =
-      try container.decodeIfPresent(
-        Bool.self,
-        forKey: .copyIgnoredOnWorktreeCreate
+    if decodedSchemaVersion >= Self.currentSchemaVersion {
+      copyIgnoredOnWorktreeCreate =
+        try container.decodeIfPresent(
+          Bool.self,
+          forKey: .copyIgnoredOnWorktreeCreate
+        )
+      copyUntrackedOnWorktreeCreate =
+        try container.decodeIfPresent(
+          Bool.self,
+          forKey: .copyUntrackedOnWorktreeCreate
+        )
+      pullRequestMergeStrategy =
+        try container.decodeIfPresent(
+          PullRequestMergeStrategy.self,
+          forKey: .pullRequestMergeStrategy
+        )
+    } else {
+      copyIgnoredOnWorktreeCreate = Self.normalizeLegacyOverride(
+        try container.decodeIfPresent(
+          Bool.self,
+          forKey: .copyIgnoredOnWorktreeCreate
+        ),
+        legacyDefault: Self.legacyCopyIgnoredDefault
       )
-    copyUntrackedOnWorktreeCreate =
-      try container.decodeIfPresent(
-        Bool.self,
-        forKey: .copyUntrackedOnWorktreeCreate
+      copyUntrackedOnWorktreeCreate = Self.normalizeLegacyOverride(
+        try container.decodeIfPresent(
+          Bool.self,
+          forKey: .copyUntrackedOnWorktreeCreate
+        ),
+        legacyDefault: Self.legacyCopyUntrackedDefault
       )
-    pullRequestMergeStrategy =
-      try container.decodeIfPresent(
-        PullRequestMergeStrategy.self,
-        forKey: .pullRequestMergeStrategy
+      pullRequestMergeStrategy = Self.normalizeLegacyOverride(
+        try container.decodeIfPresent(
+          PullRequestMergeStrategy.self,
+          forKey: .pullRequestMergeStrategy
+        ),
+        legacyDefault: Self.legacyMergeStrategyDefault
       )
+    }
+    schemaVersion = Self.currentSchemaVersion
+  }
+}
+
+extension RepositorySettings {
+  nonisolated private static func normalizeLegacyOverride<Value: Equatable>(
+    _ value: Value?,
+    legacyDefault: Value
+  ) -> Value? {
+    guard let value else { return nil }
+    return value == legacyDefault ? nil : value
   }
 }

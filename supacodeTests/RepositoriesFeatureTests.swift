@@ -1285,6 +1285,104 @@ struct RepositoriesFeatureTests {
     #expect(observedBaseDirectory.value == expectedBaseDirectory)
   }
 
+  @Test(.dependencies) func createRandomWorktreeUsesGlobalCopyFlagsWhenRepositoryOverridesMissing() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    let observedCopyFlags = LockIsolated<(Bool, Bool)?>(nil)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.copyIgnoredOnWorktreeCreate = true
+      $0.global.copyUntrackedOnWorktreeCreate = true
+    }
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.copyIgnoredOnWorktreeCreate = nil
+      $0.copyUntrackedOnWorktreeCreate = nil
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.createWorktreeStream = { _, _, _, copyIgnored, copyUntracked, _ in
+        observedCopyFlags.withValue { $0 = (copyIgnored, copyUntracked) }
+        return AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(observedCopyFlags.value?.0 == true)
+    #expect(observedCopyFlags.value?.1 == true)
+  }
+
+  @Test(.dependencies) func createRandomWorktreeInBareRepositoryIgnoresGlobalCopyFlags() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    let observedCopyFlags = LockIsolated<(Bool, Bool)?>(nil)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.copyIgnoredOnWorktreeCreate = true
+      $0.global.copyUntrackedOnWorktreeCreate = true
+    }
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.copyIgnoredOnWorktreeCreate = nil
+      $0.copyUntrackedOnWorktreeCreate = nil
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in true }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.createWorktreeStream = { _, _, _, copyIgnored, copyUntracked, _ in
+        observedCopyFlags.withValue { $0 = (copyIgnored, copyUntracked) }
+        return AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(observedCopyFlags.value?.0 == false)
+    #expect(observedCopyFlags.value?.1 == false)
+  }
+
   @Test(.dependencies) func createRandomWorktreeInRepositoryStreamFailureRemovesPendingWorktree() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -2561,6 +2659,54 @@ struct RepositoriesFeatureTests {
     #expect(store.state.worktreeInfoByID[featureWorktree.id]?.pullRequest?.state == "OPEN")
     #expect(store.state.archivedWorktreeIDs.isEmpty)
     #expect(mergedNumbers.value == [12])
+    await store.finish()
+  }
+
+  @Test func pullRequestActionMergeUsesGlobalStrategyWhenRepositoryOverrideMissing() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openPullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name, number: 12)
+    var state = makeState(repositories: [repository])
+    state.githubIntegrationAvailability = .disabled
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: openPullRequest
+    )
+    let mergedStrategies = LockIsolated<[PullRequestMergeStrategy]>([])
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.pullRequestMergeStrategy = .squash
+    }
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.pullRequestMergeStrategy = nil
+    }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.mergePullRequest = { _, _, strategy in
+        mergedStrategies.withValue { $0.append(strategy) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .merge)))
+    await store.receive(\.showToast) {
+      $0.statusToast = .inProgress("Merging pull request…")
+    }
+    await store.receive(\.showToast) {
+      $0.statusToast = .success("Pull request merged")
+    }
+    await store.receive(\.worktreeInfoEvent)
+    #expect(mergedStrategies.value == [.squash])
     await store.finish()
   }
 
