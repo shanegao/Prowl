@@ -14,7 +14,7 @@ struct WorktreeSettingsView: View {
     )
     VStack(alignment: .leading) {
       Form {
-        Section("Worktree") {
+        Section("Creation") {
           VStack(alignment: .leading) {
             TextField(
               "Default: current behavior",
@@ -28,6 +28,26 @@ struct WorktreeSettingsView: View {
               .monospaced()
           }
           .frame(maxWidth: .infinity, alignment: .leading)
+          VStack(alignment: .leading) {
+            Toggle(
+              "Prompt for branch name during creation",
+              isOn: $store.promptForWorktreeCreation
+            )
+            .help("Ask for branch name and base ref before creating a worktree.")
+            Text("When enabled, you choose the branch name and where it branches from before creating the worktree.")
+              .foregroundStyle(.secondary)
+          }
+          VStack(alignment: .leading) {
+            Toggle(
+              "Fetch remote before creating worktree",
+              isOn: $store.fetchRemoteBeforeWorktreeCreation
+            )
+            .help("Runs git fetch <remote> before creating a worktree.")
+            Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
+              .foregroundStyle(.secondary)
+          }
+        }
+        Section("Cleanup") {
           VStack(alignment: .leading) {
             Toggle(
               "Also delete local branch when deleting a worktree",
@@ -51,7 +71,7 @@ struct WorktreeSettingsView: View {
             case .archive:
               Text("Archives worktrees when their pull requests are merged.")
             case .delete:
-              Text("Follows the \"Delete local branch with worktree\" option below.")
+              Text("Follows the \"Also delete local branch when deleting a worktree\" option above.")
             case nil:
               EmptyView()
             }
@@ -66,24 +86,6 @@ struct WorktreeSettingsView: View {
               Text("Auto-delete archived worktrees")
               Text("Permanently removes archived worktrees after the selected period.")
             }
-          }
-          VStack(alignment: .leading) {
-            Toggle(
-              "Prompt for branch name during creation",
-              isOn: $store.promptForWorktreeCreation
-            )
-            .help("Ask for branch name and base ref before creating a worktree.")
-            Text("When enabled, you choose the branch name and where it branches from before creating the worktree.")
-              .foregroundStyle(.secondary)
-          }
-          VStack(alignment: .leading) {
-            Toggle(
-              "Fetch remote before creating worktree",
-              isOn: $store.fetchRemoteBeforeWorktreeCreation
-            )
-            .help("Runs git fetch <remote> before creating a worktree.")
-            Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
-              .foregroundStyle(.secondary)
           }
         }
       }
