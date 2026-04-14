@@ -248,6 +248,47 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.defaultWorktreeBaseDirectoryPath == expectedPath)
   }
 
+  @Test(.dependencies) func changingGlobalOverrideDefaultsUpdatesRepositorySettingsState() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    var state = SettingsFeature.State()
+    state.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .git,
+      settings: .default,
+      userSettings: .default
+    )
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.copyIgnoredOnWorktreeCreate, true))) {
+      $0.copyIgnoredOnWorktreeCreate = true
+      $0.repositorySettings?.globalCopyIgnoredOnWorktreeCreate = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.binding(.set(\.copyUntrackedOnWorktreeCreate, true))) {
+      $0.copyUntrackedOnWorktreeCreate = true
+      $0.repositorySettings?.globalCopyUntrackedOnWorktreeCreate = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.binding(.set(\.pullRequestMergeStrategy, .squash))) {
+      $0.pullRequestMergeStrategy = .squash
+      $0.repositorySettings?.globalPullRequestMergeStrategy = .squash
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(store.state.repositorySettings?.globalCopyIgnoredOnWorktreeCreate == true)
+    #expect(store.state.repositorySettings?.globalCopyUntrackedOnWorktreeCreate == true)
+    #expect(store.state.repositorySettings?.globalPullRequestMergeStrategy == .squash)
+    #expect(settingsFile.global.copyIgnoredOnWorktreeCreate == true)
+    #expect(settingsFile.global.copyUntrackedOnWorktreeCreate == true)
+    #expect(settingsFile.global.pullRequestMergeStrategy == .squash)
+  }
+
   @Test(.dependencies) func setTerminalFontSizePersistsWithoutAnalyticsOrGlobalFanout() async {
     var initialSettings = GlobalSettings.default
     initialSettings.analyticsEnabled = true

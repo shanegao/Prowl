@@ -19,6 +19,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var promptForWorktreeCreation: Bool
   var fetchOriginBeforeWorktreeCreation: Bool
   var defaultWorktreeBaseDirectoryPath: String?
+  var copyIgnoredOnWorktreeCreate: Bool
+  var copyUntrackedOnWorktreeCreate: Bool
+  var pullRequestMergeStrategy: PullRequestMergeStrategy
   var restoreTerminalLayoutOnLaunch: Bool
   var terminalFontSize: Float32?
   var archivedAutoDeletePeriod: AutoDeletePeriod?
@@ -45,6 +48,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation: true,
     fetchOriginBeforeWorktreeCreation: true,
     defaultWorktreeBaseDirectoryPath: nil,
+    copyIgnoredOnWorktreeCreate: false,
+    copyUntrackedOnWorktreeCreate: false,
+    pullRequestMergeStrategy: .merge,
     restoreTerminalLayoutOnLaunch: false,
     archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
@@ -72,6 +78,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation: Bool,
     fetchOriginBeforeWorktreeCreation: Bool = true,
     defaultWorktreeBaseDirectoryPath: String? = nil,
+    copyIgnoredOnWorktreeCreate: Bool = false,
+    copyUntrackedOnWorktreeCreate: Bool = false,
+    pullRequestMergeStrategy: PullRequestMergeStrategy = .merge,
     restoreTerminalLayoutOnLaunch: Bool = false,
     archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
@@ -97,6 +106,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.fetchOriginBeforeWorktreeCreation = fetchOriginBeforeWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
+    self.copyIgnoredOnWorktreeCreate = copyIgnoredOnWorktreeCreate
+    self.copyUntrackedOnWorktreeCreate = copyUntrackedOnWorktreeCreate
+    self.pullRequestMergeStrategy = pullRequestMergeStrategy
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
     self.archivedAutoDeletePeriod = archivedAutoDeletePeriod
     self.terminalFontSize = terminalFontSize
@@ -222,6 +234,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     defaultWorktreeBaseDirectoryPath =
       try container.decodeIfPresent(String.self, forKey: .defaultWorktreeBaseDirectoryPath)
       ?? Self.default.defaultWorktreeBaseDirectoryPath
+    copyIgnoredOnWorktreeCreate =
+      try container.decodeIfPresent(Bool.self, forKey: .copyIgnoredOnWorktreeCreate)
+      ?? Self.default.copyIgnoredOnWorktreeCreate
+    copyUntrackedOnWorktreeCreate =
+      try container.decodeIfPresent(Bool.self, forKey: .copyUntrackedOnWorktreeCreate)
+      ?? Self.default.copyUntrackedOnWorktreeCreate
+    pullRequestMergeStrategy =
+      try container.decodeIfPresent(PullRequestMergeStrategy.self, forKey: .pullRequestMergeStrategy)
+      ?? Self.default.pullRequestMergeStrategy
     restoreTerminalLayoutOnLaunch =
       try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
       ?? Self.default.restoreTerminalLayoutOnLaunch

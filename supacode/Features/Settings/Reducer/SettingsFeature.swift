@@ -26,6 +26,9 @@ struct SettingsFeature {
     var promptForWorktreeCreation: Bool
     var fetchRemoteBeforeWorktreeCreation: Bool
     var defaultWorktreeBaseDirectoryPath: String
+    var copyIgnoredOnWorktreeCreate: Bool
+    var copyUntrackedOnWorktreeCreate: Bool
+    var pullRequestMergeStrategy: PullRequestMergeStrategy
     var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
@@ -59,6 +62,9 @@ struct SettingsFeature {
       fetchRemoteBeforeWorktreeCreation = settings.fetchOriginBeforeWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
         SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
+      copyIgnoredOnWorktreeCreate = settings.copyIgnoredOnWorktreeCreate
+      copyUntrackedOnWorktreeCreate = settings.copyUntrackedOnWorktreeCreate
+      pullRequestMergeStrategy = settings.pullRequestMergeStrategy
       restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
       terminalFontSize = settings.terminalFontSize
       keybindingUserOverrides = settings.keybindingUserOverrides
@@ -88,6 +94,9 @@ struct SettingsFeature {
         defaultWorktreeBaseDirectoryPath: SupacodePaths.normalizedWorktreeBaseDirectoryPath(
           defaultWorktreeBaseDirectoryPath
         ),
+        copyIgnoredOnWorktreeCreate: copyIgnoredOnWorktreeCreate,
+        copyUntrackedOnWorktreeCreate: copyUntrackedOnWorktreeCreate,
+        pullRequestMergeStrategy: pullRequestMergeStrategy,
         restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
         archivedAutoDeletePeriod: archivedAutoDeletePeriod,
         terminalFontSize: terminalFontSize,
@@ -185,18 +194,18 @@ struct SettingsFeature {
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
         state.fetchRemoteBeforeWorktreeCreation = normalizedSettings.fetchOriginBeforeWorktreeCreation
         state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
+        state.copyIgnoredOnWorktreeCreate = normalizedSettings.copyIgnoredOnWorktreeCreate
+        state.copyUntrackedOnWorktreeCreate = normalizedSettings.copyUntrackedOnWorktreeCreate
+        state.pullRequestMergeStrategy = normalizedSettings.pullRequestMergeStrategy
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
         state.terminalFontSize = normalizedSettings.terminalFontSize
         state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
-        state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
-          normalizedSettings.defaultWorktreeBaseDirectoryPath
+        state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:
         state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
-        let defaultWorktreeBaseDirectoryPath = state.globalSettings.defaultWorktreeBaseDirectoryPath
-        state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
-          defaultWorktreeBaseDirectoryPath
+        state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
 
       case .setCommandFinishedNotificationThreshold(let text):
@@ -209,9 +218,7 @@ struct SettingsFeature {
 
       case .setSystemNotificationsEnabled(let isEnabled):
         state.systemNotificationsEnabled = isEnabled
-        let defaultWorktreeBaseDirectoryPath = state.globalSettings.defaultWorktreeBaseDirectoryPath
-        state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
-          defaultWorktreeBaseDirectoryPath
+        state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
 
       case .setTerminalFontSize(let fontSize):
@@ -364,5 +371,18 @@ struct SettingsFeature {
       return .send(.delegate(.settingsChanged(settings)))
     }
     return .none
+  }
+}
+
+extension SettingsFeature.State {
+  mutating func syncGlobalDefaults(from settings: GlobalSettings) {
+    repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
+      settings.defaultWorktreeBaseDirectoryPath
+    repositorySettings?.globalCopyIgnoredOnWorktreeCreate =
+      settings.copyIgnoredOnWorktreeCreate
+    repositorySettings?.globalCopyUntrackedOnWorktreeCreate =
+      settings.copyUntrackedOnWorktreeCreate
+    repositorySettings?.globalPullRequestMergeStrategy =
+      settings.pullRequestMergeStrategy
   }
 }
