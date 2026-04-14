@@ -137,6 +137,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(promptForWorktreeCreation, forKey: .promptForWorktreeCreation)
     try container.encode(fetchOriginBeforeWorktreeCreation, forKey: .fetchOriginBeforeWorktreeCreation)
     try container.encodeIfPresent(defaultWorktreeBaseDirectoryPath, forKey: .defaultWorktreeBaseDirectoryPath)
+    try container.encode(copyIgnoredOnWorktreeCreate, forKey: .copyIgnoredOnWorktreeCreate)
+    try container.encode(copyUntrackedOnWorktreeCreate, forKey: .copyUntrackedOnWorktreeCreate)
+    try container.encode(pullRequestMergeStrategy, forKey: .pullRequestMergeStrategy)
     try container.encode(restoreTerminalLayoutOnLaunch, forKey: .restoreTerminalLayoutOnLaunch)
     try container.encodeIfPresent(archivedAutoDeletePeriod?.rawValue, forKey: .archivedAutoDeletePeriod)
     try container.encodeIfPresent(terminalFontSize, forKey: .terminalFontSize)
@@ -164,6 +167,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case promptForWorktreeCreation
     case fetchOriginBeforeWorktreeCreation
     case defaultWorktreeBaseDirectoryPath
+    case copyIgnoredOnWorktreeCreate
+    case copyUntrackedOnWorktreeCreate
+    case pullRequestMergeStrategy
     case restoreTerminalLayoutOnLaunch
     case archivedAutoDeletePeriod
     case terminalFontSize
