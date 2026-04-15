@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.4.16](https://github.com/onevcat/Prowl/releases/tag/v2026.4.16)
+
+**Fixed**
+
+- Fixed a race condition when entering Canvas view that could leave the terminal surface blank.
+
 ## [2026.4.15](https://github.com/onevcat/Prowl/releases/tag/v2026.4.15)
 
 ## New
