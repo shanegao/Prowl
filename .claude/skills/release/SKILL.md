@@ -28,4 +28,3 @@ Build, sign, notarize, and publish a Prowl release.
 6. Report the GitHub release URL and remind the user to verify:
    - The DMG downloads and installs correctly
    - Sparkle update check works (launch app → Check for Updates)
-   - The appcast at `https://prowl.onev.cat/appcast.xml` is updated
