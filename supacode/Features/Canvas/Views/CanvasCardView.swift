@@ -5,6 +5,7 @@ struct CanvasCardView: View {
   let repositoryName: String
   let worktreeName: String
   let tree: SplitTree<GhosttySurfaceView>
+  let focusedSurfaceId: UUID?
   let isFocused: Bool
   let isSelected: Bool
   let hasUnseenNotification: Bool
@@ -192,9 +193,14 @@ struct CanvasCardView: View {
   }
 
   private var terminalContent: some View {
-    TerminalSplitTreeView(tree: tree, pinnedSize: cardSize, action: onSplitOperation)
-      .frame(width: cardSize.width, height: cardSize.height)
-      .allowsHitTesting(isFocused && !showsSelectionShield)
+    TerminalSplitTreeView(
+      tree: tree,
+      pinnedSize: cardSize,
+      focusedSurfaceId: focusedSurfaceId,
+      action: onSplitOperation
+    )
+    .frame(width: cardSize.width, height: cardSize.height)
+    .allowsHitTesting(isFocused && !showsSelectionShield)
   }
 
   private var selectionShield: some View {

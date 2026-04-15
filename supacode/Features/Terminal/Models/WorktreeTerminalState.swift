@@ -112,6 +112,13 @@ final class WorktreeTerminalState {
     surfaces[surfaceID]
   }
 
+  /// Persistent focused surface ID for the given tab. Does not change when the
+  /// Prowl window loses key state — used by views that want to indicate the
+  /// "last focused" pane even while the app is inactive.
+  func focusedSurfaceId(for tabId: TerminalTabID) -> UUID? {
+    focusedSurfaceIdByTab[tabId]
+  }
+
   @discardableResult
   func insertCommittedText(_ text: String, in tabId: TerminalTabID) -> Bool {
     guard let surface = surfaceView(for: tabId) else { return false }

@@ -8,6 +8,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
 
   case alacritty
   case antigravity
+  case codex
   case editor
   case finder
   case cursor
@@ -42,6 +43,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .editor: "$EDITOR"
     case .alacritty: "Alacritty"
     case .antigravity: "Antigravity"
+    case .codex: "Codex"
     case .cursor: "Cursor"
     case .githubDesktop: "GitHub Desktop"
     case .gitkraken: "GitKraken"
@@ -72,9 +74,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder: "Finder"
     case .editor: "$EDITOR"
-    case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
-      .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+    case .alacritty, .antigravity, .codex, .cursor, .fork, .githubDesktop, .gitkraken, .gitup,
+      .ghostty, .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge,
+      .terminal, .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode,
+      .zed:
       title
     }
   }
@@ -94,9 +97,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder, .editor:
       return true
-    case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
-      .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+    case .alacritty, .antigravity, .codex, .cursor, .fork, .githubDesktop, .gitkraken, .gitup,
+      .ghostty, .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge,
+      .terminal, .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode,
+      .zed:
       return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
     }
   }
@@ -107,6 +111,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .editor: "editor"
     case .alacritty: "alacritty"
     case .antigravity: "antigravity"
+    case .codex: "codex"
     case .cursor: "cursor"
     case .fork: "fork"
     case .githubDesktop: "github-desktop"
@@ -139,6 +144,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .editor: ""
     case .alacritty: "org.alacritty"
     case .antigravity: "com.google.antigravity"
+    case .codex: "com.openai.codex"
     case .cursor: "com.todesktop.230313mzl4w4u92"
     case .fork: "com.DanPristupov.Fork"
     case .githubDesktop: "com.github.GitHubClient"
@@ -169,6 +175,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
 
   static let editorPriority: [OpenWorktreeAction] = [
     .cursor,
+    .codex,
     .zed,
     .vscode,
     .windsurf,
@@ -249,6 +256,55 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .editor:
       return
+    case .codex:
+      let searchPaths = [
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex",
+        "\(NSHomeDirectory())/.local/bin/codex",
+      ]
+      guard let codexPath = searchPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+        onError(
+          OpenActionError(
+            title: "codex CLI not found",
+            message: "Install the Codex CLI to open this worktree."
+          )
+        )
+        return
+      }
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: codexPath)
+      process.arguments = ["app", worktree.workingDirectory.path]
+      // GUI-launched Prowl inherits a minimal PATH without Homebrew paths, which
+      // breaks `#!/usr/bin/env node` in the codex CLI shebang. Inject the common
+      // shebang-interpreter locations so the child can resolve node.
+      var env = ProcessInfo.processInfo.environment
+      let additions =
+        "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:\(NSHomeDirectory())/.local/bin"
+      let existing = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+      env["PATH"] = "\(additions):\(existing)"
+      process.environment = env
+      process.terminationHandler = { proc in
+        let status = proc.terminationStatus
+        guard status != 0 else { return }
+        Task { @MainActor in
+          onError(
+            OpenActionError(
+              title: "Unable to open in \(actionTitle)",
+              message: "codex exited with status \(status)"
+            )
+          )
+        }
+      }
+      do {
+        try process.run()
+      } catch {
+        onError(
+          OpenActionError(
+            title: "Unable to open in \(actionTitle)",
+            message: error.localizedDescription
+          )
+        )
+      }
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
     // Apps that require CLI arguments instead of Apple Events to open directories.

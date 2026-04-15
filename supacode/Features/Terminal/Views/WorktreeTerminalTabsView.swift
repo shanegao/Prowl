@@ -45,7 +45,10 @@ struct WorktreeTerminalTabsView: View {
       )
       if let selectedId = state.tabManager.selectedTabId {
         TerminalTabContentStack(tabs: state.tabManager.tabs, selectedTabId: selectedId) { tabId in
-          TerminalSplitTreeAXContainer(tree: state.splitTree(for: tabId)) { operation in
+          TerminalSplitTreeAXContainer(
+            tree: state.splitTree(for: tabId),
+            focusedSurfaceId: state.focusedSurfaceId(for: tabId)
+          ) { operation in
             state.performSplitOperation(operation, in: tabId)
           }
         }
