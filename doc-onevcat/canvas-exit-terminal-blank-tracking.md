@@ -1,11 +1,17 @@
 # Canvas Exit Terminal Blank Tracking
 
 Last updated: 2026-04-15
-Status: Open, intermittent, narrowed from occlusion-only suspicion to host reattachment failure
+Status: Open, intermittent, now confirmed to affect both Canvas exit and Canvas entry via host ownership races
 
 ## Symptom
 
 When leaving Canvas and returning to the normal worktree terminal view, the terminal area can appear blank.
+
+As of 2026-04-15, the reverse direction is also reproducible:
+
+- after the app has been running for a while, entering Canvas from a normal worktree tab can open a blank Canvas card
+- the selected tab/worktree remains logically correct
+- unlike the earlier exit symptom, tab switching, creating a new tab, or switching away and back does not reliably recover the blank card
 
 Typical behavior:
 
@@ -77,6 +83,13 @@ This suggests the blank terminal is caused by host ownership loss:
 - a later teardown or host rebuild removes the surface from the active view tree
 - the normal terminal host does not currently guarantee that its `documentView` still owns the surface after updates
 - once detached, occlusion recovery is irrelevant because there is no live host left to present the surface
+
+The newly observed Canvas-entry failure sharpens the theory further:
+
+- the canvas host can successfully take ownership of the selected surface
+- the previous terminal host may still run a defensive `ensureSurfaceAttached()` while it is already leaving the window hierarchy
+- because that reattach path only checked "not attached to my document view", it could steal the surface back from the live canvas host
+- once the stale terminal host deinitializes, AppKit removes that stolen surface again, leaving Canvas blank with no active host
 
 What now looks less likely:
 
@@ -203,6 +216,9 @@ Latest reduced repro:
 - two tabs only
 - selected tab surface detached after briefly reaching terminal-sized bounds
 - no reattach log observed afterward
+- reverse repro also confirmed: entering Canvas can blank the selected card immediately
+- in the failing entry log, `hostReattach wrapper=<terminal>` fires after `host=canvas` is already attached and visible
+- the stale terminal wrapper later deinitializes and the surface ends up detached (`attached=false window=false`)
 
 Current tactical response:
 
@@ -210,6 +226,7 @@ Current tactical response:
 - add host wrapper diagnostics to correlate `surface ↔ wrapper ↔ canvas/terminal`
 - attempt a narrow fix: terminal host reattaches the surface if updates/layout find it missing
 - add a detach-time safety net so a just-detached surface asks its last terminal host to try reattachment on the next main-loop turn
+- refine that narrow fix so terminal reattach only runs after the surface has actually left the view tree; it must not steal a surface currently owned by Canvas
 
 Expected interpretation of the next repro:
 

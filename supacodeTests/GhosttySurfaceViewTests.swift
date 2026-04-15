@@ -218,7 +218,7 @@ struct GhosttySurfaceViewTests {
     #expect(appliedValues == [true, true])
   }
 
-  @Test func terminalHostReattachesDetachedSurface() {
+  @Test func terminalHostReattachesSurfaceOnlyAfterItLeavesTheViewTree() {
     let runtime = GhosttyRuntime()
     let surfaceView = GhosttySurfaceView(
       runtime: runtime,
@@ -236,8 +236,38 @@ struct GhosttySurfaceViewTests {
 
     terminalHost.ensureSurfaceAttached(requiresLiveHost: false)
 
+    #expect(!terminalHost.isSurfaceAttachedToDocumentView)
+    #expect(surfaceView.superview === foreignHost)
+
+    surfaceView.removeFromSuperview()
+    #expect(surfaceView.superview == nil)
+
+    terminalHost.ensureSurfaceAttached(requiresLiveHost: false)
+
     #expect(terminalHost.isSurfaceAttachedToDocumentView)
     #expect(surfaceView.scrollWrapper === terminalHost)
+  }
+
+  @Test func terminalHostDoesNotStealSurfaceFromCanvasHost() {
+    let runtime = GhosttyRuntime()
+    let surfaceView = GhosttySurfaceView(
+      runtime: runtime,
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    let terminalHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .terminal)
+    let canvasHost = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: .canvas)
+
+    #expect(!terminalHost.isSurfaceAttachedToDocumentView)
+    #expect(canvasHost.isSurfaceAttachedToDocumentView)
+    #expect(surfaceView.scrollWrapper === canvasHost)
+
+    terminalHost.ensureSurfaceAttached(requiresLiveHost: false)
+
+    #expect(!terminalHost.isSurfaceAttachedToDocumentView)
+    #expect(canvasHost.isSurfaceAttachedToDocumentView)
+    #expect(surfaceView.scrollWrapper === canvasHost)
   }
 
   @Test func canvasHostDoesNotStealDetachedSurfaceBack() {

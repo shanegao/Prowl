@@ -2518,6 +2518,7 @@ final class GhosttySurfaceScrollView: NSView {
       guard superview != nil || window != nil else { return }
     }
     guard !isSurfaceAttachedToDocumentView else { return }
+    guard surfaceView.superview == nil else { return }
     surfaceHostLogger.info(
       "[CanvasExit] hostReattach wrapper=\(debugID) host=\(hostKind.rawValue) "
         + "surface=\(surfaceView.debugIdentifierForLogging) "
