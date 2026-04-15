@@ -2518,6 +2518,7 @@ final class GhosttySurfaceScrollView: NSView {
       guard superview != nil || window != nil else { return }
     }
     guard !isSurfaceAttachedToDocumentView else { return }
+    // Only adopt an orphaned surface; never steal it from a live host such as Canvas.
     guard surfaceView.superview == nil else { return }
     surfaceHostLogger.info(
       "[CanvasExit] hostReattach wrapper=\(debugID) host=\(hostKind.rawValue) "
