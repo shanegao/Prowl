@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.4.15](https://github.com/onevcat/Prowl/releases/tag/v2026.4.15)
+
+## New
+
+- **Fetch before worktree creation**: Prowl can now run `git fetch` against the relevant remote before creating a new worktree. The option is on by default and can be toggled in Settings > Worktree. Fetch errors are logged but do not block worktree creation.
+- **Merged worktree action**: The "auto-archive on merge" toggle has been replaced with a three-option picker — Do Nothing, Archive, or Delete — controlling what happens to a worktree when its pull request is merged. Find it in Settings > Worktree. Existing configurations migrate automatically.
+- **Global defaults for copy flags and merge strategy**: The "copy ignored files", "copy untracked files", and "pull request merge strategy" settings can now be configured once as global defaults in Settings, with optional per-repository overrides. Repository-level pickers show the current global value when no override is set.
+
+## Fixed
+
+- Terminals could appear blank after exiting Canvas view due to the surface losing its host attachment. Prowl now detects and recovers from this state automatically.
+
 ## [2026.4.11](https://github.com/onevcat/Prowl/releases/tag/v2026.4.11)
 
 This release focuses on worktree management improvements and quality-of-life fixes.
