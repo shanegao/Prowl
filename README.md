@@ -31,7 +31,7 @@ You're not just typing commands anymore — you're orchestrating Claude Code, Co
 
 ### 🖼 Canvas — every agent, at a glance
 
-<img align="right" width="360" src="https://prowl.onev.cat/images/feature-canvas.png" alt="Canvas view of multiple live agent terminals">
+<img align="right" width="360" src="https://prowl.onev.cat/images/feature-canvas.webp" alt="Canvas view of multiple live agent terminals">
 
 Three agents running, one just finished — _where_? Canvas gives you a bird's-eye view where every card is a **live, interactive terminal**, not a screenshot. Finished tasks light up the moment they complete, and you can broadcast a single command to every agent at once.
 
