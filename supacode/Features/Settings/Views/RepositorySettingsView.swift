@@ -716,6 +716,7 @@ struct RepositorySettingsView: View {
       Text("Choose where this command runs and edit the script used by this repository custom command.")
         .font(.caption)
         .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
 
       Picker("Execution", selection: command.execution) {
         Text("New Tab")
@@ -748,10 +749,12 @@ struct RepositorySettingsView: View {
       Text(scriptDescription(for: command.wrappedValue.execution))
         .font(.caption)
         .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
 
       if command.wrappedValue.execution.supportsCloseOnSuccess {
         Toggle("Close on success", isOn: command.closeOnSuccess)
           .help("Automatically closes the tab or split when the command exits with code 0.")
+          .toggleStyle(.checkbox)
       }
     }
     .padding(12)
@@ -925,6 +928,8 @@ struct RepositorySettingsView: View {
           command.systemImage = updatedCommand.systemImage
           command.command = updatedCommand.command
           command.execution = updatedCommand.execution
+          command.splitDirection = updatedCommand.splitDirection
+          command.closeOnSuccess = updatedCommand.closeOnSuccess
           command.shortcut = updatedCommand.shortcut
         }
       }
