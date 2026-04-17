@@ -627,6 +627,7 @@ struct AppFeature {
         }
         let command = customCommand.command
         let closeOnSuccess = customCommand.closeOnSuccess
+        let commandName = customCommand.resolvedTitle
         switch customCommand.execution {
         case .shellScript:
           return .run { _ in
@@ -635,7 +636,8 @@ struct AppFeature {
                 worktree,
                 input: command,
                 runSetupScriptIfNew: false,
-                autoCloseOnSuccess: closeOnSuccess
+                autoCloseOnSuccess: closeOnSuccess,
+                customCommandName: commandName
               )
             )
           }
@@ -647,7 +649,8 @@ struct AppFeature {
                 worktree,
                 direction: direction,
                 input: command,
-                autoCloseOnSuccess: closeOnSuccess
+                autoCloseOnSuccess: closeOnSuccess,
+                customCommandName: commandName
               )
             )
           }
@@ -914,6 +917,10 @@ struct AppFeature {
       case .commandPalette:
         return .none
 
+      case .terminalEvent(.customCommandSucceeded(_, let name, let durationMs)):
+        let message = "\(name) succeeded in \(formatCustomCommandDuration(durationMs))"
+        return .send(.repositories(.showToast(.success(message))))
+
       case .terminalEvent(.notificationReceived(let worktreeID, let title, let body)):
         var effects: [Effect<Action>] = [
           .send(.repositories(.worktreeOrdering(.worktreeNotificationReceived(worktreeID))))
@@ -1008,4 +1015,18 @@ struct AppFeature {
       CommandPaletteFeature()
     }
   }
+}
+
+// Renders Custom Command run duration for status toasts.
+// Sub-second runs show ms; short runs show one decimal; long runs reuse the
+// whole-seconds formatter used by other command-finished notifications.
+func formatCustomCommandDuration(_ durationMs: Int) -> String {
+  if durationMs < 1_000 {
+    return "\(max(durationMs, 0))ms"
+  }
+  let seconds = Double(durationMs) / 1_000.0
+  if seconds < 10 {
+    return String(format: "%.1fs", seconds)
+  }
+  return WorktreeTerminalState.formatDuration(Int(seconds))
 }

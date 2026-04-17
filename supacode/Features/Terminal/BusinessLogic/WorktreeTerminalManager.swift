@@ -52,22 +52,25 @@ final class WorktreeTerminalManager {
     switch command {
     case .createTab(let worktree, let runSetupScriptIfNew):
       Task { createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
-    case .createTabWithInput(let worktree, let input, let runSetupScriptIfNew, let autoCloseOnSuccess):
+    case .createTabWithInput(
+      let worktree, let input, let runSetupScriptIfNew, let autoCloseOnSuccess, let customCommandName):
       Task {
         createTabAsync(
           in: worktree,
           runSetupScriptIfNew: runSetupScriptIfNew,
           initialInput: input,
-          autoCloseOnSuccess: autoCloseOnSuccess
+          autoCloseOnSuccess: autoCloseOnSuccess,
+          customCommandName: customCommandName
         )
       }
-    case .createSplitWithInput(let worktree, let direction, let input, let autoCloseOnSuccess):
+    case .createSplitWithInput(let worktree, let direction, let input, let autoCloseOnSuccess, let customCommandName):
       Task {
         createSplitAsync(
           in: worktree,
           direction: direction,
           initialInput: input,
-          autoCloseOnSuccess: autoCloseOnSuccess
+          autoCloseOnSuccess: autoCloseOnSuccess,
+          customCommandName: customCommandName
         )
       }
     case .createTabInDirectory(let worktree, let directory):
@@ -247,6 +250,9 @@ final class WorktreeTerminalManager {
     state.onFontSizeAdjusted = { [weak self] in
       self?.syncPreferredFontSize(from: worktree.id)
     }
+    state.onCustomCommandSucceeded = { [weak self] name, durationMs in
+      self?.emit(.customCommandSucceeded(worktreeID: worktree.id, name: name, durationMs: durationMs))
+    }
     states[worktree.id] = state
     terminalLogger.info("Created terminal state for worktree \(worktree.id)")
     return state
@@ -257,7 +263,8 @@ final class WorktreeTerminalManager {
     runSetupScriptIfNew: Bool,
     initialInput: String? = nil,
     workingDirectory: URL? = nil,
-    autoCloseOnSuccess: Bool = false
+    autoCloseOnSuccess: Bool = false,
+    customCommandName: String? = nil
   ) {
     let state = state(for: worktree) { runSetupScriptIfNew }
     let setupScript: String?
@@ -275,8 +282,13 @@ final class WorktreeTerminalManager {
       initialInput: initialInput,
       workingDirectoryOverride: workingDirectory
     )
-    if autoCloseOnSuccess, let tabId, let surfaceId = state.focusedSurfaceId(in: tabId) {
-      state.markSurfaceForAutoClose(surfaceId)
+    if let tabId, let surfaceId = state.focusedSurfaceId(in: tabId) {
+      if autoCloseOnSuccess {
+        state.markSurfaceForAutoClose(surfaceId)
+      }
+      if let customCommandName {
+        state.markSurfaceForCustomCommand(surfaceId, name: customCommandName)
+      }
     }
   }
 
@@ -284,7 +296,8 @@ final class WorktreeTerminalManager {
     in worktree: Worktree,
     direction: UserCustomSplitDirection,
     initialInput: String,
-    autoCloseOnSuccess: Bool
+    autoCloseOnSuccess: Bool,
+    customCommandName: String? = nil
   ) {
     let state = state(for: worktree)
     guard
@@ -297,6 +310,9 @@ final class WorktreeTerminalManager {
     }
     if autoCloseOnSuccess {
       state.markSurfaceForAutoClose(newSurfaceId)
+    }
+    if let customCommandName {
+      state.markSurfaceForCustomCommand(newSurfaceId, name: customCommandName)
     }
   }
 

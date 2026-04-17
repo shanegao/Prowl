@@ -45,6 +45,9 @@ final class WorktreeTerminalState {
   /// Surfaces that should auto-close on the next `command_finished` event with exit code 0.
   /// Populated by `markSurfaceForAutoClose` and consumed (one-shot) in `handleCommandFinished`.
   private var autoCloseSurfaceIds: Set<UUID> = []
+  /// Surfaces running a tracked Custom Command. The stored name is surfaced as a success
+  /// toast when the command exits with code 0. One-shot: removed on the first finish event.
+  private var pendingCustomCommands: [UUID: String] = [:]
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
@@ -64,6 +67,9 @@ final class WorktreeTerminalState {
   var onCommandPaletteToggle: (() -> Void)?
   var onSetupScriptConsumed: (() -> Void)?
   var onFontSizeAdjusted: (() -> Void)?
+  /// Emitted when a tracked Custom Command finishes with exit code 0.
+  /// Payload carries the user-facing command name and run duration in milliseconds.
+  var onCustomCommandSucceeded: ((String, Int) -> Void)?
 
   init(
     runtime: GhosttyRuntime,
@@ -536,6 +542,12 @@ final class WorktreeTerminalState {
     autoCloseSurfaceIds.contains(surfaceId)
   }
 
+  /// Records the user-facing Custom Command name associated with a freshly created surface,
+  /// so a success toast can be emitted when that surface's next command exits with code 0.
+  func markSurfaceForCustomCommand(_ surfaceId: UUID, name: String) {
+    pendingCustomCommands[surfaceId] = name
+  }
+
   // Short delay lets the user see the final output before the pane disappears.
   private static let autoCloseDelay: Duration = .milliseconds(800)
 
@@ -677,6 +689,7 @@ final class WorktreeTerminalState {
     focusedSurfaceIdByTab.removeAll()
     tabIsRunningById.removeAll()
     autoCloseSurfaceIds.removeAll()
+    pendingCustomCommands.removeAll()
     setRunScriptTabId(nil)
     tabManager.closeAll()
   }
@@ -1304,6 +1317,12 @@ final class WorktreeTerminalState {
       continuation.finish()
     }
 
+    // Custom command success toast. One-shot: removed regardless of outcome.
+    if let commandName = pendingCustomCommands.removeValue(forKey: surfaceId), exitCode == 0 {
+      let durationMs = Int(durationNs / 1_000_000)
+      onCustomCommandSucceeded?(commandName, durationMs)
+    }
+
     // Auto-close on success (exit 0). One-shot: the id is removed regardless of outcome.
     if autoCloseSurfaceIds.remove(surfaceId) != nil {
       if exitCode == 0, surfaces[surfaceId] != nil {
@@ -1355,6 +1374,7 @@ final class WorktreeTerminalState {
       surface.closeSurface()
       surfaces.removeValue(forKey: surface.id)
       autoCloseSurfaceIds.remove(surface.id)
+      pendingCustomCommands.removeValue(forKey: surface.id)
     }
     focusedSurfaceIdByTab.removeValue(forKey: tabId)
     tabIsRunningById.removeValue(forKey: tabId)
@@ -1497,12 +1517,14 @@ final class WorktreeTerminalState {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
       autoCloseSurfaceIds.remove(view.id)
+      pendingCustomCommands.removeValue(forKey: view.id)
       return
     }
     guard let node = tree.find(id: view.id) else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
       autoCloseSurfaceIds.remove(view.id)
+      pendingCustomCommands.removeValue(forKey: view.id)
       return
     }
     let nextSurface =
@@ -1513,6 +1535,7 @@ final class WorktreeTerminalState {
     view.closeSurface()
     surfaces.removeValue(forKey: view.id)
     autoCloseSurfaceIds.remove(view.id)
+    pendingCustomCommands.removeValue(forKey: view.id)
     if newTree.isEmpty {
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)

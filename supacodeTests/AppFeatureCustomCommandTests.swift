@@ -37,7 +37,13 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .createTabWithInput(worktree, input: "swift test", runSetupScriptIfNew: false, autoCloseOnSuccess: false)
+        .createTabWithInput(
+          worktree,
+          input: "swift test",
+          runSetupScriptIfNew: false,
+          autoCloseOnSuccess: false,
+          customCommandName: "Test"
+        ),
       ],
     )
   }
@@ -108,7 +114,13 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .createSplitWithInput(worktree, direction: .down, input: "tail -f logs", autoCloseOnSuccess: false)
+        .createSplitWithInput(
+          worktree,
+          direction: .down,
+          input: "tail -f logs",
+          autoCloseOnSuccess: false,
+          customCommandName: "Tail"
+        ),
       ],
     )
   }
@@ -154,8 +166,20 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .createTabWithInput(worktree, input: "make build", runSetupScriptIfNew: false, autoCloseOnSuccess: true),
-        .createSplitWithInput(worktree, direction: .right, input: "make lint", autoCloseOnSuccess: true),
+        .createTabWithInput(
+          worktree,
+          input: "make build",
+          runSetupScriptIfNew: false,
+          autoCloseOnSuccess: true,
+          customCommandName: "Build"
+        ),
+        .createSplitWithInput(
+          worktree,
+          direction: .right,
+          input: "make lint",
+          autoCloseOnSuccess: true,
+          customCommandName: "Lint"
+        ),
       ],
     )
   }
@@ -257,7 +281,13 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .createTabWithInput(worktree, input: "echo five", runSetupScriptIfNew: false, autoCloseOnSuccess: false)
+        .createTabWithInput(
+          worktree,
+          input: "echo five",
+          runSetupScriptIfNew: false,
+          autoCloseOnSuccess: false,
+          customCommandName: "Five"
+        ),
       ],
     )
   }

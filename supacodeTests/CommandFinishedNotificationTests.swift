@@ -199,6 +199,61 @@ struct CommandFinishedNotificationTests {
     #expect(state.isMarkedForAutoClose(otherSurfaceId))
   }
 
+  // MARK: - Custom command success toast
+
+  @Test func customCommandSuccessEmitsNameAndDuration() {
+    let state = makeState()
+    var received: [(String, Int)] = []
+    state.onCustomCommandSucceeded = { name, durationMs in
+      received.append((name, durationMs))
+    }
+    state.markSurfaceForCustomCommand(surfaceId, name: "Build")
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 1_500_000_000, surfaceId: surfaceId)
+
+    #expect(received.count == 1)
+    #expect(received.first?.0 == "Build")
+    #expect(received.first?.1 == 1_500)
+  }
+
+  @Test func customCommandFailureSkipsSuccessEvent() {
+    let state = makeState()
+    var received: [(String, Int)] = []
+    state.onCustomCommandSucceeded = { name, durationMs in
+      received.append((name, durationMs))
+    }
+    state.markSurfaceForCustomCommand(surfaceId, name: "Build")
+
+    state.handleCommandFinished(exitCode: 2, durationNs: 5_000_000_000, surfaceId: surfaceId)
+
+    #expect(received.isEmpty)
+  }
+
+  @Test func customCommandMarkIsOneShot() {
+    let state = makeState()
+    var received: [(String, Int)] = []
+    state.onCustomCommandSucceeded = { name, durationMs in
+      received.append((name, durationMs))
+    }
+    state.markSurfaceForCustomCommand(surfaceId, name: "Build")
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 1_000_000_000, surfaceId: surfaceId)
+    state.handleCommandFinished(exitCode: 0, durationNs: 2_000_000_000, surfaceId: surfaceId)
+
+    #expect(received.count == 1)
+  }
+
+  @Test func customCommandDurationFormatter() {
+    #expect(formatCustomCommandDuration(0) == "0ms")
+    #expect(formatCustomCommandDuration(250) == "250ms")
+    #expect(formatCustomCommandDuration(999) == "999ms")
+    #expect(formatCustomCommandDuration(1_000) == "1.0s")
+    #expect(formatCustomCommandDuration(1_540) == "1.5s")
+    #expect(formatCustomCommandDuration(9_900) == "9.9s")
+    #expect(formatCustomCommandDuration(12_000) == "12s")
+    #expect(formatCustomCommandDuration(75_000) == "1m 15s")
+  }
+
   // MARK: - Helpers
 
   private func makeState(threshold: Int = 10) -> WorktreeTerminalState {
