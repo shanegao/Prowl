@@ -42,6 +42,12 @@ final class WorktreeTerminalState {
   private var commandFinishedNotificationThreshold = 10
   private var lastKeyInputTimeBySurface: [UUID: ContinuousClock.Instant] = [:]
   private var commandFinishedWaiters: [UUID: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation] = [:]
+  /// Surfaces that should auto-close on the next `command_finished` event with exit code 0.
+  /// Populated by `markSurfaceForAutoClose` and consumed (one-shot) in `handleCommandFinished`.
+  private var autoCloseSurfaceIds: Set<UUID> = []
+  /// Surfaces running a tracked Custom Command. The stored name is surfaced as a success
+  /// toast when the command exits with code 0. One-shot: removed on the first finish event.
+  private var pendingCustomCommands: [UUID: String] = [:]
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
@@ -61,6 +67,9 @@ final class WorktreeTerminalState {
   var onCommandPaletteToggle: (() -> Void)?
   var onSetupScriptConsumed: (() -> Void)?
   var onFontSizeAdjusted: (() -> Void)?
+  /// Emitted when a tracked Custom Command finishes with exit code 0.
+  /// Payload carries the user-facing command name and run duration in milliseconds.
+  var onCustomCommandSucceeded: ((String, Int) -> Void)?
 
   init(
     runtime: GhosttyRuntime,
@@ -479,6 +488,78 @@ final class WorktreeTerminalState {
     return tree
   }
 
+  /// Splits the currently focused surface and seeds the new pane with `initialInput`.
+  /// Returns the new surface id, or nil if the split could not be created.
+  @discardableResult
+  func createSplitOnFocusedSurface(
+    direction: UserCustomSplitDirection,
+    initialInput: String
+  ) -> UUID? {
+    guard let tabId = tabManager.selectedTabId,
+      let parentSurfaceId = focusedSurfaceIdByTab[tabId],
+      let tree = trees[tabId],
+      let parentSurface = surfaces[parentSurfaceId]
+    else {
+      return nil
+    }
+    let newSurface = createSurface(
+      tabId: tabId,
+      initialInput: runScriptInput(initialInput),
+      inheritingFromSurfaceId: parentSurfaceId,
+      context: GHOSTTY_SURFACE_CONTEXT_SPLIT
+    )
+    do {
+      let newTree = try tree.inserting(
+        view: newSurface,
+        at: parentSurface,
+        direction: mapUserSplitDirection(direction)
+      )
+      updateTree(newTree, for: tabId)
+      if isCanvasManaged {
+        newSurface.setOcclusion(true)
+      }
+      focusSurface(newSurface, in: tabId)
+      return newSurface.id
+    } catch {
+      newSurface.closeSurface()
+      surfaces.removeValue(forKey: newSurface.id)
+      return nil
+    }
+  }
+
+  /// Returns the focused surface id for a given tab, if any.
+  func focusedSurfaceId(in tabId: TerminalTabID) -> UUID? {
+    focusedSurfaceIdByTab[tabId]
+  }
+
+  /// Marks a surface so that its next successful `command_finished` event (exit 0)
+  /// will trigger a one-shot close of that surface.
+  func markSurfaceForAutoClose(_ surfaceId: UUID) {
+    autoCloseSurfaceIds.insert(surfaceId)
+  }
+
+  func isMarkedForAutoClose(_ surfaceId: UUID) -> Bool {
+    autoCloseSurfaceIds.contains(surfaceId)
+  }
+
+  /// Records the user-facing Custom Command name associated with a freshly created surface,
+  /// so a success toast can be emitted when that surface's next command exits with code 0.
+  func markSurfaceForCustomCommand(_ surfaceId: UUID, name: String) {
+    pendingCustomCommands[surfaceId] = name
+  }
+
+  // Short delay lets the user see the final output before the pane disappears.
+  private static let autoCloseDelay: Duration = .milliseconds(800)
+
+  private func scheduleAutoClose(surfaceId: UUID) {
+    Task { [weak self] in
+      try? await Task.sleep(for: Self.autoCloseDelay)
+      guard let self else { return }
+      guard let view = self.surfaces[surfaceId] else { return }
+      self.handleCloseRequest(for: view, processAlive: false)
+    }
+  }
+
   func performSplitAction(_ action: GhosttySplitAction, for surfaceId: UUID) -> Bool {
     guard let tabId = tabId(containing: surfaceId), var tree = trees[tabId] else {
       return false
@@ -607,6 +688,8 @@ final class WorktreeTerminalState {
     trees.removeAll()
     focusedSurfaceIdByTab.removeAll()
     tabIsRunningById.removeAll()
+    autoCloseSurfaceIds.removeAll()
+    pendingCustomCommands.removeAll()
     setRunScriptTabId(nil)
     tabManager.closeAll()
   }
@@ -820,11 +903,11 @@ final class WorktreeTerminalState {
     return formatCommandInput(script)
   }
 
+  // Env vars are injected into the surface's shell process via
+  // `GhosttySurfaceView(environment:)`, so scripts no longer need a shell
+  // export prefix.
   private func formatCommandInput(_ script: String) -> String? {
-    makeCommandInput(
-      script: script,
-      environmentExportPrefix: worktree.scriptEnvironmentExportPrefix
-    )
+    makeCommandInput(script: script)
   }
 
   private func runScriptInput(_ script: String) -> String? {
@@ -836,10 +919,7 @@ final class WorktreeTerminalState {
   // Without this, the interactive shell stays alive after the script finishes
   // and GHOSTTY_ACTION_SHOW_CHILD_EXITED never fires for completion detection.
   private func blockingScriptInput(_ script: String) -> String? {
-    makeBlockingScriptInput(
-      script: script,
-      environmentExportPrefix: worktree.scriptEnvironmentExportPrefix
-    )
+    makeBlockingScriptInput(script: script)
   }
 
   private func setRunScriptTabId(_ tabId: TerminalTabID?) {
@@ -869,7 +949,8 @@ final class WorktreeTerminalState {
       workingDirectory: workingDirectoryOverride ?? inherited.workingDirectory ?? worktree.workingDirectory,
       initialInput: initialInput,
       fontSize: resolvedFontSize,
-      context: context
+      context: context,
+      environment: worktree.scriptEnvironment
     )
     // Sending a no-op font size action marks the Ghostty surface as
     // "font_size_adjusted", which prevents config reloads (triggered by
@@ -1236,6 +1317,20 @@ final class WorktreeTerminalState {
       continuation.finish()
     }
 
+    // Custom command success toast. One-shot: removed regardless of outcome.
+    if let commandName = pendingCustomCommands.removeValue(forKey: surfaceId), exitCode == 0 {
+      let durationMs = Int(durationNs / 1_000_000)
+      onCustomCommandSucceeded?(commandName, durationMs)
+    }
+
+    // Auto-close on success (exit 0). One-shot: the id is removed regardless of outcome.
+    if autoCloseSurfaceIds.remove(surfaceId) != nil {
+      if exitCode == 0, surfaces[surfaceId] != nil {
+        scheduleAutoClose(surfaceId: surfaceId)
+        return
+      }
+    }
+
     guard commandFinishedNotificationEnabled else { return }
     let durationSeconds = Int(durationNs / 1_000_000_000)
     guard durationSeconds >= commandFinishedNotificationThreshold else { return }
@@ -1278,6 +1373,8 @@ final class WorktreeTerminalState {
     for surface in tree.leaves() {
       surface.closeSurface()
       surfaces.removeValue(forKey: surface.id)
+      autoCloseSurfaceIds.remove(surface.id)
+      pendingCustomCommands.removeValue(forKey: surface.id)
     }
     focusedSurfaceIdByTab.removeValue(forKey: tabId)
     tabIsRunningById.removeValue(forKey: tabId)
@@ -1365,6 +1462,21 @@ final class WorktreeTerminalState {
     }
   }
 
+  private func mapUserSplitDirection(_ direction: UserCustomSplitDirection)
+    -> SplitTree<GhosttySurfaceView>.NewDirection
+  {
+    switch direction {
+    case .left:
+      return .left
+    case .right:
+      return .right
+    case .top:
+      return .top
+    case .down:
+      return .down
+    }
+  }
+
   private func mapFocusDirection(_ direction: GhosttySplitAction.FocusDirection)
     -> SplitTree<GhosttySurfaceView>.FocusDirection
   {
@@ -1404,11 +1516,15 @@ final class WorktreeTerminalState {
     guard let tabId = tabId(containing: view.id), let tree = trees[tabId] else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      autoCloseSurfaceIds.remove(view.id)
+      pendingCustomCommands.removeValue(forKey: view.id)
       return
     }
     guard let node = tree.find(id: view.id) else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      autoCloseSurfaceIds.remove(view.id)
+      pendingCustomCommands.removeValue(forKey: view.id)
       return
     }
     let nextSurface =
@@ -1418,6 +1534,8 @@ final class WorktreeTerminalState {
     let newTree = tree.removing(node)
     view.closeSurface()
     surfaces.removeValue(forKey: view.id)
+    autoCloseSurfaceIds.remove(view.id)
+    pendingCustomCommands.removeValue(forKey: view.id)
     if newTree.isEmpty {
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)
@@ -1611,26 +1729,13 @@ extension WorktreeTerminalState {
   }
 }
 
-nonisolated func makeCommandInput(
-  script: String,
-  environmentExportPrefix: String
-) -> String? {
+nonisolated func makeCommandInput(script: String) -> String? {
   let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
   guard !trimmed.isEmpty else { return nil }
-  return environmentExportPrefix + trimmed + "\n"
+  return trimmed + "\n"
 }
 
-nonisolated func makeBlockingScriptInput(
-  script: String,
-  environmentExportPrefix: String
-) -> String? {
-  guard
-    let input = makeCommandInput(
-      script: script,
-      environmentExportPrefix: environmentExportPrefix
-    )
-  else {
-    return nil
-  }
+nonisolated func makeBlockingScriptInput(script: String) -> String? {
+  guard let input = makeCommandInput(script: script) else { return nil }
   return input + "exit\n"
 }

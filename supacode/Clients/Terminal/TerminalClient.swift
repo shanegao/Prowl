@@ -8,7 +8,20 @@ struct TerminalClient {
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
-    case createTabWithInput(Worktree, input: String, runSetupScriptIfNew: Bool)
+    case createTabWithInput(
+      Worktree,
+      input: String,
+      runSetupScriptIfNew: Bool,
+      autoCloseOnSuccess: Bool,
+      customCommandName: String? = nil
+    )
+    case createSplitWithInput(
+      Worktree,
+      direction: UserCustomSplitDirection,
+      input: String,
+      autoCloseOnSuccess: Bool,
+      customCommandName: String? = nil
+    )
     case createTabInDirectory(Worktree, directory: URL)
     case ensureInitialTab(Worktree, runSetupScriptIfNew: Bool, focusing: Bool)
     case runScript(Worktree, script: String)
@@ -32,6 +45,7 @@ struct TerminalClient {
   }
 
   enum Event: Equatable {
+    case customCommandSucceeded(worktreeID: Worktree.ID, name: String, durationMs: Int)
     case notificationReceived(worktreeID: Worktree.ID, title: String, body: String)
     case notificationIndicatorChanged(count: Int)
     case tabCreated(worktreeID: Worktree.ID)
