@@ -41,6 +41,23 @@ final class TerminalTabManager {
     tabs[index].isTitleLocked = false
   }
 
+  func updateIcon(_ id: TerminalTabID, icon: String?) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    guard !tabs[index].isIconLocked else { return }
+    tabs[index].icon = icon
+  }
+
+  func overrideIcon(_ id: TerminalTabID, icon: String) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    tabs[index].icon = icon
+    tabs[index].isIconLocked = true
+  }
+
+  func clearIconOverride(_ id: TerminalTabID) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    tabs[index].isIconLocked = false
+  }
+
   func updateDirty(_ id: TerminalTabID, isDirty: Bool) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
     tabs[index].isDirty = isDirty

@@ -36,6 +36,8 @@ final class WorktreeTerminalState {
   /// `syncFocusIfNeeded` skips `applySurfaceActivity` to avoid overriding
   /// Canvas-set occlusion with stale normal-mode window activity values.
   var isCanvasManaged = false
+  /// Tab whose icon picker should be presented. `nil` hides the picker.
+  var iconPickerTabId: TerminalTabID?
   var notifications: [WorktreeTerminalNotification] = []
   var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
@@ -719,12 +721,15 @@ final class WorktreeTerminalState {
         return nil
       }
       // Skip title/icon for blocking-script tabs as they are transient.
+      // Persist the icon only when the user has explicitly overridden it; otherwise
+      // restore should pick up the current default ("terminal").
       let isBlockingScriptTab = tab.id == runScriptTabId
+      let snapshotIcon: String? = (isBlockingScriptTab || !tab.isIconLocked) ? nil : tab.icon
       snapshotTabs.append(
         TerminalLayoutSnapshotPayload.SnapshotTab(
           tabID: tab.id.rawValue.uuidString,
           title: isBlockingScriptTab ? nil : tab.title,
-          icon: isBlockingScriptTab ? nil : tab.icon,
+          icon: snapshotIcon,
           splitRoot: splitRoot
         )
       )
@@ -812,7 +817,8 @@ final class WorktreeTerminalState {
           id: entry.tabID,
           title: entry.snapshotTab.title ?? "\(worktree.name) \(index + 1)",
           icon: entry.snapshotTab.icon ?? "terminal",
-          isTitleLocked: entry.snapshotTab.title != nil
+          isTitleLocked: entry.snapshotTab.title != nil,
+          isIconLocked: entry.snapshotTab.icon != nil
         )
       )
     }
@@ -1124,6 +1130,36 @@ final class WorktreeTerminalState {
     let surfaceWindow = focusedSurfaceIdByTab[tabId].flatMap { surfaces[$0]?.window }
     guard let window = surfaceWindow ?? NSApp.keyWindow else { return }
     promptTabTitle(for: tabId, in: window)
+  }
+
+  func presentIconPicker(for tabId: TerminalTabID) {
+    guard tabManager.tabs.contains(where: { $0.id == tabId }) else { return }
+    iconPickerTabId = tabId
+  }
+
+  func presentIconPickerForFocusedTab() {
+    guard let tabId = tabManager.selectedTabId else { return }
+    presentIconPicker(for: tabId)
+  }
+
+  func dismissIconPicker() {
+    iconPickerTabId = nil
+  }
+
+  /// Default SF Symbol used for a tab when the user has not set an override.
+  func defaultIcon(for tabId: TerminalTabID) -> String {
+    tabId == runScriptTabId ? "play.fill" : "terminal"
+  }
+
+  /// Apply an icon change for `tabId`. Pass `nil` to clear the override and
+  /// restore the tab's default icon.
+  func applyIconChange(_ tabId: TerminalTabID, icon newIcon: String?) {
+    if let newIcon, !newIcon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      tabManager.overrideIcon(tabId, icon: newIcon)
+    } else {
+      tabManager.clearIconOverride(tabId)
+      tabManager.updateIcon(tabId, icon: defaultIcon(for: tabId))
+    }
   }
 
   private func promptTabTitle(for tabId: TerminalTabID, in window: NSWindow) {

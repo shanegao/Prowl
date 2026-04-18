@@ -42,6 +42,7 @@ struct TerminalClient {
     case setSelectedWorktreeID(Worktree.ID?)
     case saveLayoutSnapshot
     case restoreLayoutSnapshot(worktrees: [Worktree])
+    case presentTabIconPicker(Worktree)
   }
 
   enum Event: Equatable {

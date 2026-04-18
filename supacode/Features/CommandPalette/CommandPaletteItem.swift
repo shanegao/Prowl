@@ -41,6 +41,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case rerunFailedJobs(Worktree.ID)
     case openFailingCheckDetails(Worktree.ID)
     case installCLI
+    case changeFocusedTabIcon(Worktree.ID)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -61,7 +62,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs,
-      .openFailingCheckDetails:
+      .openFailingCheckDetails,
+      .changeFocusedTabIcon:
       return true
     case .worktreeSelect, .removeWorktree, .archiveWorktree:
       return false
@@ -89,7 +91,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .openFailingCheckDetails,
       .worktreeSelect,
       .removeWorktree,
-      .archiveWorktree:
+      .archiveWorktree,
+      .changeFocusedTabIcon:
       return false
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound:
@@ -125,7 +128,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .installCLI,
       .worktreeSelect,
       .removeWorktree,
-      .archiveWorktree:
+      .archiveWorktree,
+      .changeFocusedTabIcon:
       return nil
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound:
