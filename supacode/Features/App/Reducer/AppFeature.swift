@@ -156,6 +156,7 @@ struct AppFeature {
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
+          .send(.updates(.task)),
           .run { _ in
             await MainActor.run {
               NSApplication.shared.dockTile.badgeLabel = nil
@@ -912,6 +913,9 @@ struct AppFeature {
       #if DEBUG
         case .commandPalette(.delegate(.debugTestToast(let toast))):
           return .send(.repositories(.showToast(toast)))
+
+        case .commandPalette(.delegate(.debugSimulateUpdateFound)):
+          return .send(.updates(.debugSimulateUpdateFound))
       #endif
 
       case .commandPalette:

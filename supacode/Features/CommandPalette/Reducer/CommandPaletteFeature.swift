@@ -52,6 +52,7 @@ struct CommandPaletteFeature {
     case installCLI
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
+      case debugSimulateUpdateFound
     #endif
   }
 
@@ -436,6 +437,12 @@ private func makeClosePullRequestItem(
         subtitle: "Simulates a success toast",
         kind: .debugTestToast(.success("Pull request merged"))
       ),
+      CommandPaletteItem(
+        id: "debug.update.simulate-found",
+        title: "[Debug] Simulate Update Found",
+        subtitle: "Shows the toolbar update badge without querying Sparkle",
+        kind: .debugSimulateUpdateFound
+      ),
     ]
   }
 #endif
@@ -584,6 +591,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
   #if DEBUG
     case .debugTestToast(let toast):
       return .debugTestToast(toast)
+    case .debugSimulateUpdateFound:
+      return .debugSimulateUpdateFound
   #endif
   }
 }
@@ -621,7 +630,7 @@ private func pullRequestDelegateAction(
     .ghosttyCommand:
     return nil
   #if DEBUG
-    case .debugTestToast:
+    case .debugTestToast, .debugSimulateUpdateFound:
       return nil
   #endif
   }
