@@ -27,6 +27,9 @@ struct WorktreeTerminalTabsView: View {
         changeTitle: { tabId in
           state.promptChangeTabTitle(tabId)
         },
+        changeIcon: { tabId in
+          state.presentIconPicker(for: tabId)
+        },
         closeTab: { tabId in
           state.closeTab(tabId)
         },
@@ -49,6 +52,25 @@ struct WorktreeTerminalTabsView: View {
       } else {
         EmptyTerminalPaneView(message: "No terminals open")
       }
+    }
+    .sheet(
+      item: Binding(
+        get: { state.iconPickerTabId },
+        set: { state.iconPickerTabId = $0 }
+      )
+    ) { tabId in
+      let currentIcon = state.tabManager.tabs.first(where: { $0.id == tabId })?.icon
+      TabIconPickerView(
+        initialIcon: currentIcon,
+        defaultIcon: state.defaultIcon(for: tabId),
+        onApply: { newIcon in
+          state.applyIconChange(tabId, icon: newIcon)
+          state.dismissIconPicker()
+        },
+        onCancel: {
+          state.dismissIconPicker()
+        }
+      )
     }
     .background(
       WindowFocusObserverView { activity in

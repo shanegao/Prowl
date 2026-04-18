@@ -1,0 +1,205 @@
+import AppKit
+import SwiftUI
+
+struct TabIconPickerView: View {
+  let initialIcon: String?
+  let defaultIcon: String
+  let onApply: (String?) -> Void
+  let onCancel: () -> Void
+
+  @State private var symbolName: String
+  @FocusState private var symbolFieldFocused: Bool
+
+  init(
+    initialIcon: String?,
+    defaultIcon: String,
+    onApply: @escaping (String?) -> Void,
+    onCancel: @escaping () -> Void
+  ) {
+    self.initialIcon = initialIcon
+    self.defaultIcon = defaultIcon
+    self.onApply = onApply
+    self.onCancel = onCancel
+    _symbolName = State(initialValue: initialIcon ?? "")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Tab Icon")
+        .font(.headline)
+      Text("Pick a preset or enter any SF Symbol name available in your system.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      HStack(spacing: 8) {
+        Image(systemName: previewSymbol)
+          .imageScale(.large)
+          .foregroundStyle(isPreviewValid ? Color.primary : Color.secondary)
+          .frame(width: 28, height: 28)
+          .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+              .fill(Color.secondary.opacity(0.15))
+          )
+          .accessibilityLabel(Text("Preview"))
+        TextField("SF Symbol name", text: $symbolName)
+          .textFieldStyle(.roundedBorder)
+          .focused($symbolFieldFocused)
+          .onSubmit { applyIfValid() }
+        Button("Open SF Symbols") {
+          openSFSymbolsReference()
+        }
+      }
+
+      ScrollView {
+        LazyVGrid(
+          columns: Array(repeating: GridItem(.fixed(28), spacing: 8), count: 10),
+          spacing: 8
+        ) {
+          ForEach(Self.symbolPresets, id: \.self) { symbol in
+            Button {
+              symbolName = symbol
+              symbolFieldFocused = true
+            } label: {
+              Image(systemName: symbol)
+                .frame(width: 28, height: 28)
+                .background(
+                  RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(symbolName == symbol ? Color.accentColor : Color.clear, lineWidth: 2)
+                )
+                .accessibilityHidden(true)
+            }
+            .buttonStyle(.plain)
+            .help(symbol)
+          }
+        }
+        .padding(8)
+      }
+      .frame(maxHeight: 160)
+      .background(
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
+          .fill(Color.secondary.opacity(0.08))
+      )
+
+      HStack {
+        Button("Reset to Default") {
+          onApply(nil)
+        }
+        .help("Restore the default icon for this tab")
+        Spacer()
+        Button("Cancel", role: .cancel) {
+          onCancel()
+        }
+        .keyboardShortcut(.cancelAction)
+        Button("Done") {
+          applyIfValid()
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(!canApply)
+      }
+    }
+    .padding(16)
+    .frame(width: 380)
+    .onAppear {
+      symbolFieldFocused = true
+    }
+  }
+
+  private var trimmedName: String {
+    symbolName.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var previewSymbol: String {
+    isPreviewValid ? trimmedName : defaultIcon
+  }
+
+  private var isPreviewValid: Bool {
+    Self.isValidSymbol(trimmedName)
+  }
+
+  private var canApply: Bool {
+    !trimmedName.isEmpty && isPreviewValid
+  }
+
+  private func applyIfValid() {
+    guard canApply else { return }
+    onApply(trimmedName)
+  }
+
+  private func openSFSymbolsReference() {
+    if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.SFSymbols") {
+      let configuration = NSWorkspace.OpenConfiguration()
+      NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, _ in }
+      return
+    }
+    guard let url = URL(string: "https://developer.apple.com/sf-symbols/") else { return }
+    NSWorkspace.shared.open(url)
+  }
+
+  static func isValidSymbol(_ name: String) -> Bool {
+    guard !name.isEmpty else { return false }
+    return NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
+  }
+
+  static let symbolPresets: [String] = [
+    "terminal",
+    "terminal.fill",
+    "play.fill",
+    "stop.fill",
+    "hammer.fill",
+    "wrench.and.screwdriver.fill",
+    "shippingbox.fill",
+    "archivebox.fill",
+    "doc.text.fill",
+    "doc.badge.plus",
+    "sparkles",
+    "wand.and.stars",
+    "bolt.fill",
+    "flame.fill",
+    "checkmark.circle.fill",
+    "xmark.circle.fill",
+    "exclamationmark.triangle.fill",
+    "ladybug.fill",
+    "clock.fill",
+    "repeat",
+    "arrow.clockwise",
+    "arrow.triangle.2.circlepath",
+    "folder.fill",
+    "folder.badge.plus",
+    "paperplane.fill",
+    "cloud.fill",
+    "tray.and.arrow.down.fill",
+    "tray.and.arrow.up.fill",
+    "icloud.and.arrow.up.fill",
+    "square.and.arrow.up.fill",
+    "magnifyingglass",
+    "tag.fill",
+    "bookmark.fill",
+    "gearshape.fill",
+    "cpu",
+    "person.fill",
+    "person.2.fill",
+    "chart.bar.fill",
+    "chart.line.uptrend.xyaxis",
+    "leaf.fill",
+  ]
+}
+
+#if DEBUG
+  #Preview("Default icon") {
+    TabIconPickerView(
+      initialIcon: nil,
+      defaultIcon: "terminal",
+      onApply: { _ in },
+      onCancel: {}
+    )
+  }
+
+  #Preview("With override") {
+    TabIconPickerView(
+      initialIcon: "sparkles",
+      defaultIcon: "terminal",
+      onApply: { _ in },
+      onCancel: {}
+    )
+  }
+#endif

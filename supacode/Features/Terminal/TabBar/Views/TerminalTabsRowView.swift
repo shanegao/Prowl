@@ -9,6 +9,7 @@ struct TerminalTabsRowView: View {
   @Binding var closeButtonGestureActive: Bool
   let fixedTabWidth: CGFloat?
   let changeTitle: (TerminalTabID) -> Void
+  let changeIcon: (TerminalTabID) -> Void
   let closeTab: (TerminalTabID) -> Void
   let closeOthers: (TerminalTabID) -> Void
   let closeToRight: (TerminalTabID) -> Void
@@ -51,6 +52,7 @@ struct TerminalTabsRowView: View {
               tabs: manager.tabs,
               actions: TerminalTabContextMenuActions(
                 changeTitle: changeTitle,
+                changeIcon: changeIcon,
                 closeTab: closeTab,
                 closeOthers: closeOthers,
                 closeToRight: closeToRight,

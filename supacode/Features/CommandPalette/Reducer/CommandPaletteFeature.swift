@@ -50,6 +50,7 @@ struct CommandPaletteFeature {
     case rerunFailedJobs(Worktree.ID)
     case openFailingCheckDetails(Worktree.ID)
     case installCLI
+    case changeFocusedTabIcon(Worktree.ID)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -224,7 +225,15 @@ struct CommandPaletteFeature {
         kind: .installCLI
       )
     )
-    if repositories.selectedTerminalWorktree != nil {
+    if let terminalWorktree = repositories.selectedTerminalWorktree {
+      items.append(
+        CommandPaletteItem(
+          id: CommandPaletteItemID.changeFocusedTabIcon(terminalWorktree.id),
+          title: "Change Tab Icon...",
+          subtitle: terminalWorktree.name,
+          kind: .changeFocusedTabIcon(terminalWorktree.id)
+        )
+      )
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
     }
     if let selectedWorktreeID = repositories.selectedWorktreeID,
@@ -268,6 +277,7 @@ struct CommandPaletteFeature {
       ids.append(contentsOf: CommandPaletteItemID.pullRequestIDs(repositoryID: repository.id))
       for worktree in repository.worktrees {
         ids.append(CommandPaletteItemID.worktreeSelect(worktree.id))
+        ids.append(CommandPaletteItemID.changeFocusedTabIcon(worktree.id))
       }
     }
     return ids
@@ -473,6 +483,10 @@ private enum CommandPaletteItemID {
     "worktree.\(worktreeID).select"
   }
 
+  static func changeFocusedTabIcon(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
+    "terminal.\(worktreeID).change-focused-tab-icon"
+  }
+
   static func ghosttyCommand(_ command: GhosttyCommand) -> CommandPaletteItem.ID {
     "\(ghosttyPrefix)\(command.action)|\(command.title)"
   }
@@ -579,6 +593,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .installCLI
   case .ghosttyCommand(let action):
     return .ghosttyCommand(action)
+  case .changeFocusedTabIcon(let worktreeID):
+    return .changeFocusedTabIcon(worktreeID)
   case .openPullRequest,
     .markPullRequestReady,
     .mergePullRequest,
@@ -627,7 +643,8 @@ private func pullRequestDelegateAction(
     .viewArchivedWorktrees,
     .refreshWorktrees,
     .installCLI,
-    .ghosttyCommand:
+    .ghosttyCommand,
+    .changeFocusedTabIcon:
     return nil
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound:

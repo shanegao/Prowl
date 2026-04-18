@@ -27,6 +27,10 @@ struct TerminalTabContextMenu: ViewModifier {
         actions.changeTitle(tabId)
       }
 
+      Button("Change Tab Icon...") {
+        actions.changeIcon(tabId)
+      }
+
       Divider()
 
       Button("Close Tab") {

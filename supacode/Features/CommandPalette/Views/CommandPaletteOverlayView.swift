@@ -351,7 +351,7 @@ private struct CommandPaletteRowView: View {
       .refreshWorktrees, .installCLI, .ghosttyCommand,
       .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
-      .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect:
+      .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon:
       return nil
     case .removeWorktree:
       return "Remove"
@@ -400,6 +400,8 @@ private struct CommandPaletteRowView: View {
       return "terminal"
     case .worktreeSelect:
       return nil
+    case .changeFocusedTabIcon:
+      return "rectangle.on.rectangle"
     case .removeWorktree:
       return "trash"
     case .archiveWorktree:
@@ -419,7 +421,7 @@ private struct CommandPaletteRowView: View {
       .refreshWorktrees, .installCLI, .ghosttyCommand,
       .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
-      .rerunFailedJobs, .openFailingCheckDetails:
+      .rerunFailedJobs, .openFailingCheckDetails, .changeFocusedTabIcon:
       return true
     case .worktreeSelect, .removeWorktree, .archiveWorktree:
       return false
@@ -535,6 +537,8 @@ private struct CommandPaletteRowView: View {
       base = "Open failing check details"
     case .installCLI:
       base = "Install Command Line Tool"
+    case .changeFocusedTabIcon:
+      base = "Change Tab Icon"
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound:
         base = row.title

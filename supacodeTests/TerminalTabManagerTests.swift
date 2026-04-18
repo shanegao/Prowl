@@ -63,4 +63,30 @@ struct TerminalTabManagerTests {
     manager.updateDirty(tabId, isDirty: false)
     #expect(manager.tabs.first?.isDirty == false)
   }
+
+  @Test func overrideIconLocksAndSetsIcon() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "one", icon: "terminal")
+    manager.overrideIcon(tabId, icon: "sparkles")
+    #expect(manager.tabs.first?.icon == "sparkles")
+    #expect(manager.tabs.first?.isIconLocked == true)
+  }
+
+  @Test func updateIconRespectsLock() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "one", icon: "terminal")
+    manager.overrideIcon(tabId, icon: "sparkles")
+    manager.updateIcon(tabId, icon: "terminal")
+    #expect(manager.tabs.first?.icon == "sparkles")
+  }
+
+  @Test func clearIconOverrideUnlocksIcon() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "one", icon: "terminal")
+    manager.overrideIcon(tabId, icon: "sparkles")
+    manager.clearIconOverride(tabId)
+    #expect(manager.tabs.first?.isIconLocked == false)
+    manager.updateIcon(tabId, icon: "play.fill")
+    #expect(manager.tabs.first?.icon == "play.fill")
+  }
 }

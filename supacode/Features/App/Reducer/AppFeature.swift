@@ -899,6 +899,16 @@ struct AppFeature {
           await terminalClient.send(.performBindingAction(worktree, action: action))
         }
 
+      case .commandPalette(.delegate(.changeFocusedTabIcon(let worktreeID))):
+        guard let worktree = state.repositories.selectedTerminalWorktree,
+          worktree.id == worktreeID
+        else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(.presentTabIconPicker(worktree))
+        }
+
       case .commandPalette(.delegate(.openPullRequest(let worktreeID))):
         return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .openOnGithub))))
 
