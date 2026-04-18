@@ -13,6 +13,7 @@
 #   APPLE_NOTARY_KEYCHAIN_PROFILE   Keychain profile for notarytool (default: supacode-notary)
 #   SPARKLE_PRIVATE_KEY_FILE        Path to EdDSA private key file (default: ~/.prowl-sparkle-private-key)
 #   NETLIFY_BUILD_HOOK              Netlify Build Hook URL for Prowl-Site rebuild
+#   SKIP_SENTRY                     Set to 1 to skip dSYM upload and Sentry release tracking
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -67,6 +68,17 @@ for cmd in gh jq codesign xcrun create-dmg; do
   command -v "$cmd" >/dev/null 2>&1 || die "$cmd is required but not found"
 done
 [[ -x "$PROJECT_DIR/bins/generate_appcast" ]] || die "bins/generate_appcast not found"
+
+SENTRY_ENABLED=1
+if [[ "${SKIP_SENTRY:-}" == "1" ]]; then
+  SENTRY_ENABLED=0
+  log "SKIP_SENTRY=1 set, dSYM upload and release tracking will be skipped"
+elif ! command -v sentry-cli >/dev/null 2>&1; then
+  SENTRY_ENABLED=0
+  log "WARNING: sentry-cli not installed; dSYM upload will be skipped"
+  log "         install:  brew install getsentry/tools/sentry-cli"
+  log "         suppress: SKIP_SENTRY=1"
+fi
 
 if [[ -n "$(git status --porcelain)" ]]; then
   die "working tree is not clean — commit or stash changes first"
@@ -180,6 +192,31 @@ fi
 
 log "archiving Release build..."
 make archive APPLE_TEAM_ID="$TEAM_ID" DEVELOPER_ID_IDENTITY_SHA="$IDENTITY_SHA"
+
+# ── Sentry: register release + upload dSYM ──────────────────────────────────
+# Done right after archive so dSYM is ready before downstream steps. Failures
+# only warn — release proceeds because dSYM can be re-uploaded later with
+# `sentry-cli debug-files upload <dSYM>`.
+
+SENTRY_RELEASE_NAME="prowl@$VERSION"
+if [[ "$SENTRY_ENABLED" -eq 1 ]]; then
+  log "creating Sentry release $SENTRY_RELEASE_NAME..."
+  sentry-cli releases new "$SENTRY_RELEASE_NAME" \
+    || log "WARNING: failed to create Sentry release (continuing)"
+
+  DSYM_DIR="build/supacode.xcarchive/dSYMs"
+  if [[ -d "$DSYM_DIR" ]]; then
+    log "uploading dSYM from $DSYM_DIR to Sentry..."
+    sentry-cli debug-files upload --include-sources --wait "$DSYM_DIR" \
+      || log "WARNING: dSYM upload failed (release will continue; re-run sentry-cli debug-files upload later)"
+  else
+    log "WARNING: $DSYM_DIR not found, skipping dSYM upload"
+  fi
+
+  log "associating commits with Sentry release..."
+  sentry-cli releases set-commits "$SENTRY_RELEASE_NAME" --auto \
+    || log "WARNING: failed to associate commits (continuing)"
+fi
 
 # ── Export ───────────────────────────────────────────────────────────────────
 
@@ -334,6 +371,16 @@ gh release create "$TAG" "${UPLOAD_FILES[@]}" \
 
 RELEASE_URL="https://github.com/$REPO/releases/tag/$TAG"
 log "release created: $RELEASE_URL"
+
+# ── Finalize Sentry release ─────────────────────────────────────────────────
+# Marks the release as deployed in Sentry's dashboard so issue tracking can
+# associate "first seen in" with this version.
+
+if [[ "$SENTRY_ENABLED" -eq 1 ]]; then
+  log "finalizing Sentry release $SENTRY_RELEASE_NAME..."
+  sentry-cli releases finalize "$SENTRY_RELEASE_NAME" \
+    || log "WARNING: failed to finalize Sentry release (non-fatal)"
+fi
 
 # ── Trigger Prowl-Site rebuild ───────────────────────────────────────────────
 
