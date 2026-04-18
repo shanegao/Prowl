@@ -24,18 +24,20 @@ struct TabIconPickerView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Tab Icon")
-        .font(.headline)
-      Text("Pick a preset or enter any SF Symbol name available in your system.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
+    VStack(alignment: .leading, spacing: 16) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Tab Icon")
+          .font(.headline)
+        Text("Pick a preset or enter any SF Symbol name available in your system.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
 
-      HStack(spacing: 8) {
+      HStack(spacing: 10) {
         Image(systemName: previewSymbol)
           .imageScale(.large)
           .foregroundStyle(isPreviewValid ? Color.primary : Color.secondary)
-          .frame(width: 28, height: 28)
+          .frame(width: 32, height: 32)
           .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
               .fill(Color.secondary.opacity(0.15))
@@ -52,8 +54,8 @@ struct TabIconPickerView: View {
 
       ScrollView {
         LazyVGrid(
-          columns: Array(repeating: GridItem(.fixed(28), spacing: 8), count: 10),
-          spacing: 8
+          columns: Array(repeating: GridItem(.fixed(32), spacing: 10), count: 8),
+          spacing: 10
         ) {
           ForEach(Self.symbolPresets, id: \.self) { symbol in
             Button {
@@ -61,7 +63,8 @@ struct TabIconPickerView: View {
               symbolFieldFocused = true
             } label: {
               Image(systemName: symbol)
-                .frame(width: 28, height: 28)
+                .imageScale(.medium)
+                .frame(width: 32, height: 32)
                 .background(
                   RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(symbolName == symbol ? Color.accentColor : Color.clear, lineWidth: 2)
@@ -72,11 +75,11 @@ struct TabIconPickerView: View {
             .help(symbol)
           }
         }
-        .padding(8)
+        .padding(12)
       }
-      .frame(maxHeight: 160)
+      .frame(maxHeight: 220)
       .background(
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
           .fill(Color.secondary.opacity(0.08))
       )
 
@@ -97,8 +100,8 @@ struct TabIconPickerView: View {
         .disabled(!canApply)
       }
     }
-    .padding(16)
-    .frame(width: 380)
+    .padding(24)
+    .frame(width: 460)
     .onAppear {
       symbolFieldFocused = true
     }
@@ -140,6 +143,11 @@ struct TabIconPickerView: View {
     return NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
   }
 
+  /// Presets curated around common development workflows. Grouped loosely by
+  /// theme so scanning the grid reveals an intent quickly:
+  /// terminal → run/build → watch/refresh → server/network → source control →
+  /// code/files → tests/bugs → AI/agent → release/deploy → metrics/logs →
+  /// security → compute.
   static let symbolPresets: [String] = [
     "terminal",
     "terminal.fill",
@@ -147,40 +155,40 @@ struct TabIconPickerView: View {
     "stop.fill",
     "hammer.fill",
     "wrench.and.screwdriver.fill",
-    "shippingbox.fill",
-    "archivebox.fill",
-    "doc.text.fill",
-    "doc.badge.plus",
-    "sparkles",
-    "wand.and.stars",
+    "eye.fill",
+    "clock.fill",
+    "arrow.clockwise",
+    "arrow.triangle.2.circlepath",
     "bolt.fill",
-    "flame.fill",
+    "server.rack",
+    "network",
+    "cloud.fill",
+    "globe",
+    "antenna.radiowaves.left.and.right",
+    "externaldrive.fill",
+    "arrow.triangle.branch",
+    "arrow.triangle.pull",
+    "arrow.merge",
+    "chevron.left.forwardslash.chevron.right",
+    "curlybraces",
+    "doc.text.fill",
+    "folder.fill",
     "checkmark.circle.fill",
     "xmark.circle.fill",
     "exclamationmark.triangle.fill",
     "ladybug.fill",
-    "clock.fill",
-    "repeat",
-    "arrow.clockwise",
-    "arrow.triangle.2.circlepath",
-    "folder.fill",
-    "folder.badge.plus",
+    "sparkles",
+    "wand.and.stars",
+    "brain.head.profile",
+    "shippingbox.fill",
     "paperplane.fill",
-    "cloud.fill",
-    "tray.and.arrow.down.fill",
-    "tray.and.arrow.up.fill",
-    "icloud.and.arrow.up.fill",
-    "square.and.arrow.up.fill",
-    "magnifyingglass",
-    "tag.fill",
-    "bookmark.fill",
-    "gearshape.fill",
-    "cpu",
-    "person.fill",
-    "person.2.fill",
-    "chart.bar.fill",
+    "archivebox.fill",
     "chart.line.uptrend.xyaxis",
-    "leaf.fill",
+    "chart.bar.fill",
+    "magnifyingglass",
+    "lock.fill",
+    "key.fill",
+    "cpu",
   ]
 }
 
