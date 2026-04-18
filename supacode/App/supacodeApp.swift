@@ -145,6 +145,8 @@ struct SupacodeApp: App {
       {
         let config = PostHogConfig(apiKey: apiKey, host: host)
         config.enableSwizzling = false
+        config.captureApplicationLifecycleEvents = false
+        config.captureScreenViews = false
         PostHogSDK.shared.setup(config)
         PostHogSDK.shared.register(AnalyticsContext.superProperties)
         PostHogSDK.shared.identify(InstallIdentifier.current)
