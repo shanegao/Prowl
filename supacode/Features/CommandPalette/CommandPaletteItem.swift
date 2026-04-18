@@ -43,6 +43,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case installCLI
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
+      case debugSimulateUpdateFound
     #endif
   }
 
@@ -65,7 +66,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .worktreeSelect, .removeWorktree, .archiveWorktree:
       return false
     #if DEBUG
-      case .debugTestToast:
+      case .debugTestToast, .debugSimulateUpdateFound:
         return true
     #endif
     }
@@ -91,7 +92,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .archiveWorktree:
       return false
     #if DEBUG
-      case .debugTestToast:
+      case .debugTestToast, .debugSimulateUpdateFound:
         return false
     #endif
     }
@@ -127,7 +128,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .archiveWorktree:
       return nil
     #if DEBUG
-      case .debugTestToast:
+      case .debugTestToast, .debugSimulateUpdateFound:
         return nil
     #endif
     }

@@ -913,6 +913,9 @@ struct AppFeature {
       #if DEBUG
         case .commandPalette(.delegate(.debugTestToast(let toast))):
           return .send(.repositories(.showToast(toast)))
+
+        case .commandPalette(.delegate(.debugSimulateUpdateFound)):
+          return .send(.updates(.debugSimulateUpdateFound))
       #endif
 
       case .commandPalette:

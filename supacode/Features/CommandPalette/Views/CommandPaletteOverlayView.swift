@@ -358,7 +358,7 @@ private struct CommandPaletteRowView: View {
     case .archiveWorktree:
       return "Archive"
     #if DEBUG
-      case .debugTestToast:
+      case .debugTestToast, .debugSimulateUpdateFound:
         return "Debug"
     #endif
     }
@@ -407,6 +407,8 @@ private struct CommandPaletteRowView: View {
     #if DEBUG
       case .debugTestToast:
         return "ladybug"
+      case .debugSimulateUpdateFound:
+        return "ladybug"
     #endif
     }
   }
@@ -422,7 +424,7 @@ private struct CommandPaletteRowView: View {
     case .worktreeSelect, .removeWorktree, .archiveWorktree:
       return false
     #if DEBUG
-      case .debugTestToast:
+      case .debugTestToast, .debugSimulateUpdateFound:
         return true
     #endif
     }
@@ -534,7 +536,7 @@ private struct CommandPaletteRowView: View {
     case .installCLI:
       base = "Install Command Line Tool"
     #if DEBUG
-      case .debugTestToast:
+      case .debugTestToast, .debugSimulateUpdateFound:
         base = row.title
     #endif
     }
