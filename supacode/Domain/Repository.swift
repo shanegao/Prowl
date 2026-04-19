@@ -11,6 +11,7 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     let supportsWorktrees: Bool
     let supportsBranchOperations: Bool
     let supportsPullRequests: Bool
+    let supportsCodeHost: Bool
     let supportsDiff: Bool
     let supportsGitStatus: Bool
     let supportsRunnableFolderActions: Bool
@@ -20,6 +21,7 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
       supportsWorktrees: true,
       supportsBranchOperations: true,
       supportsPullRequests: true,
+      supportsCodeHost: true,
       supportsDiff: true,
       supportsGitStatus: true,
       supportsRunnableFolderActions: true,
@@ -30,6 +32,7 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
       supportsWorktrees: false,
       supportsBranchOperations: false,
       supportsPullRequests: false,
+      supportsCodeHost: false,
       supportsDiff: false,
       supportsGitStatus: false,
       supportsRunnableFolderActions: true,

@@ -226,9 +226,40 @@ extension RepositoriesFeature {
     case .pullRequestAction(let worktreeID, let action):
       guard let worktree = state.worktree(for: worktreeID),
         let repositoryID = state.repositoryID(containing: worktreeID),
-        let repository = state.repositories[id: repositoryID],
-        let pullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
+        let repository = state.repositories[id: repositoryID]
       else {
+        return .send(
+          .presentAlert(
+            title: "Repository not available",
+            message: "Prowl could not find the selected repository."
+          )
+        )
+      }
+      let repoRoot = worktree.repositoryRootURL
+      let worktreeRoot = worktree.workingDirectory
+      let optionalPullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
+      if case .openOnCodeHost = action {
+        let gitClient = gitClient
+        let openURLClient = openURLClient
+        let pullRequestURL = optionalPullRequest.flatMap { Self.validWebURL($0.url) }
+        return .run { send in
+          if let pullRequestURL {
+            await openURLClient.open(pullRequestURL)
+            return
+          }
+          guard let repositoryURL = await gitClient.repositoryWebURL(repoRoot) else {
+            await send(
+              .presentAlert(
+                title: "Repository URL not available",
+                message: "Prowl could not determine a code host URL for this repository."
+              )
+            )
+            return
+          }
+          await openURLClient.open(repositoryURL)
+        }
+      }
+      guard let pullRequest = optionalPullRequest else {
         return .send(
           .presentAlert(
             title: "Pull request not available",
@@ -236,8 +267,6 @@ extension RepositoriesFeature {
           )
         )
       }
-      let repoRoot = worktree.repositoryRootURL
-      let worktreeRoot = worktree.workingDirectory
       let pullRequestRefresh = WorktreeInfoWatcherClient.Event.repositoryPullRequestRefresh(
         repositoryRootURL: repoRoot,
         worktreeIDs: repository.worktrees.map(\.id)
@@ -247,18 +276,8 @@ extension RepositoriesFeature {
         $0.checkState == .failure && $0.detailsUrl != nil
       }?.detailsUrl
       switch action {
-      case .openOnGithub:
-        guard let url = URL(string: pullRequest.url) else {
-          return .send(
-            .presentAlert(
-              title: "Invalid pull request URL",
-              message: "Prowl could not open the pull request URL."
-            )
-          )
-        }
-        return .run { @MainActor _ in
-          NSWorkspace.shared.open(url)
-        }
+      case .openOnCodeHost:
+        return .none
 
       case .copyFailingJobURL:
         guard let failingCheckDetailsURL, !failingCheckDetailsURL.isEmpty else {
@@ -550,6 +569,17 @@ extension RepositoriesFeature {
       state.mergedWorktreeAction = action
       return .none
     }
+  }
+
+  nonisolated private static func validWebURL(_ raw: String) -> URL? {
+    guard let url = URL(string: raw),
+      let scheme = url.scheme?.lowercased(),
+      ["http", "https"].contains(scheme),
+      url.host != nil
+    else {
+      return nil
+    }
+    return url
   }
 
   var githubIntegrationReducer: some ReducerOf<Self> {

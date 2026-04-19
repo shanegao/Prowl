@@ -503,7 +503,18 @@ struct GitClient {
     }
   }
 
+  nonisolated func repositoryWebURL(for repositoryRoot: URL) async -> URL? {
+    await remoteWebInfo(for: repositoryRoot)?.repositoryURL
+  }
+
   nonisolated func remoteInfo(for repositoryRoot: URL) async -> GithubRemoteInfo? {
+    guard let remoteWebInfo = await remoteWebInfo(for: repositoryRoot) else {
+      return nil
+    }
+    return Self.parseGithubRemoteInfo(remoteWebInfo)
+  }
+
+  nonisolated private func remoteWebInfo(for repositoryRoot: URL) async -> GitRemoteWebInfo? {
     let path = repositoryRoot.path(percentEncoded: false)
     guard
       let remotesOutput = try? await runGit(
@@ -533,7 +544,7 @@ struct GitClient {
       else {
         continue
       }
-      if let info = Self.parseGithubRemoteInfo(remoteURL) {
+      if let info = Self.parseRepositoryWebInfo(remoteURL) {
         return info
       }
     }
@@ -857,7 +868,7 @@ struct GitClient {
     return nil
   }
 
-  nonisolated static func parseGithubRemoteInfo(_ remoteURL: String) -> GithubRemoteInfo? {
+  nonisolated static func parseRepositoryWebInfo(_ remoteURL: String) -> GitRemoteWebInfo? {
     let trimmed = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
       return nil
@@ -872,33 +883,56 @@ struct GitClient {
       guard hostParts.count == 2 else {
         return nil
       }
-      return parseGithubRemoteInfo(host: String(hostParts[0]), path: String(hostParts[1]))
+      return parseRepositoryWebInfo(host: String(hostParts[0]), port: nil, path: String(hostParts[1]))
     }
     guard let url = URL(string: trimmed), let host = url.host else {
       return nil
     }
     let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-    return parseGithubRemoteInfo(host: host, path: path)
+    return parseRepositoryWebInfo(host: host, port: url.port, path: path)
   }
 
-  nonisolated private static func parseGithubRemoteInfo(host: String, path: String) -> GithubRemoteInfo? {
-    let normalizedHost = host.lowercased()
-    guard normalizedHost.contains("github") else {
+  nonisolated static func parseGithubRemoteInfo(_ remoteURL: String) -> GithubRemoteInfo? {
+    guard let remoteWebInfo = parseRepositoryWebInfo(remoteURL) else {
       return nil
     }
+    return parseGithubRemoteInfo(remoteWebInfo)
+  }
+
+  nonisolated private static func parseRepositoryWebInfo(
+    host: String,
+    port: Int?,
+    path: String
+  ) -> GitRemoteWebInfo? {
     let components = path.split(separator: "/", omittingEmptySubsequences: true)
     guard components.count >= 2 else {
       return nil
     }
-    let owner = String(components[0])
-    var repo = String(components[1])
-    if repo.hasSuffix(".git") {
-      repo = String(repo.dropLast(4))
+    var repositoryPath = components.map(String.init).joined(separator: "/")
+    if repositoryPath.hasSuffix(".git") {
+      repositoryPath = String(repositoryPath.dropLast(4))
     }
+    guard !repositoryPath.isEmpty else {
+      return nil
+    }
+    return GitRemoteWebInfo(host: host, repositoryPath: repositoryPath, port: port)
+  }
+
+  nonisolated private static func parseGithubRemoteInfo(_ remoteWebInfo: GitRemoteWebInfo) -> GithubRemoteInfo? {
+    let normalizedHost = remoteWebInfo.host.lowercased()
+    guard normalizedHost.contains("github") else {
+      return nil
+    }
+    let components = remoteWebInfo.repositoryPath.split(separator: "/", omittingEmptySubsequences: true)
+    guard components.count >= 2 else {
+      return nil
+    }
+    let owner = String(components[0])
+    let repo = String(components[1])
     guard !owner.isEmpty, !repo.isEmpty else {
       return nil
     }
-    return GithubRemoteInfo(host: host, owner: owner, repo: repo)
+    return GithubRemoteInfo(host: remoteWebInfo.host, owner: owner, repo: repo)
   }
 
 }

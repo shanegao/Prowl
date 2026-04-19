@@ -20,8 +20,7 @@ struct WorktreeCommands: Commands {
     let repositories = store.repositories
     let hasActiveWorktree = repositories.worktree(for: repositories.selectedWorktreeID) != nil
     let orderedRows = visibleHotkeyWorktreeRows ?? repositories.orderedWorktreeRows()
-    let pullRequestURL = selectedPullRequestURL
-    let githubIntegrationEnabled = store.settings.githubIntegrationEnabled
+    let codeHostWorktreeID = selectedCodeHostWorktreeID
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let customCommands = store.selectedCustomCommands
     CommandMenu("Worktrees") {
@@ -74,14 +73,14 @@ struct WorktreeCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openWorktree)))
       .help(helpText(title: "Open Worktree", commandID: AppShortcuts.CommandID.openWorktree))
       .disabled(openSelectedWorktreeAction == nil)
-      Button("Open Pull Request on GitHub") {
-        if let pullRequestURL {
-          NSWorkspace.shared.open(pullRequestURL)
+      Button("Open on Code Host") {
+        if let codeHostWorktreeID {
+          store.send(.repositories(.githubIntegration(.pullRequestAction(codeHostWorktreeID, .openOnCodeHost))))
         }
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openPullRequest)))
-      .help(helpText(title: "Open Pull Request on GitHub", commandID: AppShortcuts.CommandID.openPullRequest))
-      .disabled(pullRequestURL == nil || !githubIntegrationEnabled)
+      .help(helpText(title: "Open on Code Host", commandID: AppShortcuts.CommandID.openPullRequest))
+      .disabled(codeHostWorktreeID == nil)
       Button("New Worktree", systemImage: "plus") {
         store.send(.repositories(.worktreeCreation(.createRandomWorktree)))
       }
@@ -130,11 +129,16 @@ struct WorktreeCommands: Commands {
     AppShortcuts.worktreeSelectionCommandIDs
   }
 
-  private var selectedPullRequestURL: URL? {
+  private var selectedCodeHostWorktreeID: Worktree.ID? {
     let repositories = store.repositories
     guard let selectedWorktreeID = repositories.selectedWorktreeID else { return nil }
-    let pullRequest = repositories.worktreeInfoByID[selectedWorktreeID]?.pullRequest
-    return pullRequest.flatMap { URL(string: $0.url) }
+    guard
+      let repositoryID = repositories.repositoryID(containing: selectedWorktreeID),
+      repositories.repositories[id: repositoryID]?.capabilities.supportsCodeHost == true
+    else {
+      return nil
+    }
+    return selectedWorktreeID
   }
 
   private func keyboardShortcut(for commandID: String) -> KeyboardShortcut? {
@@ -178,16 +182,18 @@ struct WorktreeCommands: Commands {
     for repoID in repositories.orderedRepositoryIDs() {
       guard let repo = reposByID[repoID] else { continue }
       if repo.kind == .plain {
-        entries.append(WorktreeMenuEntry(
-          kind: .plainFolder(id: repo.id, name: repo.name),
-          shortcutCommandID: nil
-        ))
+        entries.append(
+          WorktreeMenuEntry(
+            kind: .plainFolder(id: repo.id, name: repo.name),
+            shortcutCommandID: nil
+          ))
       } else {
         for row in repositories.worktreeRows(in: repo) {
-          entries.append(WorktreeMenuEntry(
-            kind: .worktree(row),
-            shortcutCommandID: shortcutByWorktreeID[row.id]
-          ))
+          entries.append(
+            WorktreeMenuEntry(
+              kind: .worktree(row),
+              shortcutCommandID: shortcutByWorktreeID[row.id]
+            ))
         }
       }
     }
@@ -203,15 +209,18 @@ struct WorktreeCommands: Commands {
       Button(title) {
         store.send(.repositories(.selectWorktree(row.id)))
       }
-      .modifier(KeyboardShortcutModifier(
-        shortcut: entry.shortcutCommandID.flatMap { keyboardShortcut(for: $0) }
-      ))
-      .help({
-        if let commandID = entry.shortcutCommandID, let shortcut = shortcutDisplay(for: commandID) {
-          return "Switch to \(title) (\(shortcut))"
-        }
-        return "Switch to \(title)"
-      }())
+      .modifier(
+        KeyboardShortcutModifier(
+          shortcut: entry.shortcutCommandID.flatMap { keyboardShortcut(for: $0) }
+        )
+      )
+      .help(
+        {
+          if let commandID = entry.shortcutCommandID, let shortcut = shortcutDisplay(for: commandID) {
+            return "Switch to \(title) (\(shortcut))"
+          }
+          return "Switch to \(title)"
+        }())
     case .plainFolder(let repoID, let name):
       Button(name) {
         store.send(.repositories(.selectRepository(repoID)))

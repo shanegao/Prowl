@@ -332,7 +332,7 @@ struct RepositoriesFeature {
   }
 
   enum PullRequestAction: Equatable {
-    case openOnGithub
+    case openOnCodeHost
     case markReadyForReview
     case merge
     case close
@@ -355,6 +355,7 @@ struct RepositoriesFeature {
   @Dependency(GitClientDependency.self) var gitClient
   @Dependency(GithubCLIClient.self) var githubCLI
   @Dependency(GithubIntegrationClient.self) var githubIntegration
+  @Dependency(OpenURLClient.self) var openURLClient
   @Dependency(RepositoryPersistenceClient.self) var repositoryPersistence
   @Dependency(ShellClient.self) var shellClient
   @Dependency(\.date.now) var now
