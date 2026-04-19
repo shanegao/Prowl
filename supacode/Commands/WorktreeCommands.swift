@@ -134,7 +134,7 @@ struct WorktreeCommands: Commands {
     guard let selectedWorktreeID = repositories.selectedWorktreeID else { return nil }
     guard
       let repositoryID = repositories.repositoryID(containing: selectedWorktreeID),
-      repositories.repositories[id: repositoryID]?.capabilities.supportsPullRequests == true
+      repositories.repositories[id: repositoryID]?.capabilities.supportsCodeHost == true
     else {
       return nil
     }

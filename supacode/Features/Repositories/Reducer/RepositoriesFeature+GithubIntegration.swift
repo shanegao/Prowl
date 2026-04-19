@@ -237,28 +237,11 @@ extension RepositoriesFeature {
       }
       let repoRoot = worktree.repositoryRootURL
       let worktreeRoot = worktree.workingDirectory
-      let pullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
-      if action != .openOnCodeHost, pullRequest == nil {
-        return .send(
-          .presentAlert(
-            title: "Pull request not available",
-            message: "Prowl could not find a pull request for this worktree."
-          )
-        )
-      }
-      let pullRequestRefresh = WorktreeInfoWatcherClient.Event.repositoryPullRequestRefresh(
-        repositoryRootURL: repoRoot,
-        worktreeIDs: repository.worktrees.map(\.id)
-      )
-      let branchName = pullRequest?.headRefName ?? worktree.name
-      let failingCheckDetailsURL = (pullRequest?.statusCheckRollup?.checks ?? []).first {
-        $0.checkState == .failure && $0.detailsUrl != nil
-      }?.detailsUrl
-      switch action {
-      case .openOnCodeHost:
+      let optionalPullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
+      if case .openOnCodeHost = action {
         let gitClient = gitClient
         let openURLClient = openURLClient
-        let pullRequestURL = pullRequest.flatMap { Self.validWebURL($0.url) }
+        let pullRequestURL = optionalPullRequest.flatMap { Self.validWebURL($0.url) }
         return .run { send in
           if let pullRequestURL {
             await openURLClient.open(pullRequestURL)
@@ -275,6 +258,26 @@ extension RepositoriesFeature {
           }
           await openURLClient.open(repositoryURL)
         }
+      }
+      guard let pullRequest = optionalPullRequest else {
+        return .send(
+          .presentAlert(
+            title: "Pull request not available",
+            message: "Prowl could not find a pull request for this worktree."
+          )
+        )
+      }
+      let pullRequestRefresh = WorktreeInfoWatcherClient.Event.repositoryPullRequestRefresh(
+        repositoryRootURL: repoRoot,
+        worktreeIDs: repository.worktrees.map(\.id)
+      )
+      let branchName = pullRequest.headRefName ?? worktree.name
+      let failingCheckDetailsURL = (pullRequest.statusCheckRollup?.checks ?? []).first {
+        $0.checkState == .failure && $0.detailsUrl != nil
+      }?.detailsUrl
+      switch action {
+      case .openOnCodeHost:
+        return .none
 
       case .copyFailingJobURL:
         guard let failingCheckDetailsURL, !failingCheckDetailsURL.isEmpty else {
@@ -310,7 +313,6 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
-          guard let pullRequest else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -340,7 +342,6 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
-          guard let pullRequest else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -374,7 +375,6 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
-          guard let pullRequest else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -405,7 +405,6 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
-          guard pullRequest != nil else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -483,7 +482,6 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
-          guard pullRequest != nil else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(

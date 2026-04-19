@@ -277,19 +277,26 @@ private func selectedCodeHostItems(
   guard
     let selectedWorktreeID = repositories.selectedWorktreeID,
     let repositoryID = repositories.repositoryID(containing: selectedWorktreeID),
-    let repository = repositories.repositories[id: repositoryID],
-    repository.capabilities.supportsPullRequests
+    let repository = repositories.repositories[id: repositoryID]
   else {
     return []
   }
 
   let pullRequest = repositories.worktreeInfo(for: selectedWorktreeID)?.pullRequest
-  if let pullRequest, pullRequest.number > 0, pullRequest.state.uppercased() != "CLOSED" {
+  if repository.capabilities.supportsPullRequests,
+    let pullRequest,
+    pullRequest.number > 0,
+    pullRequest.state.uppercased() != "CLOSED"
+  {
     return pullRequestItems(
       pullRequest: pullRequest,
       worktreeID: selectedWorktreeID,
       repositoryID: repositoryID
     )
+  }
+
+  guard repository.capabilities.supportsCodeHost else {
+    return []
   }
 
   return [
