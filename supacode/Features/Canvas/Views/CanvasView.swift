@@ -6,6 +6,9 @@ struct CanvasView: View {
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   let terminalManager: WorktreeTerminalManager
+  /// When set, the canvas only shows panes from this worktree. `nil` keeps the
+  /// default global-canvas behaviour.
+  var scopedWorktreeID: Worktree.ID?
   var onExitToTab: () -> Void = {}
   @State private var layoutStore = CanvasLayoutStore()
 
@@ -18,6 +21,7 @@ struct CanvasView: View {
   @State private var activeResize: [TerminalTabID: ActiveResize] = [:]
   @State private var hasPerformedInitialFit = false
   @State private var viewportSize: CGSize = .zero
+  @State private var resizeRelayoutTask: Task<Void, Never>?
 
   private let minCardWidth: CGFloat = 300
   private let minCardHeight: CGFloat = 200
@@ -26,6 +30,15 @@ struct CanvasView: View {
   private let titleBarHeight: CGFloat = 28
   private let cardSpacing: CGFloat = 20
 
+  /// Filters `terminalManager.activeWorktreeStates` by `scopedWorktreeID` when
+  /// the view is in scoped (per-worktree) mode. Returns all active states for
+  /// the global canvas.
+  private var scopedActiveStates: [WorktreeTerminalState] {
+    let all = terminalManager.activeWorktreeStates
+    guard let scopedWorktreeID else { return all }
+    return all.filter { $0.worktreeID == scopedWorktreeID }
+  }
+
   var body: some View {
     let selectAllCanvasShortcut = AppShortcuts.resolvedShortcut(
       for: AppShortcuts.CommandID.selectAllCanvasCards,
@@ -33,7 +46,7 @@ struct CanvasView: View {
     )
     CanvasScrollContainer(offset: $canvasOffset, lastOffset: $lastCanvasOffset) {
       GeometryReader { _ in
-        let activeStates = terminalManager.activeWorktreeStates
+        let activeStates = scopedActiveStates
         let allCardKeys = collectCardKeys(from: activeStates)
         let allTabIDs = collectVisibleTabIDs(from: activeStates)
 
@@ -45,9 +58,6 @@ struct CanvasView: View {
             syncBroadcastCallbacks(states: activeStates)
           }
           .onChange(of: allCardKeys) { _, newKeys in
-            if newKeys.isEmpty {
-              CanvasLayoutStore.hasAutoArrangedInSession = false
-            }
             ensureLayouts(for: newKeys)
             syncBroadcastCallbacks(states: activeStates)
           }
@@ -147,15 +157,23 @@ struct CanvasView: View {
       .onGeometryChange(for: CGSize.self) { proxy in
         proxy.size
       } action: { newSize in
+        let previousSize = viewportSize
         viewportSize = newSize
         if !hasPerformedInitialFit {
           hasPerformedInitialFit = true
-          if !CanvasLayoutStore.hasAutoArrangedInSession {
-            CanvasLayoutStore.hasAutoArrangedInSession = true
-            arrangeCards()
-          }
+          applyLayoutForCurrentMode()
           fitToView(canvasSize: newSize)
+        } else if previousSize != newSize {
+          scheduleResizeRelayout(for: newSize)
         }
+      }
+      .onChange(of: scopedWorktreeID) { _, _ in
+        // Switching between overall and per-worktree canvas reuses the same
+        // CanvasView instance (no .id() upstream), so .onAppear never fires
+        // and the one-shot initial-fit gate stays latched. Re-apply the
+        // mode-appropriate layout so cards don't look stale.
+        applyLayoutForCurrentMode()
+        fitToView(canvasSize: viewportSize)
       }
     }
     .overlay(alignment: .bottomTrailing) {
@@ -163,7 +181,7 @@ struct CanvasView: View {
     }
     .onKeyPress(.escape) {
       guard selectionState.isBroadcasting else { return .ignored }
-      clearSelection(states: terminalManager.activeWorktreeStates)
+      clearSelection(states: scopedActiveStates)
       return .handled
     }
     .onKeyPress(
@@ -176,7 +194,11 @@ struct CanvasView: View {
       return .handled
     }
     .task { activateCanvas() }
-    .onDisappear { deactivateCanvas() }
+    .onDisappear {
+      resizeRelayoutTask?.cancel()
+      resizeRelayoutTask = nil
+      deactivateCanvas()
+    }
   }
 
   private func showsSelectionShield(for tabID: TerminalTabID) -> Bool {
@@ -229,40 +251,83 @@ struct CanvasView: View {
   // MARK: - Layout
 
   /// Batch-position all cards that don't have stored layouts yet.
-  /// Uses a single, consistent column count to avoid overlap between
-  /// cards positioned in different passes.
+  /// For a per-worktree canvas, also re-fits every existing card's size to
+  /// the new total count so the grid stays uniform as panes are added or
+  /// removed; the global canvas keeps user sizes untouched.
   private func ensureLayouts(for cardKeys: [String]) {
     let unpositioned = cardKeys.filter { layoutStore.cardLayouts[$0] == nil }
-    guard !unpositioned.isEmpty else { return }
+    let isScoped = scopedWorktreeID != nil
+    guard !unpositioned.isEmpty || isScoped else { return }
 
-    // Count only VISIBLE cards that already have layouts (ignores stale entries).
-    let positionedCount = cardKeys.count - unpositioned.count
-    // For incremental adds, preserve the existing grid shape.
-    // For initial layout, use total count for a balanced grid.
-    let columns =
-      positionedCount > 0
-      ? gridColumns(for: positionedCount)
-      : gridColumns(for: cardKeys.count)
+    let totalCount = cardKeys.count
+    let columns = gridColumns(for: totalCount)
+    // Global canvas keeps the fixed default so new cards line up with
+    // user-placed ones; per-worktree canvas tiles the viewport.
+    let cardSize: CGSize =
+      isScoped
+      ? fittedCardSize(count: totalCount, viewportSize: viewportSize)
+      : CanvasCardLayout.defaultSize
 
-    // Build locally, assign once to trigger a single save.
     var layouts = layoutStore.cardLayouts
-    for (offset, key) in unpositioned.enumerated() {
-      layouts[key] = CanvasCardLayout(
-        position: gridPosition(index: positionedCount + offset, columns: columns)
-      )
+    if isScoped {
+      // Re-tile the whole per-worktree grid so every card matches the new
+      // fitted size — keeps the "all equal" invariant as panes come and go.
+      for (index, key) in cardKeys.enumerated() {
+        layouts[key] = CanvasCardLayout(
+          position: gridPosition(index: index, columns: columns, cardSize: cardSize),
+          size: cardSize
+        )
+      }
+    } else {
+      // Global canvas: only position new cards; existing layouts are sacred.
+      let positionedCount = totalCount - unpositioned.count
+      let incrementalColumns =
+        positionedCount > 0
+        ? gridColumns(for: positionedCount)
+        : columns
+      for (offset, key) in unpositioned.enumerated() {
+        layouts[key] = CanvasCardLayout(
+          position: gridPosition(
+            index: positionedCount + offset,
+            columns: incrementalColumns,
+            cardSize: cardSize
+          ),
+          size: cardSize
+        )
+      }
     }
     layoutStore.cardLayouts = layouts
   }
 
-  /// Balanced grid: columns ≈ sqrt(N). No viewport constraint — the canvas
-  /// is infinite and fitToView handles zoom.
+  /// Balanced grid: columns ≈ sqrt(N).
   private func gridColumns(for count: Int) -> Int {
     max(1, Int(ceil(sqrt(Double(count)))))
   }
 
-  private func gridPosition(index: Int, columns: Int) -> CGPoint {
-    let cardW = CanvasCardLayout.defaultSize.width
-    let cardH = CanvasCardLayout.defaultSize.height + titleBarHeight
+  /// Card size that divides the viewport across a sqrt-based grid so a handful
+  /// of cards fill the visible canvas instead of sitting at the 800×550
+  /// default. Falls back to `CanvasCardLayout.defaultSize` when the viewport
+  /// isn't measured yet.
+  private func fittedCardSize(count: Int, viewportSize: CGSize) -> CGSize {
+    guard count > 0, viewportSize.width > 0, viewportSize.height > 0 else {
+      return CanvasCardLayout.defaultSize
+    }
+    let columns = gridColumns(for: count)
+    let rows = Int(ceil(Double(count) / Double(columns)))
+    let availableW = viewportSize.width - cardSpacing * CGFloat(columns + 1)
+    let availableH =
+      viewportSize.height - cardSpacing * CGFloat(rows + 1) - titleBarHeight * CGFloat(rows)
+    let rawW = availableW / CGFloat(columns)
+    let rawH = availableH / CGFloat(rows)
+    return CGSize(
+      width: clampWidth(rawW),
+      height: clampHeight(rawH)
+    )
+  }
+
+  private func gridPosition(index: Int, columns: Int, cardSize: CGSize) -> CGPoint {
+    let cardW = cardSize.width
+    let cardH = cardSize.height + titleBarHeight
     let row = index / columns
     let col = index % columns
     return CGPoint(
@@ -332,14 +397,45 @@ struct CanvasView: View {
     }
   }
 
-  /// Reset all card positions to a clean grid layout (uniform sizes).
+  /// Runs the auto-layout for the current canvas mode. Both modes reset to
+  /// a uniform grid on every canvas open / scope change / viewport resize —
+  /// per-worktree uses `fittedCardSize` to tile the viewport, global uses the
+  /// `CanvasCardLayout.defaultSize`. The "Arrange cards preserving sizes"
+  /// toolbar button remains for users who want MaxRects packing on demand.
+  private func applyLayoutForCurrentMode() {
+    organizeCards()
+  }
+
+  /// Debounce viewport-change relayouts so a live window drag doesn't thrash
+  /// the grid on every delta. Cancels any pending relayout and re-fires after
+  /// the user stops resizing.
+  private func scheduleResizeRelayout(for newSize: CGSize) {
+    resizeRelayoutTask?.cancel()
+    resizeRelayoutTask = Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(200))
+      guard !Task.isCancelled else { return }
+      applyLayoutForCurrentMode()
+      fitToView(canvasSize: newSize)
+    }
+  }
+
+  /// Reset all card positions to a clean grid layout. For the global canvas
+  /// this keeps the original 800×550 default so user dashboards stay
+  /// predictable; for a per-worktree canvas it tiles the viewport so a
+  /// handful of panes fill the visible space.
   private func organizeCards() {
-    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    let keys = collectCardKeys(from: scopedActiveStates)
+    guard !keys.isEmpty else { return }
     let columns = gridColumns(for: keys.count)
+    let cardSize: CGSize =
+      scopedWorktreeID != nil
+      ? fittedCardSize(count: keys.count, viewportSize: viewportSize)
+      : CanvasCardLayout.defaultSize
     var layouts = layoutStore.cardLayouts
     for (index, key) in keys.enumerated() {
       layouts[key] = CanvasCardLayout(
-        position: gridPosition(index: index, columns: columns)
+        position: gridPosition(index: index, columns: columns, cardSize: cardSize),
+        size: cardSize
       )
     }
     layoutStore.cardLayouts = layouts
@@ -349,7 +445,7 @@ struct CanvasView: View {
   /// current size and finds a compact layout whose aspect ratio matches
   /// the viewport.
   private func arrangeCards() {
-    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    let keys = collectCardKeys(from: scopedActiveStates)
     guard !keys.isEmpty, viewportSize.width > 0, viewportSize.height > 0 else { return }
 
     let cards: [CanvasCardPacker.CardInfo] = keys.map { key in
@@ -369,7 +465,7 @@ struct CanvasView: View {
   private func fitToView(canvasSize: CGSize) {
     guard canvasSize.width > 0, canvasSize.height > 0 else { return }
 
-    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    let keys = collectCardKeys(from: scopedActiveStates)
     guard !keys.isEmpty else { return }
 
     // Bounding box of all cards in canvas coordinates
@@ -409,7 +505,7 @@ struct CanvasView: View {
 
   /// Remove stored layouts for tabs that no longer exist.
   private func cleanStaleLayouts() {
-    let visibleKeys = Set(collectCardKeys(from: terminalManager.activeWorktreeStates))
+    let visibleKeys = Set(collectCardKeys(from: scopedActiveStates))
     let staleKeys = layoutStore.cardLayouts.keys.filter { !visibleKeys.contains($0) }
     guard !staleKeys.isEmpty else { return }
     var layouts = layoutStore.cardLayouts
@@ -514,7 +610,7 @@ struct CanvasView: View {
   }
 
   private func selectAllCards() {
-    let activeStates = terminalManager.activeWorktreeStates
+    let activeStates = scopedActiveStates
     let allTabIDs = collectVisibleTabIDs(from: activeStates)
     guard allTabIDs.count > 1 else { return }
     mutateSelection(states: activeStates) { state in
@@ -654,7 +750,7 @@ struct CanvasView: View {
   private func activateCanvas() {
     cleanStaleLayouts()
 
-    let activeStates = terminalManager.activeWorktreeStates
+    let activeStates = scopedActiveStates
 
     // Mark all states as canvas-managed so that tree updates (e.g. split
     // creation) don't trigger applySurfaceActivity with stale normal-mode
@@ -689,7 +785,7 @@ struct CanvasView: View {
   }
 
   private func deactivateCanvas() {
-    let activeStates = terminalManager.activeWorktreeStates
+    let activeStates = scopedActiveStates
     for state in activeStates {
       state.isCanvasManaged = false
     }

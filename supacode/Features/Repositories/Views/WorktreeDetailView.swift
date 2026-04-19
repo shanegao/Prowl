@@ -59,10 +59,10 @@ struct WorktreeDetailView: View {
       selectedTerminalWorktree: selectedTerminalWorktree,
       selectedWorktreeSummaries: selectedWorktreeSummaries
     )
-    .navigationTitle(repositories.isShowingCanvas ? "Canvas" : "")
+    .navigationTitle(detailNavigationTitle(repositories: repositories))
     .toolbar(removing: repositories.isShowingCanvas ? nil : .title)
     .toolbar {
-      if repositories.isShowingCanvas {
+      if case .canvasOverall = repositories.selection {
         canvasToolbarContent(
           notificationGroups: notificationGroups,
           unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
@@ -86,8 +86,25 @@ struct WorktreeDetailView: View {
           )
         )
       {
+        let canvasButtonWorktreeID = selectedTerminalWorktree?.id
+        let canvasButtonPaneCount = canvasButtonWorktreeID.flatMap { id in
+          terminalManager.activeWorktreeStates
+            .first(where: { $0.worktreeID == id })?
+            .totalPaneCount
+        } ?? 0
         WorktreeToolbarContent(
           toolbarState: toolbarState,
+          showsWorktreeCanvasButton: canvasButtonWorktreeID != nil && canvasButtonPaneCount > 1,
+          isWorktreeCanvasActive: repositories.isShowingCanvas
+            && repositories.scopedCanvasWorktreeID == canvasButtonWorktreeID,
+          onToggleWorktreeCanvas: {
+            // Resolve the worktree at press time, not at toolbar-render time.
+            // The .keyboardShortcut action can otherwise fire with a stale ID
+            // captured from a previous render, opening canvas for the wrong
+            // worktree after the user switches sidebar selection.
+            guard let id = store.state.repositories.selectedTerminalWorktree?.id else { return }
+            store.send(.repositories(.toggleWorktreeCanvas(id)))
+          },
           onRenameBranch: { newBranch in
             guard let selectedWorktree else { return }
             store.send(.repositories(.requestRenameBranch(selectedWorktree.id, newBranch)))
@@ -121,6 +138,16 @@ struct WorktreeDetailView: View {
       runScriptIsRunning: runScriptIsRunning
     )
     return applyFocusedActions(content: content, actions: actions)
+  }
+
+  private func detailNavigationTitle(repositories: RepositoriesFeature.State) -> String {
+    if case .canvasOverall = repositories.selection { return "Canvas" }
+    if case .canvasForWorktree(let worktreeID) = repositories.selection,
+      let worktree = repositories.worktree(for: worktreeID)
+    {
+      return "Canvas · \(worktree.name)"
+    }
+    return ""
   }
 
   @ToolbarContentBuilder
@@ -219,10 +246,16 @@ struct WorktreeDetailView: View {
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
     if repositories.isShowingCanvas {
+      let scopedID = repositories.scopedCanvasWorktreeID
       CanvasView(
         terminalManager: terminalManager,
+        scopedWorktreeID: scopedID,
         onExitToTab: {
-          store.send(.repositories(.toggleCanvas))
+          if let scopedID {
+            store.send(.repositories(.toggleWorktreeCanvas(scopedID)))
+          } else {
+            store.send(.repositories(.toggleCanvas))
+          }
         })
     } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
@@ -426,6 +459,9 @@ struct WorktreeDetailView: View {
 
   fileprivate struct WorktreeToolbarContent: ToolbarContent {
     let toolbarState: WorktreeToolbarState
+    let showsWorktreeCanvasButton: Bool
+    let isWorktreeCanvasActive: Bool
+    let onToggleWorktreeCanvas: () -> Void
     let onRenameBranch: (String) -> Void
     let onOpenWorktree: (OpenWorktreeAction) -> Void
     let onOpenActionSelectionChanged: (OpenWorktreeAction) -> Void
@@ -439,14 +475,27 @@ struct WorktreeDetailView: View {
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
-      ToolbarItem {
-        WorktreeDetailTitleView(
-          title: toolbarState.title,
-          onSubmit: toolbarState.title.supportsRename ? onRenameBranch : nil
-        )
+      if !isWorktreeCanvasActive {
+        ToolbarItem {
+          WorktreeDetailTitleView(
+            title: toolbarState.title,
+            onSubmit: toolbarState.title.supportsRename ? onRenameBranch : nil
+          )
+        }
       }
 
       ToolbarSpacer(.flexible)
+
+      if showsWorktreeCanvasButton {
+        ToolbarSpacer(.fixed)
+        ToolbarItemGroup {
+          WorktreeCanvasToolbarButton(
+            isActive: isWorktreeCanvasActive,
+            onToggle: onToggleWorktreeCanvas
+          )
+        }
+        ToolbarSpacer(.fixed)
+      }
 
       ToolbarItemGroup {
         ToolbarStatusView(
@@ -922,6 +971,9 @@ private struct WorktreeToolbarPreview: View {
     .toolbar {
       WorktreeDetailView.WorktreeToolbarContent(
         toolbarState: toolbarState,
+        showsWorktreeCanvasButton: false,
+        isWorktreeCanvasActive: false,
+        onToggleWorktreeCanvas: {},
         onRenameBranch: { _ in },
         onOpenWorktree: { _ in },
         onOpenActionSelectionChanged: { _ in },

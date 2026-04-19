@@ -124,6 +124,7 @@ struct CanvasCardView: View {
     .frame(height: titleBarHeight)
     .frame(maxWidth: .infinity)
     .background(titleBarBackground)
+    .contentShape(.rect)
     .accessibilityAddTraits(.isButton)
     .onTapGesture { onTitleBarTap() }
     .onHover { hovering in

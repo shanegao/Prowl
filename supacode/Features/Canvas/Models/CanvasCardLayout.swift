@@ -233,9 +233,6 @@ struct CanvasCardPacker {
 final class CanvasLayoutStore {
   private static let storageKey = "canvasCardLayouts"
 
-  /// Whether auto-arrange has run in this app session. Resets on app launch.
-  static var hasAutoArrangedInSession = false
-
   var cardLayouts: [String: CanvasCardLayout] {
     didSet { save() }
   }

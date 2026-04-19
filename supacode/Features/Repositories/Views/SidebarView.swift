@@ -141,8 +141,13 @@ struct SidebarView: View {
     state: RepositoriesFeature.State,
     visibleWorktreeIDs: Set<Worktree.ID>
   ) -> Set<SidebarSelection> {
-    if state.isShowingCanvas {
-      return [.canvas]
+    if case .canvasOverall = state.selection {
+      return [.canvasOverall]
+    }
+    if case .canvasForWorktree(let worktreeID) = state.selection {
+      // Scoped canvas keeps the worktree row highlighted, not the "Canvas"
+      // sidebar item, so the user knows which worktree they're inspecting.
+      return [.worktree(worktreeID)]
     }
     if state.isShowingArchivedWorktrees {
       return [.archivedWorktrees]

@@ -272,6 +272,8 @@ struct RepositoriesFeature {
     case selectArchivedWorktrees
     case selectCanvas
     case toggleCanvas
+    case selectWorktreeCanvas(Worktree.ID)
+    case toggleWorktreeCanvas(Worktree.ID)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
@@ -619,14 +621,14 @@ struct RepositoriesFeature {
           // Remember the current worktree so toggleCanvas can restore it.
           state.preCanvasWorktreeID = state.selectedWorktreeID
           state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
-          state.selection = .canvas
+          state.selection = .canvasOverall
           state.sidebarSelectedWorktreeIDs = []
           return .run { _ in
             await terminalClient.send(.setCanvasMode(true))
           }
 
         case .toggleCanvas:
-          if state.isShowingCanvas {
+          if state.isShowingGlobalCanvas {
             // Exit canvas: prefer the card focused in canvas, then the worktree
             // we came from, then the first available worktree.
             let targetID =
@@ -648,6 +650,30 @@ struct RepositoriesFeature {
             // Enter canvas if there are any open worktrees.
             guard !state.orderedWorktreeRows().isEmpty else { return .none }
             return .send(.selectCanvas)
+          }
+
+        case .selectWorktreeCanvas(let worktreeID):
+          // Remember where to return when toggled back to tab view.
+          state.preCanvasWorktreeID = state.selectedWorktreeID
+          state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
+          state.selection = .canvasForWorktree(worktreeID)
+          state.sidebarSelectedWorktreeIDs = []
+          return .run { _ in
+            await terminalClient.send(.setCanvasMode(true))
+          }
+
+        case .toggleWorktreeCanvas(let worktreeID):
+          if case .canvasForWorktree = state.selection {
+            // Exit scoped canvas: return to the worktree we came from (same
+            // restore order as the global canvas), falling back to the scoped
+            // worktree itself so the user lands somewhere sensible.
+            let targetID =
+              state.preCanvasTerminalTargetID
+              ?? state.preCanvasWorktreeID
+              ?? worktreeID
+            return .send(.selectWorktree(targetID, focusTerminal: true))
+          } else {
+            return .send(.selectWorktreeCanvas(worktreeID))
           }
 
         case .setSidebarSelectedWorktreeIDs(let worktreeIDs):
@@ -1384,7 +1410,22 @@ extension RepositoriesFeature.State {
   }
 
   var isShowingCanvas: Bool {
-    selection == .canvas
+    if case .canvasOverall = selection { return true }
+    if case .canvasForWorktree = selection { return true }
+    return false
+  }
+
+  /// True only for the repo-wide global canvas (not the per-worktree variant).
+  var isShowingGlobalCanvas: Bool {
+    if case .canvasOverall = selection { return true }
+    return false
+  }
+
+  /// The worktree ID when the user is in a scoped (per-worktree) canvas. `nil`
+  /// for the global canvas or when not in a canvas at all.
+  var scopedCanvasWorktreeID: Worktree.ID? {
+    if case .canvasForWorktree(let id) = selection { return id }
+    return nil
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {
@@ -2096,7 +2137,7 @@ private func isSidebarSelectionValid(
     return isSelectionValid(id, state: state)
   case .repository(let id):
     return state.repositories[id: id] != nil
-  case .archivedWorktrees, .canvas:
+  case .archivedWorktrees, .canvasOverall, .canvasForWorktree:
     return true
   case nil:
     return false

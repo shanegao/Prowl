@@ -17,13 +17,17 @@ struct SidebarListView: View {
     let selection = Binding<Set<SidebarSelection>>(
       get: {
         var nextSelections = sidebarSelections
-        if state.isShowingCanvas {
-          nextSelections = [.canvas]
+        if case .canvasOverall = state.selection {
+          nextSelections = [.canvasOverall]
+        } else if case .canvasForWorktree(let worktreeID) = state.selection {
+          // Scoped canvas keeps the worktree row highlighted, not the "Canvas"
+          // sidebar item.
+          nextSelections = [.worktree(worktreeID)]
         } else if state.isShowingArchivedWorktrees {
           nextSelections = [.archivedWorktrees]
         } else {
           nextSelections.remove(.archivedWorktrees)
-          nextSelections.remove(.canvas)
+          nextSelections.remove(.canvasOverall)
           if let selectedRepository = state.selectedRepository, selectedRepository.kind == .plain {
             nextSelections = [.repository(selectedRepository.id)]
           } else if let selectedWorktreeID = state.selectedWorktreeID {
@@ -39,8 +43,8 @@ struct SidebarListView: View {
           return repositoryID
         }
 
-        if nextSelections.contains(.canvas) {
-          sidebarSelections = [.canvas]
+        if nextSelections.contains(.canvasOverall) {
+          sidebarSelections = [.canvasOverall]
           store.send(.selectCanvas)
           return
         }
@@ -186,7 +190,7 @@ struct SidebarListView: View {
       .safeAreaInset(edge: .top) {
         CanvasSidebarButton(
           store: store,
-          isSelected: state.isShowingCanvas
+          isSelected: state.isShowingGlobalCanvas
         )
         .padding(.top, 4)
         .background(.bar)

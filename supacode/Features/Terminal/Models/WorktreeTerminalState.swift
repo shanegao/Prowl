@@ -119,6 +119,12 @@ final class WorktreeTerminalState {
     focusedSurfaceIdByTab[tabId]
   }
 
+  /// Total terminal panes across all tabs for this worktree (sum of split-tree
+  /// leaves). Read-only — does not materialize missing trees.
+  var totalPaneCount: Int {
+    trees.values.reduce(0) { $0 + $1.leaves().count }
+  }
+
   @discardableResult
   func insertCommittedText(_ text: String, in tabId: TerminalTabID) -> Bool {
     guard let surface = surfaceView(for: tabId) else { return false }
