@@ -910,7 +910,7 @@ struct AppFeature {
         }
 
       case .commandPalette(.delegate(.openPullRequest(let worktreeID))):
-        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .openOnGithub))))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .openOnCodeHost))))
 
       case .commandPalette(.delegate(.markPullRequestReady(let worktreeID))):
         return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .markReadyForReview))))

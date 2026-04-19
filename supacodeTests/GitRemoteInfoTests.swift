@@ -4,6 +4,18 @@ import Testing
 @testable import supacode
 
 struct GitRemoteInfoTests {
+  @Test func parseRepositoryWebInfoFromGitHubRemote() {
+    let info = GitClient.parseRepositoryWebInfo("git@github.com:octo/repo.git")
+    #expect(info == GitRemoteWebInfo(host: "github.com", repositoryPath: "octo/repo"))
+    #expect(info?.repositoryURL == URL(string: "https://github.com/octo/repo"))
+  }
+
+  @Test func parseRepositoryWebInfoFromGitLabSubgroupRemote() {
+    let info = GitClient.parseRepositoryWebInfo("https://gitlab.com/group/subgroup/repo.git")
+    #expect(info == GitRemoteWebInfo(host: "gitlab.com", repositoryPath: "group/subgroup/repo"))
+    #expect(info?.repositoryURL == URL(string: "https://gitlab.com/group/subgroup/repo"))
+  }
+
   @Test func parseSSHRemote() {
     let info = GitClient.parseGithubRemoteInfo("git@github.com:octo/repo.git")
     #expect(info == GithubRemoteInfo(host: "github.com", owner: "octo", repo: "repo"))

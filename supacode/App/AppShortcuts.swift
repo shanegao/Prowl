@@ -328,7 +328,7 @@ enum AppShortcuts {
     ),
     .init(
       id: CommandID.openPullRequest,
-      title: "Open Pull Request",
+      title: "Open on Code Host",
       scope: .configurableAppAction,
       shortcut: openPullRequest
     ),

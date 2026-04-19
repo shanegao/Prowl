@@ -226,9 +226,19 @@ extension RepositoriesFeature {
     case .pullRequestAction(let worktreeID, let action):
       guard let worktree = state.worktree(for: worktreeID),
         let repositoryID = state.repositoryID(containing: worktreeID),
-        let repository = state.repositories[id: repositoryID],
-        let pullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
+        let repository = state.repositories[id: repositoryID]
       else {
+        return .send(
+          .presentAlert(
+            title: "Repository not available",
+            message: "Prowl could not find the selected repository."
+          )
+        )
+      }
+      let repoRoot = worktree.repositoryRootURL
+      let worktreeRoot = worktree.workingDirectory
+      let pullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
+      if action != .openOnCodeHost, pullRequest == nil {
         return .send(
           .presentAlert(
             title: "Pull request not available",
@@ -236,28 +246,34 @@ extension RepositoriesFeature {
           )
         )
       }
-      let repoRoot = worktree.repositoryRootURL
-      let worktreeRoot = worktree.workingDirectory
       let pullRequestRefresh = WorktreeInfoWatcherClient.Event.repositoryPullRequestRefresh(
         repositoryRootURL: repoRoot,
         worktreeIDs: repository.worktrees.map(\.id)
       )
-      let branchName = pullRequest.headRefName ?? worktree.name
-      let failingCheckDetailsURL = (pullRequest.statusCheckRollup?.checks ?? []).first {
+      let branchName = pullRequest?.headRefName ?? worktree.name
+      let failingCheckDetailsURL = (pullRequest?.statusCheckRollup?.checks ?? []).first {
         $0.checkState == .failure && $0.detailsUrl != nil
       }?.detailsUrl
       switch action {
-      case .openOnGithub:
-        guard let url = URL(string: pullRequest.url) else {
-          return .send(
-            .presentAlert(
-              title: "Invalid pull request URL",
-              message: "Prowl could not open the pull request URL."
+      case .openOnCodeHost:
+        let gitClient = gitClient
+        let openURLClient = openURLClient
+        let pullRequestURL = pullRequest.flatMap { URL(string: $0.url) }
+        return .run { send in
+          if let pullRequestURL {
+            await openURLClient.open(pullRequestURL)
+            return
+          }
+          guard let repositoryURL = await gitClient.repositoryWebURL(repoRoot) else {
+            await send(
+              .presentAlert(
+                title: "Repository URL not available",
+                message: "Prowl could not determine a code host URL for this repository."
+              )
             )
-          )
-        }
-        return .run { @MainActor _ in
-          NSWorkspace.shared.open(url)
+            return
+          }
+          await openURLClient.open(repositoryURL)
         }
 
       case .copyFailingJobURL:
@@ -294,6 +310,7 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
+          guard let pullRequest else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -323,6 +340,7 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
+          guard let pullRequest else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -356,6 +374,7 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
+          guard let pullRequest else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -386,6 +405,7 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
+          guard pullRequest != nil else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
@@ -463,6 +483,7 @@ extension RepositoriesFeature {
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
         return .run { send in
+          guard pullRequest != nil else { return }
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(

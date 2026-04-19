@@ -179,6 +179,25 @@ struct CommandPaletteFeatureTests {
     #expect(items.contains(where: { $0.id == "global.new-worktree" }) == false)
   }
 
+  @Test func commandPaletteItems_showsCodeHostActionWithoutPullRequest() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let openItem = items.first {
+      if case .openPullRequest(let worktreeID) = $0.kind {
+        return worktreeID == worktree.id
+      }
+      return false
+    }
+
+    #expect(openItem?.title == "Open Repository on Code Host")
+    #expect(openItem?.subtitle == repository.name)
+  }
+
   @Test func emptyQueryHidesGhosttyCommands() {
     let ghosttyItem = CommandPaletteItem(
       id: "ghostty.goto_split:right|Focus Split Right",

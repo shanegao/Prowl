@@ -3104,6 +3104,74 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func pullRequestActionOpenOnCodeHostOpensPullRequestURLWhenAvailable() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let pullRequest = makePullRequest(
+      state: "OPEN",
+      headRefName: featureWorktree.name,
+      number: 12,
+      url: "https://github.com/octo/repo/pull/12"
+    )
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: pullRequest
+    )
+    let openedURLs = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        Issue.record("repositoryWebURL should not be requested when a pull request URL exists")
+        return nil
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .openOnCodeHost)))
+    await store.finish()
+
+    #expect(openedURLs.value == [URL(string: "https://github.com/octo/repo/pull/12")!])
+  }
+
+  @Test func pullRequestActionOpenOnCodeHostFallsBackToRepositoryURL() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let repositoryURL = URL(string: "https://gitlab.com/group/subgroup/repo")!
+    let openedURLs = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        repositoryURL
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .openOnCodeHost)))
+    await store.finish()
+
+    #expect(openedURLs.value == [repositoryURL])
+  }
+
   @Test func worktreeInfoEventRepositoryPullRequestRefreshMarksInFlightThenCompletes() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -3493,7 +3561,7 @@ struct RepositoriesFeatureTests {
     let fixedDate = Date(timeIntervalSince1970: 1_000_000)
     var state = makeState(repositories: [repository])
     state.archivedWorktrees = [
-      ArchivedWorktree(id: worktree.id, archivedAt: .distantPast),
+      ArchivedWorktree(id: worktree.id, archivedAt: .distantPast)
     ]
     state.archivedAutoDeletePeriod = nil
     let store = TestStore(initialState: state) {
@@ -3513,7 +3581,7 @@ struct RepositoriesFeatureTests {
     let fixedDate = Date(timeIntervalSince1970: 1_000_000)
     var state = makeState(repositories: [repository])
     state.archivedWorktrees = [
-      ArchivedWorktree(id: mainWorktree.id, archivedAt: .distantPast),
+      ArchivedWorktree(id: mainWorktree.id, archivedAt: .distantPast)
     ]
     state.archivedAutoDeletePeriod = .oneDay
     let store = TestStore(initialState: state) {
@@ -3787,7 +3855,8 @@ struct RepositoriesFeatureTests {
   private func makePullRequest(
     state: String,
     headRefName: String? = nil,
-    number: Int = 1
+    number: Int = 1,
+    url: String? = nil
   ) -> GithubPullRequest {
     GithubPullRequest(
       number: number,
@@ -3800,7 +3869,7 @@ struct RepositoriesFeatureTests {
       mergeable: nil,
       mergeStateStatus: nil,
       updatedAt: nil,
-      url: "https://example.com/pull/\(number)",
+      url: url ?? "https://example.com/pull/\(number)",
       headRefName: headRefName,
       baseRefName: "main",
       commitsCount: 1,

@@ -236,20 +236,7 @@ struct CommandPaletteFeature {
       )
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
     }
-    if let selectedWorktreeID = repositories.selectedWorktreeID,
-      let repositoryID = repositories.repositoryID(containing: selectedWorktreeID),
-      repositories.repositories[id: repositoryID]?.capabilities.supportsPullRequests == true,
-      let pullRequest = repositories.worktreeInfo(for: selectedWorktreeID)?.pullRequest,
-      pullRequest.number > 0,
-      pullRequest.state.uppercased() != "CLOSED"
-    {
-      let pullRequestActions = pullRequestItems(
-        pullRequest: pullRequest,
-        worktreeID: selectedWorktreeID,
-        repositoryID: repositoryID
-      )
-      items.append(contentsOf: pullRequestActions)
-    }
+    items.append(contentsOf: selectedCodeHostItems(from: repositories))
     #if DEBUG
       items.append(contentsOf: debugToastItems())
     #endif
@@ -282,6 +269,38 @@ struct CommandPaletteFeature {
     }
     return ids
   }
+}
+
+private func selectedCodeHostItems(
+  from repositories: RepositoriesFeature.State
+) -> [CommandPaletteItem] {
+  guard
+    let selectedWorktreeID = repositories.selectedWorktreeID,
+    let repositoryID = repositories.repositoryID(containing: selectedWorktreeID),
+    let repository = repositories.repositories[id: repositoryID],
+    repository.capabilities.supportsPullRequests
+  else {
+    return []
+  }
+
+  let pullRequest = repositories.worktreeInfo(for: selectedWorktreeID)?.pullRequest
+  if let pullRequest, pullRequest.number > 0, pullRequest.state.uppercased() != "CLOSED" {
+    return pullRequestItems(
+      pullRequest: pullRequest,
+      worktreeID: selectedWorktreeID,
+      repositoryID: repositoryID
+    )
+  }
+
+  return [
+    CommandPaletteItem(
+      id: CommandPaletteItemID.pullRequestOpen(repositoryID),
+      title: "Open Repository on Code Host",
+      subtitle: repository.name,
+      kind: .openPullRequest(selectedWorktreeID),
+      priorityTier: 2
+    ),
+  ]
 }
 
 private func pullRequestItems(
@@ -361,7 +380,7 @@ private func pullRequestItems(
   var items: [CommandPaletteItem] = [
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestOpen(repositoryID),
-      title: "Open PR on GitHub",
+      title: "Open Pull Request on GitHub",
       subtitle: pullRequest.title,
       kind: .openPullRequest(worktreeID),
       priorityTier: 2
