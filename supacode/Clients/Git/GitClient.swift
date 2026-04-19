@@ -883,13 +883,13 @@ struct GitClient {
       guard hostParts.count == 2 else {
         return nil
       }
-      return parseRepositoryWebInfo(host: String(hostParts[0]), path: String(hostParts[1]))
+      return parseRepositoryWebInfo(host: String(hostParts[0]), port: nil, path: String(hostParts[1]))
     }
     guard let url = URL(string: trimmed), let host = url.host else {
       return nil
     }
     let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-    return parseRepositoryWebInfo(host: host, path: path)
+    return parseRepositoryWebInfo(host: host, port: url.port, path: path)
   }
 
   nonisolated static func parseGithubRemoteInfo(_ remoteURL: String) -> GithubRemoteInfo? {
@@ -899,7 +899,11 @@ struct GitClient {
     return parseGithubRemoteInfo(remoteWebInfo)
   }
 
-  nonisolated private static func parseRepositoryWebInfo(host: String, path: String) -> GitRemoteWebInfo? {
+  nonisolated private static func parseRepositoryWebInfo(
+    host: String,
+    port: Int?,
+    path: String
+  ) -> GitRemoteWebInfo? {
     let components = path.split(separator: "/", omittingEmptySubsequences: true)
     guard components.count >= 2 else {
       return nil
@@ -911,7 +915,7 @@ struct GitClient {
     guard !repositoryPath.isEmpty else {
       return nil
     }
-    return GitRemoteWebInfo(host: host, repositoryPath: repositoryPath)
+    return GitRemoteWebInfo(host: host, repositoryPath: repositoryPath, port: port)
   }
 
   nonisolated private static func parseGithubRemoteInfo(_ remoteWebInfo: GitRemoteWebInfo) -> GithubRemoteInfo? {

@@ -258,7 +258,7 @@ extension RepositoriesFeature {
       case .openOnCodeHost:
         let gitClient = gitClient
         let openURLClient = openURLClient
-        let pullRequestURL = pullRequest.flatMap { URL(string: $0.url) }
+        let pullRequestURL = pullRequest.flatMap { Self.validWebURL($0.url) }
         return .run { send in
           if let pullRequestURL {
             await openURLClient.open(pullRequestURL)
@@ -571,6 +571,17 @@ extension RepositoriesFeature {
       state.mergedWorktreeAction = action
       return .none
     }
+  }
+
+  nonisolated private static func validWebURL(_ raw: String) -> URL? {
+    guard let url = URL(string: raw),
+      let scheme = url.scheme?.lowercased(),
+      ["http", "https"].contains(scheme),
+      url.host != nil
+    else {
+      return nil
+    }
+    return url
   }
 
   var githubIntegrationReducer: some ReducerOf<Self> {

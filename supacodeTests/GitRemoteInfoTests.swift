@@ -16,6 +16,17 @@ struct GitRemoteInfoTests {
     #expect(info?.repositoryURL == URL(string: "https://gitlab.com/group/subgroup/repo"))
   }
 
+  @Test func parseRepositoryWebInfoPreservesCustomPortAndPathPrefix() {
+    let info = GitClient.parseRepositoryWebInfo("ssh://git@git.example.com:8443/scm/platform/repo.git")
+    #expect(info == GitRemoteWebInfo(host: "git.example.com", repositoryPath: "scm/platform/repo", port: 8443))
+    #expect(info?.repositoryURL == URL(string: "https://git.example.com:8443/scm/platform/repo"))
+  }
+
+  @Test func parseRepositoryWebInfoRejectsUnparseableRemote() {
+    let info = GitClient.parseRepositoryWebInfo("/tmp/local-only/repo.git")
+    #expect(info == nil)
+  }
+
   @Test func parseSSHRemote() {
     let info = GitClient.parseGithubRemoteInfo("git@github.com:octo/repo.git")
     #expect(info == GithubRemoteInfo(host: "github.com", owner: "octo", repo: "repo"))

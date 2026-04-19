@@ -3172,6 +3172,75 @@ struct RepositoriesFeatureTests {
     #expect(openedURLs.value == [repositoryURL])
   }
 
+  @Test func pullRequestActionOpenOnCodeHostFallsBackWhenPullRequestURLIsInvalid() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let pullRequest = makePullRequest(
+      state: "OPEN",
+      headRefName: featureWorktree.name,
+      number: 12,
+      url: "/octo/repo/pull/12"
+    )
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: pullRequest
+    )
+    let repositoryURL = URL(string: "https://git.example.com/scm/repo")!
+    let openedURLs = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        repositoryURL
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .openOnCodeHost)))
+    await store.finish()
+
+    #expect(openedURLs.value == [repositoryURL])
+  }
+
+  @Test func pullRequestActionOpenOnCodeHostShowsAlertWhenRepositoryURLUnavailable() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .openOnCodeHost)))
+    await store.receive(\.presentAlert) {
+      $0.alert = AlertState<RepositoriesFeature.Alert> {
+        TextState("Repository URL not available")
+      } actions: {
+        ButtonState(role: .cancel) {
+          TextState("OK")
+        }
+      } message: {
+        TextState("Prowl could not determine a code host URL for this repository.")
+      }
+    }
+  }
+
   @Test func worktreeInfoEventRepositoryPullRequestRefreshMarksInFlightThenCompletes() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
