@@ -41,7 +41,7 @@ struct CanvasView: View {
         Color.clear
           .onAppear {
             ensureLayouts(for: allCardKeys)
-            pruneSelection(to: Set(allTabIDs), states: activeStates)
+            pruneSelection(previousOrder: [], currentOrder: allTabIDs, states: activeStates)
             syncBroadcastCallbacks(states: activeStates)
           }
           .onChange(of: allCardKeys) { _, newKeys in
@@ -51,8 +51,8 @@ struct CanvasView: View {
             ensureLayouts(for: newKeys)
             syncBroadcastCallbacks(states: activeStates)
           }
-          .onChange(of: allTabIDs) { _, newTabIDs in
-            pruneSelection(to: Set(newTabIDs), states: activeStates)
+          .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in
+            pruneSelection(previousOrder: oldTabIDs, currentOrder: newTabIDs, states: activeStates)
           }
           .contentShape(.rect)
           .accessibilityAddTraits(.isButton)
@@ -122,6 +122,13 @@ struct CanvasView: View {
                     onExitToTab()
                   }
                   lastTitleBarTapDate = now
+                },
+                onExpand: {
+                  focusSingleCard(tab.id, surfaceState: state, states: activeStates)
+                  onExitToTab()
+                },
+                onClose: {
+                  state.closeTab(tab.id)
                 }
               )
               .scaleEffect(canvasScale, anchor: .center)
@@ -549,9 +556,13 @@ struct CanvasView: View {
     }
   }
 
-  private func pruneSelection(to visibleTabIDs: Set<TerminalTabID>, states: [WorktreeTerminalState]) {
+  private func pruneSelection(
+    previousOrder: [TerminalTabID],
+    currentOrder: [TerminalTabID],
+    states: [WorktreeTerminalState]
+  ) {
     let previousPrimaryTabID = selectionState.primaryTabID
-    selectionState.prune(to: visibleTabIDs)
+    selectionState.pruneAutoAdvancingPrimary(previousOrder: previousOrder, currentOrder: currentOrder)
     syncPrimaryFocus(from: previousPrimaryTabID, to: selectionState.primaryTabID, states: states)
     syncBroadcastCallbacks(states: states)
   }
