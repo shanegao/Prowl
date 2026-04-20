@@ -14,6 +14,11 @@ struct ShelfView: View {
   let terminalManager: WorktreeTerminalManager
   let createTab: () -> Void
 
+  /// Shared namespace so each spine's `matchedGeometryEffect` can bridge
+  /// the left-stack ForEach and the right-stack ForEach without breaking
+  /// visual identity while it moves between them.
+  @Namespace private var spineNamespace
+
   var body: some View {
     let state = store.state
     let books = state.orderedShelfBooks()
@@ -26,6 +31,7 @@ struct ShelfView: View {
       if let openIndex {
         spineStack(books: Array(books[0...openIndex]))
         openBookArea(for: books[openIndex], state: state)
+          .transition(.opacity)
         let rightStart = openIndex + 1
         if rightStart < books.count {
           spineStack(books: Array(books[rightStart..<books.count]))
@@ -37,6 +43,11 @@ struct ShelfView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(.background)
+    // Animate on every openBookID change — covers both Shelf-originated
+    // book switches (which also set their own TCA animation) and
+    // left-nav-originated switches, so the spine flow is consistent
+    // regardless of entry point.
+    .animation(.easeInOut(duration: 0.2), value: openBookID)
   }
 
   @ViewBuilder
@@ -53,6 +64,7 @@ struct ShelfView: View {
           onSplitVertical: isOpen(book) ? { performSplit(direction: "new_split:right") } : nil,
           onSplitHorizontal: isOpen(book) ? { performSplit(direction: "new_split:down") } : nil
         )
+        .matchedGeometryEffect(id: book.id, in: spineNamespace)
       }
     }
   }
@@ -108,11 +120,14 @@ struct ShelfView: View {
       state.tabManager.selectTab(tabID)
       return
     }
+    // Animate the spine flow and terminal crossfade. The duration and
+    // curve mirror the Shelf design doc: ~200ms ease-in-out, snappy but
+    // legible so the user can read each spine's movement.
     switch book.kind {
     case .worktree:
-      store.send(.selectWorktree(book.id, focusTerminal: true))
+      store.send(.selectWorktree(book.id, focusTerminal: true), animation: .easeInOut(duration: 0.2))
     case .plainFolder:
-      store.send(.selectRepository(book.repositoryID))
+      store.send(.selectRepository(book.repositoryID), animation: .easeInOut(duration: 0.2))
     }
     if let tabID {
       // Apply tab selection eagerly; the target book's state already exists
