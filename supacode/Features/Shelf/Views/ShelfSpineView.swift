@@ -18,6 +18,9 @@ struct ShelfSpineView: View {
   let onNewTab: (() -> Void)?
   let onSplitVertical: (() -> Void)?
   let onSplitHorizontal: (() -> Void)?
+  /// "Remove this book" — drives the book-level context menu entry on
+  /// the spine header / empty body. Nil disables the menu.
+  let onRemoveBook: (() -> Void)?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -31,6 +34,7 @@ struct ShelfSpineView: View {
           .contentShape(.rect)
       }
       .buttonStyle(.plain)
+      .contextMenu { bookContextMenu }
       bottomControls
     }
     .frame(width: ShelfMetrics.spineWidth)
@@ -41,6 +45,17 @@ struct ShelfSpineView: View {
       }
     }
     .help(book.displayName)
+  }
+
+  @ViewBuilder
+  private var bookContextMenu: some View {
+    if let onRemoveBook {
+      Button(role: .destructive) {
+        onRemoveBook()
+      } label: {
+        Text("Remove Book")
+      }
+    }
   }
 
   @ViewBuilder
@@ -80,6 +95,7 @@ struct ShelfSpineView: View {
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
+    .contextMenu { bookContextMenu }
   }
 
   @ViewBuilder
@@ -97,7 +113,20 @@ struct ShelfSpineView: View {
               hotkeyIndex: hotkeyIndex,
               isActive: terminalState.tabManager.selectedTabId == tab.id,
               hasUnseenNotification: terminalState.hasUnseenNotification(for: tab.id),
-              onTap: { onSelectTab(tab.id) }
+              onTap: { onSelectTab(tab.id) },
+              onClose: { terminalState.closeTab(tab.id) }
+            )
+            .terminalTabContextMenu(
+              tabId: tab.id,
+              tabs: terminalState.tabManager.tabs,
+              actions: TerminalTabContextMenuActions(
+                changeTitle: { terminalState.promptChangeTabTitle($0) },
+                changeIcon: { terminalState.presentIconPicker(for: $0) },
+                closeTab: { terminalState.closeTab($0) },
+                closeOthers: { terminalState.closeOtherTabs(keeping: $0) },
+                closeToRight: { terminalState.closeTabsToRight(of: $0) },
+                closeAll: { terminalState.closeAllTabs() }
+              )
             )
           }
         }
@@ -165,8 +194,10 @@ private struct ShelfSpineTabSlot: View {
   let isActive: Bool
   let hasUnseenNotification: Bool
   let onTap: () -> Void
+  let onClose: () -> Void
 
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
+  @State private var isHovering = false
 
   var body: some View {
     Button(action: onTap) {
@@ -178,6 +209,23 @@ private struct ShelfSpineTabSlot: View {
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
+    .overlay(alignment: .topTrailing) {
+      if isHovering && !commandKeyObserver.isPressed {
+        Button(action: onClose) {
+          Image(systemName: "xmark.circle.fill")
+            .imageScale(.small)
+            .foregroundStyle(.primary)
+            .background(Circle().fill(.background))
+            .accessibilityLabel("Close Tab")
+        }
+        .buttonStyle(.plain)
+        .offset(x: 3, y: -3)
+        .help("Close Tab")
+      }
+    }
+    .onHover { hovering in
+      isHovering = hovering
+    }
     .help(tab.title)
   }
 

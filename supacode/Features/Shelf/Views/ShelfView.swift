@@ -62,7 +62,8 @@ struct ShelfView: View {
           onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
           onNewTab: isOpen(book) ? createTab : nil,
           onSplitVertical: isOpen(book) ? { performSplit(direction: "new_split:right") } : nil,
-          onSplitHorizontal: isOpen(book) ? { performSplit(direction: "new_split:down") } : nil
+          onSplitHorizontal: isOpen(book) ? { performSplit(direction: "new_split:down") } : nil,
+          onRemoveBook: { removeBook(book) }
         )
         .matchedGeometryEffect(id: book.id, in: spineNamespace)
       }
@@ -74,6 +75,20 @@ struct ShelfView: View {
       let state = terminalManager.stateIfExists(for: openID)
     else { return }
     _ = state.performBindingActionOnFocusedSurface(direction)
+  }
+
+  /// "Remove Book" context action. Worktree books funnel through the
+  /// existing archive flow (which shows confirmation + progress); plain
+  /// folder books go through repository removal. Both pathways
+  /// eventually drop the book off the Shelf via the same prune logic
+  /// that drives the left navigation.
+  private func removeBook(_ book: ShelfBook) {
+    switch book.kind {
+    case .worktree:
+      store.send(.worktreeLifecycle(.requestArchiveWorktree(book.id, book.repositoryID)))
+    case .plainFolder:
+      store.send(.repositoryManagement(.requestRemoveRepository(book.repositoryID)))
+    }
   }
 
   private func isOpen(_ book: ShelfBook) -> Bool {
