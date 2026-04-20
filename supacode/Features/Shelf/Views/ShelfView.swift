@@ -3,11 +3,12 @@ import SwiftUI
 
 /// Root view for Shelf presentation mode.
 ///
-/// Phase 2 layout: three horizontal segments — a left stack of passed
-/// spines, the currently open book's terminal area, and a right stack of
-/// upcoming spines. Subsequent phases layer in tab slots, animations,
-/// notification badges, the bottom controls, and context menus described
-/// in `doc-onevcat/shelf-view.md`.
+/// Phase 3 layout: three horizontal segments — a left stack of passed
+/// spines (each showing its book's tabs), the currently open book's
+/// terminal area, and a right stack of upcoming spines. Clicking a tab
+/// on any spine opens that book (when different) and selects that tab.
+/// Animations and the ⌘-held digit overlay are layered in subsequent
+/// phases.
 struct ShelfView: View {
   let store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
@@ -22,18 +23,14 @@ struct ShelfView: View {
 
     HStack(spacing: 0) {
       if let openIndex {
-        spineStack(books: Array(books[0...openIndex]), openIndex: openIndex, isLeftStack: true)
+        spineStack(books: Array(books[0...openIndex]))
         openBookArea(for: books[openIndex], state: state)
         let rightStart = openIndex + 1
         if rightStart < books.count {
-          spineStack(
-            books: Array(books[rightStart..<books.count]),
-            openIndex: openIndex,
-            isLeftStack: false
-          )
+          spineStack(books: Array(books[rightStart..<books.count]))
         }
       } else {
-        spineStack(books: books, openIndex: nil, isLeftStack: true)
+        spineStack(books: books)
         emptyOpenArea()
       }
     }
@@ -42,13 +39,15 @@ struct ShelfView: View {
   }
 
   @ViewBuilder
-  private func spineStack(books: [ShelfBook], openIndex: Int?, isLeftStack: Bool) -> some View {
+  private func spineStack(books: [ShelfBook]) -> some View {
     HStack(spacing: 0) {
-      ForEach(Array(books.enumerated()), id: \.element.id) { _, book in
+      ForEach(books) { book in
         ShelfSpineView(
           book: book,
           isOpen: isOpen(book),
-          onTap: { handleSpineTap(book) }
+          terminalState: terminalManager.stateIfExists(for: book.id),
+          onOpenBook: { openBook(book, selectingTab: nil) },
+          onSelectTab: { tabID in openBook(book, selectingTab: tabID) }
         )
       }
     }
@@ -89,12 +88,26 @@ struct ShelfView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private func handleSpineTap(_ book: ShelfBook) {
+  /// Open `book` and optionally select a specific tab on it. For the open
+  /// book's own tab slots (no book change), this skips the worktree
+  /// re-selection and just tells the tab manager to switch tab.
+  private func openBook(_ book: ShelfBook, selectingTab tabID: TerminalTabID?) {
+    let isAlreadyOpen = store.state.openShelfBookID == book.id
+    if let tabID, isAlreadyOpen, let state = terminalManager.stateIfExists(for: book.id) {
+      state.tabManager.selectTab(tabID)
+      return
+    }
     switch book.kind {
     case .worktree:
       store.send(.selectWorktree(book.id, focusTerminal: true))
     case .plainFolder:
       store.send(.selectRepository(book.repositoryID))
+    }
+    if let tabID {
+      // Apply tab selection eagerly; the target book's state already exists
+      // if the user has opened it before. For first-time opens the tab
+      // manager seeds a default tab which we won't override.
+      terminalManager.stateIfExists(for: book.id)?.tabManager.selectTab(tabID)
     }
   }
 }

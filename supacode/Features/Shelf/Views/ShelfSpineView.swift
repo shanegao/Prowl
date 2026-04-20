@@ -2,35 +2,72 @@ import SwiftUI
 
 /// Vertical spine rendering for a single book on the Shelf.
 ///
-/// Phase 2 scope: geometry (one-line-text width), rotated header
-/// (name/branch), and a fixed-width selection background. Tab slots,
-/// notification badges, ⌘-overlay digits, and bottom controls are added
-/// in later phases.
+/// Phase 3 scope: header with book-level notification dot, a vertical
+/// scrollable tab list (icon-only slots), tap targets for header (opens
+/// the book with its current tab) and per-tab slot (opens the book with
+/// that tab). Animations, ⌘-held digit overlay, and bottom controls are
+/// layered in subsequent phases.
 struct ShelfSpineView: View {
   let book: ShelfBook
   let isOpen: Bool
-  let onTap: () -> Void
+  let terminalState: WorktreeTerminalState?
+  let onOpenBook: () -> Void
+  let onSelectTab: (TerminalTabID) -> Void
 
   var body: some View {
-    Button(action: onTap) {
-      VStack(alignment: .center, spacing: 4) {
-        ShelfSpineHeader(book: book)
-          .padding(.top, 8)
-        Spacer(minLength: 0)
+    VStack(spacing: 0) {
+      headerButton
+      tabList
+      // Flexible spacer keeps the tap target for "open this book" filling
+      // any leftover vertical space below the tab list.
+      Button(action: onOpenBook) {
+        Color.clear
+          .contentShape(.rect)
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .contentShape(.rect)
+      .buttonStyle(.plain)
     }
-    .buttonStyle(.plain)
     .frame(width: ShelfMetrics.spineWidth)
     .background(spineBackground)
     .overlay(alignment: .trailing) {
       if !isOpen {
-        Divider()
-          .opacity(0.4)
+        Divider().opacity(0.35)
       }
     }
-    .help("\(book.displayName)")
+    .help(book.displayName)
+  }
+
+  @ViewBuilder
+  private var headerButton: some View {
+    Button(action: onOpenBook) {
+      ShelfSpineHeader(
+        book: book,
+        hasAggregatedNotification: terminalState?.hasUnseenNotification == true
+      )
+      .frame(maxWidth: .infinity)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+  }
+
+  @ViewBuilder
+  private var tabList: some View {
+    if let terminalState {
+      ScrollView(.vertical, showsIndicators: false) {
+        VStack(spacing: ShelfMetrics.slotSpacing) {
+          ForEach(terminalState.tabManager.tabs) { tab in
+            ShelfSpineTabSlot(
+              tab: tab,
+              isActive: terminalState.tabManager.selectedTabId == tab.id,
+              hasUnseenNotification: terminalState.hasUnseenNotification(for: tab.id),
+              onTap: { onSelectTab(tab.id) }
+            )
+          }
+        }
+        .padding(.horizontal, ShelfMetrics.slotHorizontalPadding)
+        .padding(.top, ShelfMetrics.slotSpacing)
+      }
+      .scrollBounceBehavior(.basedOnSize)
+    }
   }
 
   @ViewBuilder
@@ -45,29 +82,87 @@ struct ShelfSpineView: View {
 
 private struct ShelfSpineHeader: View {
   let book: ShelfBook
+  let hasAggregatedNotification: Bool
 
   var body: some View {
     VStack(spacing: 6) {
-      Text(book.displayName)
-        .font(.callout.weight(.semibold))
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .fixedSize()
-        .rotationEffect(.degrees(90))
-        .frame(width: ShelfMetrics.spineWidth, alignment: .center)
-      if let branchName = book.branchName, branchName != book.displayName {
-        Text(branchName)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+      ZStack(alignment: .top) {
+        Circle()
+          .fill(.orange)
+          .frame(width: ShelfMetrics.aggregatedDotSize, height: ShelfMetrics.aggregatedDotSize)
+          .opacity(hasAggregatedNotification ? 1 : 0)
+          .accessibilityLabel("Unread notifications")
+          .accessibilityHidden(!hasAggregatedNotification)
+      }
+      .frame(height: ShelfMetrics.aggregatedDotSize)
+      .padding(.top, 6)
+      VStack(spacing: 6) {
+        Text(book.displayName)
+          .font(.callout.weight(.semibold))
           .lineLimit(1)
           .truncationMode(.tail)
           .fixedSize()
           .rotationEffect(.degrees(90))
           .frame(width: ShelfMetrics.spineWidth, alignment: .center)
+        if let branchName = book.branchName, branchName != book.displayName {
+          Text(branchName)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .fixedSize()
+            .rotationEffect(.degrees(90))
+            .frame(width: ShelfMetrics.spineWidth, alignment: .center)
+        }
       }
+      .padding(.top, 30)
+      .padding(.bottom, 10)
     }
-    .padding(.top, 36)
-    .padding(.bottom, 8)
+  }
+}
+
+private struct ShelfSpineTabSlot: View {
+  let tab: TerminalTabItem
+  let isActive: Bool
+  let hasUnseenNotification: Bool
+  let onTap: () -> Void
+
+  var body: some View {
+    Button(action: onTap) {
+      ZStack {
+        backgroundFill
+        Image(systemName: tab.icon ?? ShelfMetrics.defaultTabIcon)
+          .imageScale(.small)
+          .foregroundStyle(foregroundTint)
+          .accessibilityHidden(true)
+      }
+      .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .help(tab.title)
+  }
+
+  @ViewBuilder
+  private var backgroundFill: some View {
+    if hasUnseenNotification {
+      // Same tint as Canvas title-bar notification highlight so Shelf's
+      // per-tab unread indicator reads as "this tab" rather than a new
+      // idiom. Wins over the active-tab highlight when both apply.
+      RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
+        .fill(Color.orange.opacity(0.3))
+    } else if isActive {
+      RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
+        .fill(Color.accentColor.opacity(0.2))
+    } else {
+      Color.clear
+    }
+  }
+
+  private var foregroundTint: Color {
+    if hasUnseenNotification { return .primary }
+    if isActive { return .primary }
+    return .secondary
   }
 }
 
@@ -75,4 +170,11 @@ private struct ShelfSpineHeader: View {
 enum ShelfMetrics {
   /// Width of a single spine (roughly one line of text).
   static let spineWidth: CGFloat = 26
+  static let slotSize: CGFloat = 22
+  static let slotCornerRadius: CGFloat = 4
+  static let slotSpacing: CGFloat = 3
+  static let slotHorizontalPadding: CGFloat = 2
+  static let aggregatedDotSize: CGFloat = 6
+  /// Fallback icon when a tab has no custom icon set.
+  static let defaultTabIcon: String = "terminal"
 }
