@@ -4,12 +4,34 @@
 
 | Key | Value |
 | --- | --- |
-| Commit | `0150ceaf0d2bc5e976df25b2f2cfa33ad92e5558` |
-| Tag | v0.8.0 |
-| Date | 2026-04-08 |
+| Commit | `c4e9be3b74085c60a209e8c231d98a9638c838f3` |
+| Tag | v0.8.1 |
+| Date | 2026-04-19 |
 
 All upstream changes up to and including this commit have been reviewed.
 Future upstream checks should only inspect commits **after** this baseline.
+
+---
+
+## 2026-04-20 — Review through v0.8.1
+
+### Upstream changes reviewed
+
+Reviewed 47 commits on `supabitapp/supacode` from `0150ceaf` (v0.8.0) through `c4e9be3b` (v0.8.1, 2026-04-19). Significant additions:
+
+- **Tuist migration** (`02d75cd5` + ~20 follow-ups) — upstream replaced the checked-in Xcode project with a generated Tuist workspace. Driven by a `release-tip` archive regression (the new `supacode-cli` Xcode target archived with `SKIP_INSTALL = NO`, polluting archives with `Products/usr/local/bin/supacode` and breaking `developer-id` export) plus configuration sprawl across pbxproj, Makefile, CI workflows, and in-source `sed` patching of Sentry/PostHog keys in `supacodeApp.swift`.
+- **CLI tool** (`e57d744d`, #227) — Unix-socket CLI `supacode` with `open`/`worktree`/`tab`/`surface`/`repo`/`settings`/`socket` subcommands. Orchestration-focused, dispatches via deeplink URLs.
+- **Script CLI + deeplinks** (`788dcff4` #253, `1f38a0c1` #246) — multi-script per repo, `worktree run --script UUID`, `worktree script list`.
+- **Folder (non-git) repo support** (`68e44966`, #257); atomic `sidebar.json` state (`7981cf34`, #254); Icon Composer app icon for macOS 26 Liquid Glass (`f37b698f`, #230).
+- **Ghostty `toggle-background-opacity`** (`1792e377`, #225) — same feature fork already implements via `5ca2bf4e` (2026-03-21, 3 weeks earlier).
+- Misc Ghostty fixes and editor integrations (RubyMine #248, surface width #233, local URL paths #236, split-preserve-zoom #241, openFinder→openWorktree rename #247).
+
+### Decisions
+
+- **Tuist migration**: **Skip.** Fork sidesteps the `release-tip` archive bug by construction — `ProwlCLI` is a SwiftPM `executableTarget`, not an Xcode target, and is pre-copied into `Resources/prowl-cli/` as a folder reference. Archives already contain only `Products/Applications/supacode.app`; `/usr/local/bin/prowl` symlinks into `/Applications/Prowl.app/Contents/Resources/prowl-cli/prowl`. Migrating would force rewriting the `/release` skill, notarization flow, appcast generation, and every rebrand patch for zero functional gain.
+- **CLI (#227, #253, #246)**: **Skip.** Fork's `prowl` CLI targets agent scripting (`send`/`key`/`read` with stdin piping, output capture, timeout, keyboard token synthesis); upstream's CLI targets orchestration (`worktree archive/pin/delete`, `tab/surface new/split/close`, `repo`/`settings`/`socket`). The two are orthogonal, not duplicative. Future work may selectively port upstream's orchestration commands into `ProwlCLI`'s envelope-based transport, but nothing forces action today.
+- **Ghostty `#225`**: **Defer to next sync of the affected files.** Upstream version is slightly cleaner — state on `GhosttyRuntime` instead of per-view (fixes multi-split-same-window ambiguity), reset on config reload, early-return in fullscreen, Bool return, debug logs. No user-visible bug in fork. When next editing `GhosttySurfaceView.swift` / `GhosttySurfaceBridge.swift` / `GhosttyRuntime.swift`, replace fork's implementation with upstream's and preserve the fork-only `chromeBackgroundColor(...)` call in `applyWindowBackgroundAppearance`.
+- **Everything else**: Nothing user-facing for the fork. Re-evaluate on next review.
 
 ---
 
