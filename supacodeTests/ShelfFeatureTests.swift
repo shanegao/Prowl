@@ -31,6 +31,7 @@ struct ShelfFeatureTests {
 
     await store.send(.toggleShelf) {
       $0.isShelfActive = true
+      $0.openedWorktreeIDs = [worktree.id]
     }
     await store.finish()
   }
@@ -101,6 +102,7 @@ struct ShelfFeatureTests {
       $0.selection = .worktree(worktree.id)
       $0.sidebarSelectedWorktreeIDs = [worktree.id]
       $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+      $0.openedWorktreeIDs = [worktree.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
@@ -134,6 +136,7 @@ struct ShelfFeatureTests {
       $0.selection = .worktree(worktree.id)
       $0.sidebarSelectedWorktreeIDs = [worktree.id]
       $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+      $0.openedWorktreeIDs = [worktree.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
@@ -175,6 +178,7 @@ struct ShelfFeatureTests {
       $0.selection = .worktree(second.id)
       $0.sidebarSelectedWorktreeIDs = [second.id]
       $0.pendingTerminalFocusWorktreeIDs = [second.id]
+      $0.openedWorktreeIDs = [second.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
@@ -241,6 +245,7 @@ struct ShelfFeatureTests {
     state.repositoryOrderIDs = [repo.id]
     state.selection = .worktree(wt1.id)
     state.isShelfActive = true
+    state.openedWorktreeIDs = [wt1.id, wt2.id]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
@@ -308,6 +313,7 @@ struct ShelfFeatureTests {
     state.repositoryRoots = [rootURL]
     state.repositoryOrderIDs = [repo.id]
     state.selection = .worktree(wt2.id)  // Currently on the last book.
+    state.openedWorktreeIDs = [wt1.id, wt2.id]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }

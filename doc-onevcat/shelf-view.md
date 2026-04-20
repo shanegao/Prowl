@@ -65,6 +65,16 @@ Let `N` be the index of the currently open book among all books `1…last`:
 `WorktreeTerminalManager.selectedWorktreeID`; the open book's active tab is
 that worktree's currently active tab (no separate Shelf-only tab memory).
 
+**Book set = opened worktrees/folders only**: the spines shown on the Shelf
+are *not* the full list of worktrees + plain folders in the sidebar. The
+Shelf only includes books the user has interacted with at least once in
+the current session — i.e., those with an associated terminal state. A
+worktree that appears in the left navigation but has never been clicked (or
+touched by CLI / layout restore) does *not* get a spine. Clicking an
+as-yet-unopened worktree in the left navigation while Shelf is active is
+what makes its spine materialize — the normal spine-flow animation applies
+as the new spine slides into its sidebar-order position.
+
 ---
 
 ## Spine Specification
@@ -399,3 +409,24 @@ The empty-book state falls out naturally: `ShelfOpenBookView` already
 renders `EmptyTerminalPaneView(message: "No terminals open")` when
 `selectedTabId == nil`. The spine remains on the shelf, with its bottom
 controls still enabling new tab / split to recover.
+
+### Opened-worktrees set
+
+`RepositoriesFeature.State.openedWorktreeIDs: Set<Worktree.ID>` tracks
+which worktrees/plain folders are currently part of the Shelf's book list.
+It's updated by the reducer in three places:
+
+- `.selectWorktree(id, _)` handler inserts `id` (covers user click in
+  sidebar, Shelf click, CLI open, layout restore)
+- `.selectRepository(id)` handler inserts `id` when the repository is a
+  plain folder (same semantics for plain folders)
+- `.toggleShelf` entry path inserts the currently selected ID when the
+  selection is already compatible with Shelf (rare path, but guards
+  against state that was set without going through the two actions above)
+
+`orderedShelfBooks()` filters against this set. The set is pure
+additive in this iteration — archived / removed worktrees still drop off
+the Shelf because the book iteration is anchored on the live
+`repositories` array, not on `openedWorktreeIDs`. That leaves a handful
+of stale IDs in the set but no visible spines; pruning can be layered in
+later if the set grows unbounded.

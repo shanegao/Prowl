@@ -207,6 +207,12 @@ struct RepositoriesFeature {
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
     var isShelfActive: Bool = false
+    /// IDs of worktrees (and plain-folder repositories) that have been
+    /// "opened" at least once in this session — i.e., had their
+    /// terminal state created by a user selection or CLI activation.
+    /// The Shelf's book list is derived from this set so a sidebar
+    /// worktree that's never been touched does not appear as a spine.
+    var openedWorktreeIDs: Set<Worktree.ID> = []
     var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -688,7 +694,22 @@ struct RepositoriesFeature {
             needsRedirect = true
           }
           state.isShelfActive = true
-          guard needsRedirect else { return .none }
+          if !needsRedirect {
+            // The current selection is the open book — make sure it's
+            // registered as opened so the Shelf renders at least this
+            // spine. Guards the case where `selection` was set without
+            // going through `.selectWorktree` / `.selectRepository`.
+            switch state.selection {
+            case .some(.worktree(let id)):
+              state.openedWorktreeIDs.insert(id)
+            case .some(.repository(let id))
+            where state.repositories[id: id]?.kind == .plain:
+              state.openedWorktreeIDs.insert(id)
+            default:
+              break
+            }
+            return .none
+          }
           let targetID = state.lastFocusedWorktreeID ?? state.orderedWorktreeRows().first?.id
           guard let targetID else { return .none }
           if state.worktree(for: targetID) == nil,
@@ -713,12 +734,19 @@ struct RepositoriesFeature {
           guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
           state.selection = .repository(repositoryID)
           state.sidebarSelectedWorktreeIDs = []
+          if state.repositories[id: repositoryID]?.kind == .plain {
+            // Plain folder selection opens the folder as a Shelf book.
+            state.openedWorktreeIDs.insert(repositoryID)
+          }
           return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
 
         case .selectWorktree(let worktreeID, let focusTerminal):
           setSingleWorktreeSelection(worktreeID, state: &state)
           if focusTerminal, let worktreeID {
             state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
+          }
+          if let worktreeID {
+            state.openedWorktreeIDs.insert(worktreeID)
           }
           let selectedWorktree = state.worktree(for: worktreeID)
           return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
