@@ -122,6 +122,13 @@ struct CanvasView: View {
                     onExitToTab()
                   }
                   lastTitleBarTapDate = now
+                },
+                onExpand: {
+                  focusSingleCard(tab.id, surfaceState: state, states: activeStates)
+                  onExitToTab()
+                },
+                onClose: {
+                  state.closeTab(tab.id)
                 }
               )
               .scaleEffect(canvasScale, anchor: .center)

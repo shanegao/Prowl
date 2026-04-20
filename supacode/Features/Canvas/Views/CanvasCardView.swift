@@ -18,6 +18,8 @@ struct CanvasCardView: View {
   let onResizeEnd: () -> Void
   let onSplitOperation: (TerminalSplitTreeView.Operation) -> Void
   let onTitleBarTap: () -> Void
+  let onExpand: () -> Void
+  let onClose: () -> Void
 
   enum CardResizeEdge {
     case leading, trailing, top, bottom
@@ -44,6 +46,7 @@ struct CanvasCardView: View {
 
   // Gesture-driven drag state: does NOT trigger body re-evaluation
   @GestureState private var dragTranslation: CGSize = .zero
+  @State private var isHoveringTitleBar: Bool = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -114,6 +117,7 @@ struct CanvasCardView: View {
         .foregroundStyle(.secondary)
         .lineLimit(1)
       Spacer()
+      titleBarActions
     }
     .padding(.horizontal, 8)
     .frame(height: titleBarHeight)
@@ -121,6 +125,9 @@ struct CanvasCardView: View {
     .background(titleBarBackground)
     .accessibilityAddTraits(.isButton)
     .onTapGesture { onTitleBarTap() }
+    .onHover { hovering in
+      isHoveringTitleBar = hovering
+    }
     .gesture(
       DragGesture(coordinateSpace: .global)
         .updating($dragTranslation) { value, state, _ in
@@ -134,6 +141,39 @@ struct CanvasCardView: View {
             ))
         }
     )
+  }
+
+  private var titleBarActions: some View {
+    HStack(spacing: 2) {
+      Button {
+        onExpand()
+      } label: {
+        Image(systemName: "arrow.up.left.and.arrow.down.right")
+          .font(.caption2.weight(.semibold))
+          .frame(width: 18, height: 18)
+          .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
+      .help("Expand to tab view")
+      .accessibilityLabel("Expand card")
+
+      Button {
+        onClose()
+      } label: {
+        Image(systemName: "xmark")
+          .font(.caption2.weight(.semibold))
+          .frame(width: 18, height: 18)
+          .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
+      .help("Close card")
+      .accessibilityLabel("Close card")
+    }
+    .opacity(isHoveringTitleBar ? 1 : 0)
+    .allowsHitTesting(isHoveringTitleBar)
+    .animation(.easeInOut(duration: 0.15), value: isHoveringTitleBar)
   }
 
   @ViewBuilder
