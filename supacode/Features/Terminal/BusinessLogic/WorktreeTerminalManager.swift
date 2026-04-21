@@ -231,8 +231,10 @@ final class WorktreeTerminalManager {
     state.onTabCreated = { [weak self] in
       self?.emit(.tabCreated(worktreeID: worktree.id))
     }
-    state.onTabClosed = { [weak self] in
-      self?.emit(.tabClosed(worktreeID: worktree.id))
+    state.onTabClosed = { [weak self, weak state] in
+      guard let self else { return }
+      let remaining = state?.tabManager.tabs.count ?? 0
+      emit(.tabClosed(worktreeID: worktree.id, remainingTabs: remaining))
     }
     state.onFocusChanged = { [weak self] surfaceID in
       self?.emit(.focusChanged(worktreeID: worktree.id, surfaceID: surfaceID))

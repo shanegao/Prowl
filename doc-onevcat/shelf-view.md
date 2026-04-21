@@ -221,10 +221,15 @@ Mirror Prowl's normal-mode tab close behavior:
 
 ### Closing the Last Tab in a Book
 
-Closing the last tab does **not** remove the book from the shelf. Instead, the
-book remains, its spine stays in place, and the open area shows an **empty
-terminal placeholder UI** (consistent with normal-mode behavior). The user can
-add a tab back via the bottom controls (after opening the book).
+Closing the last tab **retires the book from the Shelf**. Its spine disappears;
+if the closed book was the one currently open, Shelf auto-advances to the next
+remaining book (in Shelf order). The user can bring the book back by clicking
+its worktree in the left navigation, which re-opens it and re-adds its spine
+with the standard spine-flow animation.
+
+(Earlier drafts of this doc proposed keeping the book on the shelf with an
+empty-terminal placeholder. Reversed: a lingering empty book felt unnatural and
+doubled as dead weight. See the Implementation Decisions Journal for the switch.)
 
 ### Removing a Book from the Shelf
 
@@ -403,12 +408,21 @@ Shelf-originated taps additionally pass the same animation to
 `store.send(_, animation:)` so the TCA-side mutation carries the transaction
 along.
 
-### Close-last-tab behavior
+### Close-last-tab behavior (revised)
 
-The empty-book state falls out naturally: `ShelfOpenBookView` already
-renders `EmptyTerminalPaneView(message: "No terminals open")` when
-`selectedTabId == nil`. The spine remains on the shelf, with its bottom
-controls still enabling new tab / split to recover.
+Reversed from the original decision. Closing the last tab now removes the
+book from the Shelf entirely. The implementation:
+
+- `TerminalClient.Event.tabClosed` gained a `remainingTabs: Int` payload so
+  AppFeature can detect the last-tab case. When it sees `remainingTabs == 0`,
+  it dispatches `.repositories(.markWorktreeClosed(id))`.
+- The `markWorktreeClosed` reducer handler removes the ID from
+  `openedWorktreeIDs`, and — only when Shelf is active and the closed
+  worktree was the open book — auto-advances selection to the next
+  remaining book (via `shelfBookSelectionEffect`). In normal view, the
+  selection is left alone so the user's current context isn't disturbed.
+- When the closed book was the last book on the Shelf, selection is kept
+  as-is; `ShelfView` falls through to its "No book selected" empty state.
 
 ### Opened-worktrees set
 

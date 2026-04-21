@@ -284,6 +284,7 @@ struct RepositoriesFeature {
     case selectPreviousShelfBook
     case selectShelfBook(Int)
     case markWorktreeOpened(Worktree.ID)
+    case markWorktreeClosed(Worktree.ID)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
@@ -681,6 +682,24 @@ struct RepositoriesFeature {
         case .markWorktreeOpened(let worktreeID):
           state.openedWorktreeIDs.insert(worktreeID)
           return .none
+
+        case .markWorktreeClosed(let worktreeID):
+          // Closing the last tab of a book retires the book from the
+          // Shelf. If this book was the one currently open on the
+          // Shelf, move focus to the next remaining book (by Shelf
+          // order) so the user lands on something useful rather than
+          // an empty-Shelf placeholder.
+          state.openedWorktreeIDs.remove(worktreeID)
+          guard state.isShelfActive,
+            state.selectedTerminalWorktree?.id == worktreeID
+          else {
+            return .none
+          }
+          let remaining = state.orderedShelfBooks()
+          guard let next = remaining.first else {
+            return .none
+          }
+          return shelfBookSelectionEffect(for: next)
 
         case .toggleShelf:
           if state.isShelfActive {

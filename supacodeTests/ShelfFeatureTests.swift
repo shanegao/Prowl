@@ -434,6 +434,120 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func markWorktreeClosedRemovesFromOpenedSet() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.openedWorktreeIDs = [wt1.id]
+    state.selection = nil  // Not currently selected, no auto-next needed.
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.markWorktreeClosed(wt1.id)) {
+      $0.openedWorktreeIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test(.dependencies) func markWorktreeClosedAutoAdvancesToNextBookWhenOpen() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let wt2 = Worktree(
+      id: "/tmp/repo/wt2",
+      name: "wt2",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt2"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repo.id]
+    state.selection = .worktree(wt1.id)
+    state.isShelfActive = true
+    state.openedWorktreeIDs = [wt1.id, wt2.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    // Close wt1 (the open book on the Shelf). wt2 is the only remaining
+    // book → reducer should auto-select wt2 so the user lands on
+    // content rather than an empty-Shelf placeholder.
+    await store.send(.markWorktreeClosed(wt1.id)) {
+      $0.openedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
+      $0.openedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func markWorktreeClosedLeavesSelectionAloneInNormalView() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let wt2 = Worktree(
+      id: "/tmp/repo/wt2",
+      name: "wt2",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt2"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.selection = .worktree(wt1.id)
+    state.isShelfActive = false  // Normal view.
+    state.openedWorktreeIDs = [wt1.id, wt2.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    // In normal view, removing from the opened set must not also steal
+    // selection away from the user — they are actively on wt1.
+    await store.send(.markWorktreeClosed(wt1.id)) {
+      $0.openedWorktreeIDs = [wt2.id]
+    }
+    await store.finish()
+  }
+
   @Test(.dependencies) func markWorktreeOpenedAddsToOpenedSet() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let wt1 = Worktree(

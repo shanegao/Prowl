@@ -1031,6 +1031,12 @@ struct AppFeature {
         // worktree; other restored worktrees only surface here.
         return .send(.repositories(.markWorktreeOpened(worktreeID)))
 
+      case .terminalEvent(.tabClosed(let worktreeID, let remainingTabs)):
+        // Closing the last tab retires the book from the Shelf. Other
+        // closes are routine and need no Reducer-side bookkeeping.
+        guard remainingTabs == 0 else { return .none }
+        return .send(.repositories(.markWorktreeClosed(worktreeID)))
+
       case .terminalEvent:
         return .none
       }
