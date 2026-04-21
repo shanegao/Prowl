@@ -19,6 +19,13 @@ struct ShelfView: View {
   /// visual identity while it moves between them.
   @Namespace private var spineNamespace
 
+  /// Mirrors the Ghostty `background-opacity` setting so the Shelf can
+  /// honor the same window transparency as normal view mode. A previous
+  /// plain `.background(.background)` defeated transparency entirely by
+  /// stamping an opaque layer behind every child — including the
+  /// terminal surface and empty-state area.
+  @Environment(\.surfaceBackgroundOpacity) private var surfaceBackgroundOpacity
+
   var body: some View {
     let state = store.state
     let books = state.orderedShelfBooks()
@@ -46,7 +53,7 @@ struct ShelfView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(.background)
+    .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBackgroundOpacity))
     // Animate on every openBookID change — covers both Shelf-originated
     // book switches (which also set their own TCA animation) and
     // left-nav-originated switches, so the spine flow is consistent
