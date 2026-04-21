@@ -281,7 +281,7 @@ keybinding system (`scope = configurableAppAction`), exposed in
 | `toggleShelf` | `Cmd+Shift+Enter` | New command. Symmetric with `toggleCanvas` (`Cmd+Option+Enter`). |
 | `selectTerminalTab1…9` | `Cmd+1..9` | **Existing** commands. In Shelf, they switch tabs within the open book. |
 | `selectPreviousTerminalTab` / `selectNextTerminalTab` | `Cmd+Shift+[` / `Cmd+Shift+]` | **Existing** — apply within the open book. |
-| `selectNextWorktree` / `selectPreviousWorktree` | Unchanged: `Cmd+Ctrl+↓` / `Cmd+Ctrl+↑` | Unchanged. See `selectNext/PreviousShelfBook` below for the `Cmd+Ctrl+→` / `Cmd+Ctrl+←` bindings on the Shelf. |
+| `selectNextWorktree` / `selectPreviousWorktree` | `Cmd+Ctrl+↓` / `Cmd+Ctrl+↑` | Mode-aware: outside Shelf, cycles worktrees (unchanged). Inside Shelf, reroutes to tab navigation within the open book — vertical arrows step through tabs on the spine, horizontal arrows step through books, matching the Shelf's two-axis layout. See `selectNext/PreviousShelfBook` below for the `Cmd+Ctrl+→` / `Cmd+Ctrl+←` bindings. |
 | `selectNextShelfBook` / `selectPreviousShelfBook` | `Cmd+Ctrl+→` / `Cmd+Ctrl+←` | **New commands**. Operate on the ordered Shelf-book list (worktrees + plain folders), which can diverge from the worktree list if plain folders are interleaved. See the Implementation Decisions Journal for why we took this over a two-binding alias on the worktree commands. |
 | `selectShelfBook1…9` | `Ctrl+Option+1..9` | **New commands**, deliberately distinct from `selectWorktree1..9` (`Ctrl+1..9`). Books and worktrees are not 1:1 in numbering: "books on the shelf" can diverge from "items in the left navigation" (e.g. presence/absence on the shelf, plain-folder ordering). Shelf-specific. |
 

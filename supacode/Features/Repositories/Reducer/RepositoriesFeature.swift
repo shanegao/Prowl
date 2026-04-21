@@ -769,10 +769,23 @@ struct RepositoriesFeature {
           return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
 
         case .selectNextWorktree:
+          // In Shelf, the vertical arrow pair maps to tab navigation
+          // within the open book — horizontal (← / →) is already book
+          // navigation, so the two axes match the Shelf layout.
+          if state.isShelfActive, let worktree = state.selectedTerminalWorktree {
+            return .run { _ in
+              await terminalClient.send(.performBindingAction(worktree, action: "next_tab"))
+            }
+          }
           guard let id = state.worktreeID(byOffset: 1) else { return .none }
           return .send(.selectWorktree(id))
 
         case .selectPreviousWorktree:
+          if state.isShelfActive, let worktree = state.selectedTerminalWorktree {
+            return .run { _ in
+              await terminalClient.send(.performBindingAction(worktree, action: "previous_tab"))
+            }
+          }
           guard let id = state.worktreeID(byOffset: -1) else { return .none }
           return .send(.selectWorktree(id))
 

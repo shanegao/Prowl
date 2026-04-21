@@ -330,6 +330,110 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func selectNextWorktreeRoutesToTabNavigationInShelf() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.selection = .worktree(wt1.id)
+    state.isShelfActive = true
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.finish()
+    #expect(sentCommands.value == [.performBindingAction(wt1, action: "next_tab")])
+  }
+
+  @Test(.dependencies) func selectPreviousWorktreeRoutesToTabNavigationInShelf() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.selection = .worktree(wt1.id)
+    state.isShelfActive = true
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.selectPreviousWorktree)
+    await store.finish()
+    #expect(sentCommands.value == [.performBindingAction(wt1, action: "previous_tab")])
+  }
+
+  @Test(.dependencies) func selectNextWorktreeOutsideShelfStillCyclesWorktrees() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let wt2 = Worktree(
+      id: "/tmp/repo/wt2",
+      name: "wt2",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt2"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.selection = .worktree(wt1.id)
+    // Shelf NOT active — existing worktree-cycling behavior must survive.
+    state.isShelfActive = false
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.openedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
   @Test(.dependencies) func markWorktreeOpenedAddsToOpenedSet() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let wt1 = Worktree(
