@@ -29,7 +29,13 @@ struct ShelfSpineView: View {
       bottomControls
     }
     .frame(width: ShelfMetrics.spineWidth)
-    .background(spineBackground)
+    .background(
+      // Single `Rectangle` with a ternary fill so the open↔closed color
+      // change interpolates in place rather than swapping one view for
+      // another (which the previous `@ViewBuilder` if/else did).
+      Rectangle()
+        .fill(isOpen ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.06))
+    )
     // Whole-spine tap target. Inner Buttons (header, tab slots, controls)
     // absorb their own clicks; clicks that fall on empty areas (scroll
     // view negative space, gaps between tabs, etc.) bubble here and open
@@ -167,27 +173,6 @@ struct ShelfSpineView: View {
     .padding(.top, ShelfMetrics.slotSpacing)
   }
 
-  /// Visual treatment splits into two bands:
-  ///
-  /// - **Closed spines** get a subtle opaque tint so the collected stack
-  ///   reads as "books on the shelf" rather than leaking into the
-  ///   terminal-area background. We deliberately avoid `.thinMaterial`
-  ///   here: when adjacent spines all use the same material and the
-  ///   ScrollView's visible region has an edge, the material's vibrancy
-  ///   layer can render a visible banding line at that edge, lining up
-  ///   across every spine into a continuous horizontal stripe. A flat
-  ///   opaque fill sidesteps the issue entirely.
-  /// - **The open spine** gets an accent tint and no trailing divider,
-  ///   so it reads as the left edge of the "open page" (per the
-  ///   Open Book Visual Distinction section of the design doc).
-  @ViewBuilder
-  private var spineBackground: some View {
-    if isOpen {
-      Color.accentColor.opacity(0.12)
-    } else {
-      Color.primary.opacity(0.06)
-    }
-  }
 }
 
 private struct ShelfSpineHeader: View {
