@@ -110,6 +110,53 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func toggleShelfFromCanvasPrefersCanvasFocusedCard() async {
+    // Canvas can have a focused card distinct from `lastFocusedWorktreeID`
+    // (which is only updated while `selection` is `.worktree`). A direct
+    // Canvas → Shelf switch should open *that* card as the active book.
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktreeA = Worktree(
+      id: "/tmp/repo/wt-a",
+      name: "wt-a",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-a"),
+      repositoryRootURL: rootURL
+    )
+    let worktreeB = Worktree(
+      id: "/tmp/repo/wt-b",
+      name: "wt-b",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-b"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktreeA, worktreeB])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+    state.lastFocusedWorktreeID = worktreeA.id
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktreeB.id }
+    }
+
+    await store.send(.toggleShelf) {
+      $0.isShelfActive = true
+    }
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(worktreeB.id)
+      $0.sidebarSelectedWorktreeIDs = [worktreeB.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktreeB.id]
+      $0.openedWorktreeIDs = [worktreeB.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
   @Test(.dependencies) func toggleShelfFromArchivedRedirectsToWorktreeAndEntersShelf() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let worktree = Worktree(

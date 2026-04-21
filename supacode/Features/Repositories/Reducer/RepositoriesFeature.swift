@@ -762,7 +762,16 @@ struct RepositoriesFeature {
             }
             return .none
           }
-          let targetID = state.lastFocusedWorktreeID ?? state.orderedWorktreeRows().first?.id
+          // Same fallback chain as `toggleCanvas`'s exit path: prefer
+          // the card the user was actively focused on in Canvas so a
+          // Canvas → Shelf switch opens *that* card as the active book,
+          // not whatever was selected before Canvas was entered.
+          let targetID =
+            terminalClient.canvasFocusedWorktreeID()
+            ?? state.preCanvasTerminalTargetID
+            ?? state.preCanvasWorktreeID
+            ?? state.lastFocusedWorktreeID
+            ?? state.orderedWorktreeRows().first?.id
           guard let targetID else { return .none }
           if state.worktree(for: targetID) == nil,
             let repository = state.repositories[id: targetID],
