@@ -43,6 +43,7 @@ struct ShelfSpineView: View {
     // the spine to pull the book out.
     .contentShape(.rect)
     .onTapGesture { onOpenBook() }
+    .accessibilityAddTraits(.isButton)
     .contextMenu { bookContextMenu }
     .overlay(alignment: .trailing) {
       if !isOpen {
