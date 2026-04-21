@@ -224,6 +224,13 @@ struct WorktreeDetailView: View {
         onExitToTab: {
           store.send(.repositories(.toggleCanvas))
         })
+    } else if repositories.isShowingShelf {
+      ShelfView(
+        store: store.scope(state: \.repositories, action: \.repositories),
+        terminalManager: terminalManager,
+        createTab: { store.send(.newTerminal) }
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
         store: store.scope(state: \.repositories, action: \.repositories)

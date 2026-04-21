@@ -65,6 +65,7 @@ struct AppFeaturePlainFolderTerminalTests {
 
     await store.send(.repositories(.selectRepository(repository.id))) {
       $0.repositories.selection = .repository(repository.id)
+      $0.repositories.openedWorktreeIDs = [repository.id]
     }
     await store.receive(\.repositories.delegate.selectedWorktreeChanged)
     await store.receive(\.worktreeSettingsLoaded) {

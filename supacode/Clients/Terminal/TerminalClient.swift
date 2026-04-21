@@ -50,7 +50,7 @@ struct TerminalClient {
     case notificationReceived(worktreeID: Worktree.ID, title: String, body: String)
     case notificationIndicatorChanged(count: Int)
     case tabCreated(worktreeID: Worktree.ID)
-    case tabClosed(worktreeID: Worktree.ID)
+    case tabClosed(worktreeID: Worktree.ID, remainingTabs: Int)
     case focusChanged(worktreeID: Worktree.ID, surfaceID: UUID)
     case taskStatusChanged(worktreeID: Worktree.ID, status: WorktreeTaskStatus)
     case runScriptStatusChanged(worktreeID: Worktree.ID, isRunning: Bool)
