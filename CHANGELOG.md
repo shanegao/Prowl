@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026.4.22](https://github.com/onevcat/Prowl/releases/tag/v2026.4.22)
+
+This release introduces Shelf, a new way to view and navigate your worktrees, along with a significant performance improvement that eliminates a source of main-thread hangs.
+
+## New
+
+- **Shelf view**: a new presentation mode that stacks your worktrees as books with vertical spines. Press `Cmd+Shift+Enter` or click the Shelf button in the sidebar toolbar to toggle it. Each spine shows the worktree name, branch, and tab slots; click any spine to open that book.
+- **Navigation shortcuts in Shelf**: navigate between books with `Cmd+Ctrl+←` / `Cmd+Ctrl+→`, navigate between tabs with `Cmd+Ctrl+↑` / `Cmd+Ctrl+↓`, or jump directly to a specific book with `Ctrl+Option+1–9`. All bindings are rebindable in Settings → Shortcuts.
+- **Command-key tab hints**: hold `Cmd` while in Shelf to swap each tab slot's icon for its `1–9` digit, making keyboard switching more discoverable.
+- **Default View setting**: choose whether Prowl launches into the standard view or Shelf in Settings → General.
+
+## Improved
+
+- Eliminated a main-thread hang (App Hang) triggered by rapid file-change or pull-request-refresh bursts. A repeated `standardizedFileURL` comparison in the sidebar render loop was accumulating enough work to stall the UI for 3+ seconds; the result is now computed once per worktree at construction time, so the sidebar stays responsive under heavy activity.
+
+## Fixed
+
+- Shelf now correctly restores focus to the open book's terminal after SwiftUI reparenting, and properly tracks which worktrees the user has actually opened rather than showing all known worktrees.
+- Toggling into Shelf from Canvas now honors the card that was focused in Canvas as the open book, rather than falling back to a default.
+
 ## [2026.4.20](https://github.com/onevcat/Prowl/releases/tag/v2026.4.20)
 
 This release focuses on canvas usability improvements and broader code host support.
