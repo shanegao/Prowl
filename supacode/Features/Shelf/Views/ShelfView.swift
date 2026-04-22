@@ -88,7 +88,8 @@ struct ShelfView: View {
           },
           onSplitVertical: open ? { performSplit(direction: "new_split:right") } : nil,
           onSplitHorizontal: open ? { performSplit(direction: "new_split:down") } : nil,
-          onRemoveBook: { removeBook(book) }
+          closeMenuTitle: closeMenuTitle(for: book),
+          onCloseBook: { closeBook(book) }
         )
         .matchedGeometryEffect(id: book.id, in: spineNamespace)
       }
@@ -114,17 +115,27 @@ struct ShelfView: View {
     _ = state.performBindingActionOnFocusedSurface(direction)
   }
 
-  /// "Remove Book" context action. Worktree books funnel through the
-  /// existing archive flow (which shows confirmation + progress); plain
-  /// folder books go through repository removal. Both pathways
-  /// eventually drop the book off the Shelf via the same prune logic
-  /// that drives the left navigation.
-  private func removeBook(_ book: ShelfBook) {
+  /// "Close Worktree / Close Folder" context action. Equivalent to
+  /// closing the last tab on this book: tears down all of its terminal
+  /// tabs, which lets the existing `tabClosed(remainingTabs: 0)` →
+  /// `markWorktreeClosed` pipeline retire the book from the Shelf and
+  /// auto-advance selection. Intentionally does *not* archive the
+  /// worktree or remove the repository — Shelf removal is a view-state
+  /// concern, not a destructive resource operation.
+  private func closeBook(_ book: ShelfBook) {
+    if let state = terminalManager.stateIfExists(for: book.id), !state.tabManager.tabs.isEmpty {
+      state.closeAllTabs()
+    } else {
+      // No live tabs to fall through the closeAllTabs → tabClosed
+      // pipeline — drive the Shelf removal directly.
+      store.send(.markWorktreeClosed(book.id))
+    }
+  }
+
+  private func closeMenuTitle(for book: ShelfBook) -> String {
     switch book.kind {
-    case .worktree:
-      store.send(.worktreeLifecycle(.requestArchiveWorktree(book.id, book.repositoryID)))
-    case .plainFolder:
-      store.send(.repositoryManagement(.requestRemoveRepository(book.repositoryID)))
+    case .worktree: "Close Worktree"
+    case .plainFolder: "Close Folder"
     }
   }
 
