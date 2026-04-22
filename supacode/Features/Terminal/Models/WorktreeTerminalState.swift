@@ -6,6 +6,7 @@ import Observation
 import Sharing
 
 private let terminalStateLogger = SupaLogger("TerminalState")
+private let commandDetectLogger = SupaLogger("CommandDetect")
 
 @MainActor
 @Observable
@@ -13,6 +14,17 @@ final class WorktreeTerminalState {
   struct SurfaceActivity: Equatable {
     let isVisible: Bool
     let isFocused: Bool
+  }
+
+  /// Pending state for the title-debounce-based command detector.
+  /// `task` fires after `commandDetectThresholdMs` if no further title
+  /// change arrives — at which point `title` is treated as a likely
+  /// long-running command. Cancelled when a new title arrives, when
+  /// the surface goes away, or when `command_finished` is received.
+  fileprivate struct CommandDetectorPending {
+    let title: String
+    let startedAt: ContinuousClock.Instant
+    let task: Task<Void, Never>
   }
 
   let tabManager: TerminalTabManager
@@ -50,6 +62,40 @@ final class WorktreeTerminalState {
   /// Surfaces running a tracked Custom Command. The stored name is surfaced as a success
   /// toast when the command exits with code 0. One-shot: removed on the first finish event.
   private var pendingCustomCommands: [UUID: String] = [:]
+  /// Per-surface pending state for the title-debounce-based tab-icon
+  /// auto-detection. Research/log-only for now: records the most recent
+  /// non-empty OSC 2 title and fires a timer after
+  /// `commandDetectThresholdMs` to distinguish long-running commands
+  /// (worth reflecting in the tab icon) from short ones (e.g. `ls`,
+  /// `git status`) that would just cause icon flicker.
+  private var commandDetectorPendingBySurface: [UUID: CommandDetectorPending] = [:]
+  /// The title that was the active candidate immediately before the
+  /// current one — i.e. the title set by `preexec` for the command
+  /// that just ran. By the time `onCommandFinished` arrives, `precmd`
+  /// has already overwritten the live title with the idle prompt, so
+  /// the "current" candidate would be useless for naming the just-
+  /// finished command. This slot preserves the real command name.
+  /// Cleared each time a `command_finished` event consumes it.
+  private var lastObservedTitleBySurface: [UUID: String] = [:]
+  /// Per-surface set of titles known to be the shell's idle prompt
+  /// (between commands). Populated by observing the first title that
+  /// arrives after each `command_finished`: that title is reliably
+  /// `precmd`-set, i.e. an idle prompt. Subsequent occurrences of any
+  /// learned title skip the debounce timer entirely so they cannot
+  /// trigger spurious `[live]` "long-running command" reports.
+  private var learnedIdleTitlesBySurface: [UUID: Set<String>] = [:]
+  /// Surfaces whose next title-change event should be added to
+  /// `learnedIdleTitlesBySurface`. Set by `command_finished`, consumed
+  /// by the next title arrival.
+  private var awaitingIdleTitleLearningBySurface: Set<UUID> = []
+  /// Per-surface guard recording the title that has already been
+  /// reported as the running command for the current command cycle.
+  /// While set, further title changes for the same surface skip the
+  /// debounce timer — a long-running TUI (claude, vim) frequently
+  /// rewrites its title (`claude` → `✳ Claude Code` → `⠐ Claude Code`)
+  /// and we only want to surface the initial command name once per
+  /// run. Cleared on `command_finished`.
+  private var reportedRunningCommandBySurface: [UUID: String] = [:]
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
@@ -525,6 +571,7 @@ final class WorktreeTerminalState {
     } catch {
       newSurface.closeSurface()
       surfaces.removeValue(forKey: newSurface.id)
+      cleanupCommandDetectorState(forSurfaceId: newSurface.id)
       return nil
     }
   }
@@ -593,6 +640,7 @@ final class WorktreeTerminalState {
       } catch {
         newSurface.closeSurface()
         surfaces.removeValue(forKey: newSurface.id)
+        cleanupCommandDetectorState(forSurfaceId: newSurface.id)
 
         return false
       }
@@ -987,6 +1035,7 @@ final class WorktreeTerminalState {
       if self.focusedSurfaceIdByTab[tabId] == view.id {
         self.tabManager.updateTitle(tabId, title: title)
       }
+      self.noteTitleForCommandDetection(title, surfaceId: view.id, tabId: tabId)
     }
     view.bridge.onSplitAction = { [weak self, weak view] action in
       guard let self, let view else { return false }
@@ -1369,6 +1418,14 @@ final class WorktreeTerminalState {
       continuation.finish()
     }
 
+    if let tabId = tabId(containing: surfaceId) {
+      noteCommandFinishedForCommandDetection(
+        durationNs: durationNs,
+        surfaceId: surfaceId,
+        tabId: tabId
+      )
+    }
+
     // Custom command success toast. One-shot: removed regardless of outcome.
     if let commandName = pendingCustomCommands.removeValue(forKey: surfaceId), exitCode == 0 {
       let durationMs = Int(durationNs / 1_000_000)
@@ -1406,6 +1463,247 @@ final class WorktreeTerminalState {
     appendNotification(title: title, body: body, surfaceId: surfaceId)
   }
 
+  // MARK: - Tab Icon Auto-Detection (research / log only)
+  //
+  // Strategy: each OSC 2 title change starts a per-surface debounce
+  // timer. If the title is still in place after the threshold, it is a
+  // likely long-running command worth turning into a tab icon. Short
+  // titles (`ls`, `git status`, …) get overwritten by the shell's idle
+  // prompt long before the threshold fires and are silently dropped.
+  // `command_finished` lets us cross-check duration: if the command
+  // exceeded the threshold, log it as a confirmed long-running entry
+  // even when its title timer was cancelled by a precmd-driven retitle.
+  //
+  // For now this layer only emits log lines so the user can validate
+  // detection accuracy across their real workflows before we wire any
+  // icon-mapping logic on top.
+
+  private static let commandDetectThresholdMs = 1500
+
+  func noteTitleForCommandDetection(_ rawTitle: String, surfaceId: UUID, tabId: TerminalTabID) {
+    let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Empty titles tend to mean "shell reset between commands" — that's
+    // an end-of-candidate signal, not a new candidate.
+    guard !title.isEmpty else {
+      cancelCommandDetectionTimer(forSurfaceId: surfaceId)
+      return
+    }
+    // Same title again (common when shells re-emit the OSC on every
+    // prompt redraw) is a no-op so the existing timer keeps ticking.
+    if let pending = commandDetectorPendingBySurface[surfaceId], pending.title == title {
+      return
+    }
+    // (A) The first title to arrive after `command_finished` is the
+    // shell's idle prompt for this surface. Memorise it so future
+    // appearances skip the debounce.
+    if awaitingIdleTitleLearningBySurface.remove(surfaceId) != nil {
+      learnedIdleTitlesBySurface[surfaceId, default: []].insert(title)
+    }
+    // Substring path: TUI tools that rewrite their own title after
+    // launch (e.g. `claude` → `✳ Claude Code`). These bypass the
+    // debounce — the title *is* the brand signal, no need to wait —
+    // and they bypass the per-cycle `reportedRunning` guard so they
+    // can refine an icon already set by the initial command name.
+    if let immediateIcon = CommandIconMap.iconForSubstring(title) {
+      let summary = applyResolvedIcon(immediateIcon, surfaceId: surfaceId, tabId: tabId)
+      let surfaceTag = surfaceId.uuidString.prefix(8)
+      let tabTag = tabId.rawValue.uuidString.prefix(8)
+      commandDetectLogger.info(
+        "[immediate] tui title matched: title=\"\(title)\" "
+          + "tab=\(tabTag) surface=\(surfaceTag) \(summary)"
+      )
+      return
+    }
+    // Decide whether this title should arm a debounce timer. Skip when:
+    //  (B) it looks like an idle prompt by shape — bootstraps before
+    //      the learner has seen `command_finished` once on this surface.
+    //  (A) it matches a learned idle prompt for this surface.
+    //  (D) the surface is mid-command and we already reported one — a
+    //      long-running TUI keeps mutating its title (claude's
+    //      spinner cycles through `✳ Claude Code` → `⠐ Claude Code`
+    //      etc.) but it's still the same run.
+    let isLearnedIdle = learnedIdleTitlesBySurface[surfaceId]?.contains(title) ?? false
+    let shouldDebounce =
+      !isLikelyIdleTitleByShape(title)
+      && !isLearnedIdle
+      && reportedRunningCommandBySurface[surfaceId] == nil
+    guard shouldDebounce else { return }
+    // Park the about-to-be-replaced candidate as the "previous" title
+    // so a subsequent `command_finished` can name the just-finished
+    // command correctly even though `precmd` will have set the live
+    // title back to the idle prompt by then.
+    if let outgoing = commandDetectorPendingBySurface[surfaceId] {
+      lastObservedTitleBySurface[surfaceId] = outgoing.title
+    }
+    commandDetectorPendingBySurface[surfaceId]?.task.cancel()
+    let startedAt = ContinuousClock.now
+    let task = Task { [weak self] in
+      try? await Task.sleep(for: .milliseconds(WorktreeTerminalState.commandDetectThresholdMs))
+      guard !Task.isCancelled else { return }
+      self?.commandDetectionTimerFired(forSurfaceId: surfaceId, tabId: tabId)
+    }
+    commandDetectorPendingBySurface[surfaceId] = CommandDetectorPending(
+      title: title,
+      startedAt: startedAt,
+      task: task
+    )
+  }
+
+  func noteCommandFinishedForCommandDetection(
+    durationNs: UInt64,
+    surfaceId: UUID,
+    tabId: TerminalTabID
+  ) {
+    let durationMs = Int(durationNs / 1_000_000)
+    // Prefer the parked previous candidate (the `preexec`-set command
+    // title) over the live one, which `precmd` will already have
+    // rewritten to the idle prompt by the time this event lands.
+    let parked = lastObservedTitleBySurface.removeValue(forKey: surfaceId)
+    let candidate = commandDetectorPendingBySurface[surfaceId]
+    let resolvedTitle = parked ?? candidate?.title
+    cancelCommandDetectionTimer(forSurfaceId: surfaceId)
+    // Reset the per-cycle "already reported" guard, and arm the
+    // idle-prompt learner so the next title (the precmd-set prompt)
+    // gets memorised.
+    reportedRunningCommandBySurface.removeValue(forKey: surfaceId)
+    awaitingIdleTitleLearningBySurface.insert(surfaceId)
+    let surfaceTag = surfaceId.uuidString.prefix(8)
+    let tabTag = tabId.rawValue.uuidString.prefix(8)
+    if durationMs >= Self.commandDetectThresholdMs {
+      let title = resolvedTitle ?? "<title not captured>"
+      commandDetectLogger.info(
+        "[done] long-running cmd: title=\"\(title)\" duration=\(durationMs)ms "
+          + "tab=\(tabTag) surface=\(surfaceTag)"
+      )
+    } else if let resolvedTitle {
+      commandDetectLogger.debug(
+        "[skip] short cmd: title=\"\(resolvedTitle)\" duration=\(durationMs)ms "
+          + "tab=\(tabTag) surface=\(surfaceTag)"
+      )
+    }
+  }
+
+  /// Cancel the in-flight debounce timer and discard the transient
+  /// pending/parked title state. Persistent learning state (learned
+  /// idle prompts, per-cycle reported guard) is left intact so it can
+  /// keep filtering across command boundaries. Use
+  /// `cleanupCommandDetectorState(forSurfaceId:)` instead when the
+  /// surface itself is being torn down.
+  func cancelCommandDetectionTimer(forSurfaceId surfaceId: UUID) {
+    commandDetectorPendingBySurface.removeValue(forKey: surfaceId)?.task.cancel()
+    lastObservedTitleBySurface.removeValue(forKey: surfaceId)
+  }
+
+  /// Drop every detector slot keyed by this surface. Called when a
+  /// surface is closed or its parent tab is torn down so we don't
+  /// retain learned-idle sets / pending tasks for ids that will never
+  /// emit again.
+  func cleanupCommandDetectorState(forSurfaceId surfaceId: UUID) {
+    cancelCommandDetectionTimer(forSurfaceId: surfaceId)
+    learnedIdleTitlesBySurface.removeValue(forKey: surfaceId)
+    awaitingIdleTitleLearningBySurface.remove(surfaceId)
+    reportedRunningCommandBySurface.removeValue(forKey: surfaceId)
+  }
+
+  /// Heuristic shape-only detection for shell idle prompts. Used as
+  /// the bootstrap filter so the very first time a surface goes idle
+  /// — before the learner has anything to match against — we can
+  /// still skip the false-positive `[live]` report. Two patterns:
+  ///   1. `user@host[:path]` — contains `@` plus `:` or `/`, no spaces.
+  ///   2. Pure path — starts with `~`, `/`, or `…`, no spaces.
+  /// Real commands typically contain a space (program + args) or a
+  /// short single token (`ls`, `claude`, `vim`) that doesn't match
+  /// either shape, so the false-negative risk is small.
+  private func isLikelyIdleTitleByShape(_ title: String) -> Bool {
+    guard !title.contains(" ") else { return false }
+    if title.contains("@"), title.contains(":") || title.contains("/") {
+      return true
+    }
+    if title.hasPrefix("~") || title.hasPrefix("/") || title.hasPrefix("…") {
+      return true
+    }
+    return false
+  }
+
+  private func commandDetectionTimerFired(forSurfaceId surfaceId: UUID, tabId: TerminalTabID) {
+    guard let pending = commandDetectorPendingBySurface[surfaceId] else { return }
+    let parts = (ContinuousClock.now - pending.startedAt).components
+    let elapsedMs = Int(parts.seconds * 1000 + parts.attoseconds / 1_000_000_000_000_000)
+    // Mark this command as already reported so subsequent title
+    // mutations within the same run (claude's spinner, vim's mode
+    // line, …) don't fire additional `[live]` entries until
+    // `command_finished` clears the guard.
+    reportedRunningCommandBySurface[surfaceId] = pending.title
+    let iconSummary = applyDetectedIcon(forCommand: pending.title, surfaceId: surfaceId, tabId: tabId)
+    let surfaceTag = surfaceId.uuidString.prefix(8)
+    let tabTag = tabId.rawValue.uuidString.prefix(8)
+    commandDetectLogger.info(
+      "[live] running cmd detected: title=\"\(pending.title)\" elapsed=\(elapsedMs)ms "
+        + "tab=\(tabTag) surface=\(surfaceTag) \(iconSummary)"
+    )
+  }
+
+  /// Side-effect of `[live]` detection: apply the icon picked by
+  /// first-token mapping. Selection-2 semantics — the icon stays
+  /// after the command exits, so the tab carries a long-lived "what
+  /// is this for" hint. Returns a short tag string so the log line
+  /// can explain *why* (or why not) the icon changed.
+  private func applyDetectedIcon(
+    forCommand title: String,
+    surfaceId: UUID,
+    tabId: TerminalTabID
+  ) -> String {
+    guard let icon = CommandIconMap.iconForFirstToken(title) else {
+      return "icon=<no-mapping>"
+    }
+    return applyResolvedIcon(icon, surfaceId: surfaceId, tabId: tabId)
+  }
+
+  /// Apply an already-resolved icon to the tab. Shared between the
+  /// debounce-driven `[live]` path and the substring-driven
+  /// `[immediate]` path so focus / lock / unchanged checks stay in
+  /// one place.
+  private func applyResolvedIcon(
+    _ icon: TabIconSource,
+    surfaceId: UUID,
+    tabId: TerminalTabID
+  ) -> String {
+    // Per-tab UI is single-headed: only the focused surface in a
+    // multi-split tab gets to drive its tab's icon. Stops a
+    // background split's command from silently overriding what the
+    // user is currently looking at.
+    guard focusedSurfaceIdByTab[tabId] == surfaceId else {
+      return "icon=<not-focused>"
+    }
+    guard let tab = tabManager.tabs.first(where: { $0.id == tabId }) else {
+      return "icon=<tab-missing>"
+    }
+    if tab.isIconLocked {
+      return "icon=<user-locked>"
+    }
+    // `tab.icon` storage is the SF Symbol string; the asset variant
+    // (when set) is the real branding, but rendering hasn't been
+    // wired yet so we still write the symbol. See `TabIconSource`
+    // docs for the three-step recipe to enable asset rendering.
+    let symbol = icon.systemSymbol
+    if tab.icon == symbol {
+      return iconLogTag(icon: icon, suffix: "(unchanged)")
+    }
+    tabManager.updateIcon(tabId, icon: symbol)
+    return iconLogTag(icon: icon, suffix: nil)
+  }
+
+  private func iconLogTag(icon: TabIconSource, suffix: String?) -> String {
+    var tag = "icon=sf:\(icon.systemSymbol)"
+    if let asset = icon.assetName {
+      tag += " (asset:\(asset))"
+    }
+    if let suffix {
+      tag += " \(suffix)"
+    }
+    return tag
+  }
+
   static func formatDuration(_ seconds: Int) -> String {
     if seconds < 60 {
       return "\(seconds)s"
@@ -1427,6 +1725,7 @@ final class WorktreeTerminalState {
       surfaces.removeValue(forKey: surface.id)
       autoCloseSurfaceIds.remove(surface.id)
       pendingCustomCommands.removeValue(forKey: surface.id)
+      cleanupCommandDetectorState(forSurfaceId: surface.id)
     }
     focusedSurfaceIdByTab.removeValue(forKey: tabId)
     tabIsRunningById.removeValue(forKey: tabId)
@@ -1570,6 +1869,7 @@ final class WorktreeTerminalState {
       surfaces.removeValue(forKey: view.id)
       autoCloseSurfaceIds.remove(view.id)
       pendingCustomCommands.removeValue(forKey: view.id)
+      cleanupCommandDetectorState(forSurfaceId: view.id)
       return
     }
     guard let node = tree.find(id: view.id) else {
@@ -1577,6 +1877,7 @@ final class WorktreeTerminalState {
       surfaces.removeValue(forKey: view.id)
       autoCloseSurfaceIds.remove(view.id)
       pendingCustomCommands.removeValue(forKey: view.id)
+      cleanupCommandDetectorState(forSurfaceId: view.id)
       return
     }
     let nextSurface =
@@ -1588,6 +1889,7 @@ final class WorktreeTerminalState {
     surfaces.removeValue(forKey: view.id)
     autoCloseSurfaceIds.remove(view.id)
     pendingCustomCommands.removeValue(forKey: view.id)
+    cleanupCommandDetectorState(forSurfaceId: view.id)
     if newTree.isEmpty {
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)
