@@ -985,8 +985,13 @@ struct RepositoriesFeature {
             }
             let worktreeURL = worktree.workingDirectory
             let gitClient = gitClient
+            let previousLineChanges = normalizedLineChanges(state.worktreeInfoByID[worktreeID])
             return .run { send in
               if let changes = await gitClient.lineChanges(worktreeURL) {
+                let nextLineChanges = normalizedLineChanges(added: changes.added, removed: changes.removed)
+                guard !lineChangesEqual(nextLineChanges, previousLineChanges) else {
+                  return
+                }
                 await send(
                   .worktreeLineChangesLoaded(
                     worktreeID: worktreeID,
@@ -2196,6 +2201,37 @@ func updateWorktreePullRequest(
     state.worktreeInfoByID.removeValue(forKey: worktreeID)
   } else {
     state.worktreeInfoByID[worktreeID] = entry
+  }
+}
+
+nonisolated private func normalizedLineChanges(_ entry: WorktreeInfoEntry?) -> (added: Int, removed: Int)? {
+  guard let added = entry?.addedLines, let removed = entry?.removedLines else {
+    return nil
+  }
+  return (added, removed)
+}
+
+nonisolated private func normalizedLineChanges(
+  added: Int,
+  removed: Int
+) -> (added: Int, removed: Int)? {
+  guard added != 0 || removed != 0 else {
+    return nil
+  }
+  return (added, removed)
+}
+
+nonisolated private func lineChangesEqual(
+  _ lhs: (added: Int, removed: Int)?,
+  _ rhs: (added: Int, removed: Int)?
+) -> Bool {
+  switch (lhs, rhs) {
+  case (nil, nil):
+    return true
+  case (.some(let lhs), .some(let rhs)):
+    return lhs.added == rhs.added && lhs.removed == rhs.removed
+  default:
+    return false
   }
 }
 
