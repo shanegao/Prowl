@@ -24,9 +24,13 @@ struct ShelfSpineView: View {
   let onNewTab: (() -> Void)?
   let onSplitVertical: (() -> Void)?
   let onSplitHorizontal: (() -> Void)?
-  /// "Remove this book" — drives the book-level context menu entry on
-  /// the spine header / empty body. Nil disables the menu.
-  let onRemoveBook: (() -> Void)?
+  /// "Close this book" — drives the book-level context menu entry on
+  /// the spine header / empty body. Nil disables the menu. The label
+  /// text is supplied by the parent so it can vary per book kind
+  /// ("Close Worktree" vs "Close Folder") without leaking the `Kind`
+  /// enum into this view.
+  let closeMenuTitle: String
+  let onCloseBook: (() -> Void)?
 
   @State private var isHovering = false
 
@@ -118,11 +122,11 @@ struct ShelfSpineView: View {
 
   @ViewBuilder
   private var bookContextMenu: some View {
-    if let onRemoveBook {
-      Button(role: .destructive) {
-        onRemoveBook()
+    if let onCloseBook {
+      Button {
+        onCloseBook()
       } label: {
-        Text("Remove Book")
+        Text(closeMenuTitle)
       }
     }
   }
