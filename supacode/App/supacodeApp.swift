@@ -245,6 +245,9 @@ struct SupacodeApp: App {
       ghosttyShortcuts: shortcuts,
       commandKeyObserver: keyObserver
     )
+    #if DEBUG
+      DebugWindowManager.shared.configure(store: appStore)
+    #endif
   }
 
   private static func makeTargetResolver(
@@ -622,13 +625,17 @@ struct SupacodeApp: App {
     .environment(ghosttyShortcuts)
     .environment(commandKeyObserver)
     .commands {
-      WorktreeCommands(store: store)
-      SidebarCommands(store: store)
-      TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)
-      WindowCommands(
-        ghosttyShortcuts: ghosttyShortcuts,
-        resolvedKeybindings: store.resolvedKeybindings
-      )
+      // Grouped to keep `commands` under SwiftUI's CommandsBuilder
+      // tuple-arity limit when `#if DEBUG` adds the Debug menu below.
+      Group {
+        WorktreeCommands(store: store)
+        SidebarCommands(store: store)
+        TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)
+        WindowCommands(
+          ghosttyShortcuts: ghosttyShortcuts,
+          resolvedKeybindings: store.resolvedKeybindings
+        )
+      }
       CommandGroup(after: .textEditing) {
         Button("Command Palette") {
           store.send(.commandPalette(.togglePresented))
@@ -662,6 +669,13 @@ struct SupacodeApp: App {
         }
         .help("Install the prowl command line tool to /usr/local/bin")
       }
+      #if DEBUG
+        CommandMenu("Debug") {
+          Button("Icon Catalog") {
+            DebugWindowManager.shared.show()
+          }
+        }
+      #endif
       CommandGroup(replacing: .help) {
         Button("Homepage", systemImage: "house") {
           if let url = URL(string: "https://prowl.onev.cat/") {

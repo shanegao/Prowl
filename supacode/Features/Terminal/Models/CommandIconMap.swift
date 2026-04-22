@@ -82,3 +82,18 @@ enum CommandIconMap {
     "journalctl": TabIconSource(systemSymbol: "text.justifyleft"),
   ]
 }
+
+#if DEBUG
+
+  extension CommandIconMap {
+    /// All first-token mapping entries, sorted alphabetically by
+    /// token. Surfaced for the Debug Window's Icon Catalog so the
+    /// auto-detected set can be eyeballed in one place.
+    static var debugAllEntries: [(token: String, icon: TabIconSource)] {
+      firstTokenMapping
+        .map { (token: $0.key, icon: $0.value) }
+        .sorted { $0.token < $1.token }
+    }
+  }
+
+#endif
