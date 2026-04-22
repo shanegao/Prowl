@@ -6,7 +6,6 @@ import Observation
 import Sharing
 
 private let terminalStateLogger = SupaLogger("TerminalState")
-private let commandDetectLogger = SupaLogger("CommandDetect")
 
 @MainActor
 @Observable
@@ -1418,13 +1417,7 @@ final class WorktreeTerminalState {
       continuation.finish()
     }
 
-    if let tabId = tabId(containing: surfaceId) {
-      noteCommandFinishedForCommandDetection(
-        durationNs: durationNs,
-        surfaceId: surfaceId,
-        tabId: tabId
-      )
-    }
+    noteCommandFinishedForCommandDetection(surfaceId: surfaceId)
 
     // Custom command success toast. One-shot: removed regardless of outcome.
     if let commandName = pendingCustomCommands.removeValue(forKey: surfaceId), exitCode == 0 {
@@ -1505,13 +1498,7 @@ final class WorktreeTerminalState {
     // and they bypass the per-cycle `reportedRunning` guard so they
     // can refine an icon already set by the initial command name.
     if let immediateIcon = CommandIconMap.iconForSubstring(title) {
-      let summary = applyResolvedIcon(immediateIcon, surfaceId: surfaceId, tabId: tabId)
-      let surfaceTag = surfaceId.uuidString.prefix(8)
-      let tabTag = tabId.rawValue.uuidString.prefix(8)
-      commandDetectLogger.info(
-        "[immediate] tui title matched: title=\"\(title)\" "
-          + "tab=\(tabTag) surface=\(surfaceTag) \(summary)"
-      )
+      applyResolvedIcon(immediateIcon, surfaceId: surfaceId, tabId: tabId)
       return
     }
     // Decide whether this title should arm a debounce timer. Skip when:
@@ -1549,38 +1536,13 @@ final class WorktreeTerminalState {
     )
   }
 
-  func noteCommandFinishedForCommandDetection(
-    durationNs: UInt64,
-    surfaceId: UUID,
-    tabId: TerminalTabID
-  ) {
-    let durationMs = Int(durationNs / 1_000_000)
-    // Prefer the parked previous candidate (the `preexec`-set command
-    // title) over the live one, which `precmd` will already have
-    // rewritten to the idle prompt by the time this event lands.
-    let parked = lastObservedTitleBySurface.removeValue(forKey: surfaceId)
-    let candidate = commandDetectorPendingBySurface[surfaceId]
-    let resolvedTitle = parked ?? candidate?.title
+  func noteCommandFinishedForCommandDetection(surfaceId: UUID) {
+    // Drop transient pending/parked state, reset the per-cycle
+    // "already reported" guard, and arm the idle-prompt learner so
+    // the next title (the precmd-set prompt) gets memorised.
     cancelCommandDetectionTimer(forSurfaceId: surfaceId)
-    // Reset the per-cycle "already reported" guard, and arm the
-    // idle-prompt learner so the next title (the precmd-set prompt)
-    // gets memorised.
     reportedRunningCommandBySurface.removeValue(forKey: surfaceId)
     awaitingIdleTitleLearningBySurface.insert(surfaceId)
-    let surfaceTag = surfaceId.uuidString.prefix(8)
-    let tabTag = tabId.rawValue.uuidString.prefix(8)
-    if durationMs >= Self.commandDetectThresholdMs {
-      let title = resolvedTitle ?? "<title not captured>"
-      commandDetectLogger.info(
-        "[done] long-running cmd: title=\"\(title)\" duration=\(durationMs)ms "
-          + "tab=\(tabTag) surface=\(surfaceTag)"
-      )
-    } else if let resolvedTitle {
-      commandDetectLogger.debug(
-        "[skip] short cmd: title=\"\(resolvedTitle)\" duration=\(durationMs)ms "
-          + "tab=\(tabTag) surface=\(surfaceTag)"
-      )
-    }
   }
 
   /// Cancel the in-flight debounce timer and discard the transient
@@ -1627,81 +1589,39 @@ final class WorktreeTerminalState {
 
   private func commandDetectionTimerFired(forSurfaceId surfaceId: UUID, tabId: TerminalTabID) {
     guard let pending = commandDetectorPendingBySurface[surfaceId] else { return }
-    let parts = (ContinuousClock.now - pending.startedAt).components
-    let elapsedMs = Int(parts.seconds * 1000 + parts.attoseconds / 1_000_000_000_000_000)
     // Mark this command as already reported so subsequent title
     // mutations within the same run (claude's spinner, vim's mode
-    // line, …) don't fire additional `[live]` entries until
+    // line, …) don't fire additional debounce passes until
     // `command_finished` clears the guard.
     reportedRunningCommandBySurface[surfaceId] = pending.title
-    let iconSummary = applyDetectedIcon(forCommand: pending.title, surfaceId: surfaceId, tabId: tabId)
-    let surfaceTag = surfaceId.uuidString.prefix(8)
-    let tabTag = tabId.rawValue.uuidString.prefix(8)
-    commandDetectLogger.info(
-      "[live] running cmd detected: title=\"\(pending.title)\" elapsed=\(elapsedMs)ms "
-        + "tab=\(tabTag) surface=\(surfaceTag) \(iconSummary)"
-    )
-  }
-
-  /// Side-effect of `[live]` detection: apply the icon picked by
-  /// first-token mapping. Selection-2 semantics — the icon stays
-  /// after the command exits, so the tab carries a long-lived "what
-  /// is this for" hint. Returns a short tag string so the log line
-  /// can explain *why* (or why not) the icon changed.
-  private func applyDetectedIcon(
-    forCommand title: String,
-    surfaceId: UUID,
-    tabId: TerminalTabID
-  ) -> String {
-    guard let icon = CommandIconMap.iconForFirstToken(title) else {
-      return "icon=<no-mapping>"
+    if let icon = CommandIconMap.iconForFirstToken(pending.title) {
+      applyResolvedIcon(icon, surfaceId: surfaceId, tabId: tabId)
     }
-    return applyResolvedIcon(icon, surfaceId: surfaceId, tabId: tabId)
   }
 
   /// Apply an already-resolved icon to the tab. Shared between the
-  /// debounce-driven `[live]` path and the substring-driven
-  /// `[immediate]` path so focus / lock / unchanged checks stay in
-  /// one place.
+  /// debounce-driven first-token path and the substring-driven
+  /// immediate path so focus / lock / unchanged checks stay in one
+  /// place.
   private func applyResolvedIcon(
     _ icon: TabIconSource,
     surfaceId: UUID,
     tabId: TerminalTabID
-  ) -> String {
+  ) {
     // Per-tab UI is single-headed: only the focused surface in a
     // multi-split tab gets to drive its tab's icon. Stops a
     // background split's command from silently overriding what the
     // user is currently looking at.
-    guard focusedSurfaceIdByTab[tabId] == surfaceId else {
-      return "icon=<not-focused>"
-    }
-    guard let tab = tabManager.tabs.first(where: { $0.id == tabId }) else {
-      return "icon=<tab-missing>"
-    }
-    if tab.isIconLocked {
-      return "icon=<user-locked>"
-    }
+    guard focusedSurfaceIdByTab[tabId] == surfaceId else { return }
+    guard let tab = tabManager.tabs.first(where: { $0.id == tabId }) else { return }
+    guard !tab.isIconLocked else { return }
     // `tab.icon` storage is the SF Symbol string; the asset variant
     // (when set) is the real branding, but rendering hasn't been
     // wired yet so we still write the symbol. See `TabIconSource`
     // docs for the three-step recipe to enable asset rendering.
     let symbol = icon.systemSymbol
-    if tab.icon == symbol {
-      return iconLogTag(icon: icon, suffix: "(unchanged)")
-    }
+    guard tab.icon != symbol else { return }
     tabManager.updateIcon(tabId, icon: symbol)
-    return iconLogTag(icon: icon, suffix: nil)
-  }
-
-  private func iconLogTag(icon: TabIconSource, suffix: String?) -> String {
-    var tag = "icon=sf:\(icon.systemSymbol)"
-    if let asset = icon.assetName {
-      tag += " (asset:\(asset))"
-    }
-    if let suffix {
-      tag += " \(suffix)"
-    }
-    return tag
   }
 
   static func formatDuration(_ seconds: Int) -> String {
