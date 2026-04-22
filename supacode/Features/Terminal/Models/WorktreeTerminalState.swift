@@ -1452,7 +1452,7 @@ final class WorktreeTerminalState {
       learnedIdleTitlesBySurface[surfaceId, default: []].insert(title)
     }
     // Drop idle prompts so they can't reach the mapping lookup.
-    if isLikelyIdleTitleByShape(title) { return }
+    if Self.isLikelyIdleTitleByShape(title) { return }
     if learnedIdleTitlesBySurface[surfaceId]?.contains(title) == true { return }
     guard let icon = CommandIconMap.iconForFirstToken(title) else { return }
     applyResolvedIcon(icon, surfaceId: surfaceId, tabId: tabId)
@@ -1481,7 +1481,10 @@ final class WorktreeTerminalState {
   /// Real commands typically contain a space (program + args) or a
   /// short single token (`ls`, `claude`, `vim`) that doesn't match
   /// either shape, so the false-negative risk is small.
-  private func isLikelyIdleTitleByShape(_ title: String) -> Bool {
+  ///
+  /// Exposed (`internal static`) for direct unit testing — does not
+  /// touch instance state.
+  static func isLikelyIdleTitleByShape(_ title: String) -> Bool {
     guard !title.contains(" ") else { return false }
     if title.contains("@"), title.contains(":") || title.contains("/") {
       return true
