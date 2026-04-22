@@ -6,19 +6,39 @@ import SwiftUI
   /// renders a `CommandIconMap` entry through the same `TabIconImage`
   /// the actual tab UI uses, so the asset / SF Symbol fallback / size
   /// behaviour shown here matches what users see on a real tab.
+  ///
+  /// `.searchable` puts the filter field in the window toolbar
+  /// (NavigationSplitView's detail toolbar slot on macOS). Filtering
+  /// is a case-insensitive substring match on the token, so typing
+  /// `git` surfaces `git`, `gh`, `lazygit`, …
   struct IconCatalogView: View {
+    @State private var searchText: String = ""
+
     var body: some View {
-      let entries = CommandIconMap.debugAllEntries
+      let entries = filteredEntries
       ScrollView {
-        LazyVStack(spacing: 0) {
-          ForEach(entries, id: \.token) { entry in
-            IconCatalogRow(token: entry.token, icon: entry.icon)
-            Divider().padding(.leading, 60)
+        if entries.isEmpty {
+          ContentUnavailableView.search(text: searchText)
+            .frame(maxWidth: .infinity, minHeight: 200)
+        } else {
+          LazyVStack(spacing: 0) {
+            ForEach(entries, id: \.token) { entry in
+              IconCatalogRow(token: entry.token, icon: entry.icon)
+              Divider().padding(.leading, 60)
+            }
           }
+          .padding(.horizontal)
         }
-        .padding(.horizontal)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      .searchable(text: $searchText, placement: .toolbar, prompt: "Filter commands")
+    }
+
+    private var filteredEntries: [(token: String, icon: TabIconSource)] {
+      let all = CommandIconMap.debugAllEntries
+      let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !needle.isEmpty else { return all }
+      return all.filter { $0.token.localizedCaseInsensitiveContains(needle) }
     }
   }
 

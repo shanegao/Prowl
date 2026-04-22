@@ -33,22 +33,47 @@ enum CommandIconMap {
     // Coding agents
     "claude": TabIconSource(systemSymbol: "sparkle", assetName: "ClaudeCode"),
     "codex": TabIconSource(systemSymbol: "sparkle", assetName: "Codex"),
+    "gemini": TabIconSource(systemSymbol: "sparkle", assetName: "Gemini"),
+    "opencode": TabIconSource(systemSymbol: "sparkle", assetName: "OpenCode"),
+    "amp": TabIconSource(systemSymbol: "sparkle", assetName: "Amp"),
+    "kimi": TabIconSource(systemSymbol: "sparkle", assetName: "Kimi"),
+    "copilot": TabIconSource(systemSymbol: "sparkle", assetName: "GitHubCopilot"),
     "aider": TabIconSource(systemSymbol: "sparkle"),
+    "droid": TabIconSource(systemSymbol: "sparkle"),
 
-    // Editors / pagers
+    // Editors / IDEs / pagers
     "vim": TabIconSource(systemSymbol: "pencil.and.scribble", assetName: "Vim"),
     "nvim": TabIconSource(systemSymbol: "pencil.and.scribble", assetName: "Neovim"),
     "nano": TabIconSource(systemSymbol: "pencil.and.scribble"),
+    "code": TabIconSource(
+      systemSymbol: "chevron.left.forwardslash.chevron.right",
+      assetName: "VSCode"
+    ),
 
-    // Package managers / JS runtimes
+    // Package managers
     "npm": TabIconSource(systemSymbol: "shippingbox", assetName: "Npm"),
     "pnpm": TabIconSource(systemSymbol: "shippingbox", assetName: "Pnpm"),
     "yarn": TabIconSource(systemSymbol: "shippingbox", assetName: "Yarn"),
     "bun": TabIconSource(systemSymbol: "shippingbox", assetName: "Bun"),
+    "brew": TabIconSource(systemSymbol: "shippingbox", assetName: "Homebrew"),
 
-    // VCS
+    // Runtime / version managers
+    "mise": TabIconSource(systemSymbol: "arrow.up.arrow.down"),
+
+    // Languages / runtimes
+    "node": TabIconSource(systemSymbol: "terminal", assetName: "Node"),
+    "go": TabIconSource(systemSymbol: "terminal", assetName: "Go"),
+    "deno": TabIconSource(systemSymbol: "terminal", assetName: "Deno"),
+    "python": TabIconSource(systemSymbol: "terminal", assetName: "Python"),
+    "python3": TabIconSource(systemSymbol: "terminal", assetName: "Python"),
+
+    // Terminal multiplexers
+    "tmux": TabIconSource(systemSymbol: "rectangle.split.3x1", assetName: "Tmux"),
+
+    // VCS — `lazygit` is a TUI front-end for git, share the icon.
     "git": TabIconSource(systemSymbol: "arrow.triangle.branch", assetName: "Git"),
     "gh": TabIconSource(systemSymbol: "arrow.triangle.branch", assetName: "GitHub"),
+    "lazygit": TabIconSource(systemSymbol: "arrow.triangle.branch", assetName: "Git"),
 
     // Build tools
     "make": TabIconSource(systemSymbol: "hammer"),
@@ -57,15 +82,24 @@ enum CommandIconMap {
     "xcodebuild": TabIconSource(systemSymbol: "hammer", assetName: "Xcode"),
     "gradle": TabIconSource(systemSymbol: "hammer", assetName: "Gradle"),
 
-    // Container / orchestration
+    // Container / orchestration — `lazydocker` is a TUI for docker,
+    // shares the icon.
     "docker": TabIconSource(systemSymbol: "shippingbox.fill", assetName: "Docker"),
     "kubectl": TabIconSource(systemSymbol: "shippingbox.fill", assetName: "Kubernetes"),
     "podman": TabIconSource(systemSymbol: "shippingbox.fill", assetName: "Podman"),
+    "lazydocker": TabIconSource(systemSymbol: "shippingbox.fill", assetName: "Docker"),
+
+    // IaC / cloud CLIs
+    "terraform": TabIconSource(systemSymbol: "cloud", assetName: "Terraform"),
+    "aws": TabIconSource(systemSymbol: "cloud", assetName: "AWS"),
+    "az": TabIconSource(systemSymbol: "cloud", assetName: "Azure"),
+    "gcloud": TabIconSource(systemSymbol: "cloud", assetName: "GoogleCloud"),
 
     // Network / remote
     "ssh": TabIconSource(systemSymbol: "network"),
     "mosh": TabIconSource(systemSymbol: "network"),
     "curl": TabIconSource(systemSymbol: "network", assetName: "Curl"),
+    "wget": TabIconSource(systemSymbol: "arrow.down.circle"),
 
     // Process / system viewers
     "htop": TabIconSource(systemSymbol: "waveform.path.ecg"),
