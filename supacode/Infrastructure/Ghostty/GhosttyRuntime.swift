@@ -1057,11 +1057,11 @@ nonisolated struct GhosttyUserConfigSnapshot: Equatable, Sendable {
   }
 
   private static func classifyBackgroundTone(from spec: String?) -> GhosttyTerminalTone {
+    // Decide "light or dark" purely from luminance. Popular dark themes
+    // (Dracula, Nord, One Dark, Kanagawa, Solarized Dark, etc.) often have
+    // noticeably tinted backgrounds, so gating on saturation misclassifies
+    // them as unknown and defeats the whole fallback.
     guard let spec, let color = NSColor(ghosttyHexColor: spec) else { return .unknown }
-
-    if color.saturation > 0.20 {
-      return .unknown
-    }
 
     let luminance = color.luminance
     if luminance >= 0.65 {
@@ -1091,16 +1091,6 @@ extension NSColor {
     guard let rgb = usingColorSpace(.sRGB) else { return 0 }
     rgb.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
     return (0.299 * red) + (0.587 * green) + (0.114 * blue)
-  }
-
-  nonisolated var saturation: Double {
-    var hue: CGFloat = 0
-    var saturation: CGFloat = 0
-    var brightness: CGFloat = 0
-    var alpha: CGFloat = 0
-    guard let rgb = usingColorSpace(.sRGB) else { return 1 }
-    rgb.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
-    return saturation
   }
 
   nonisolated fileprivate convenience init?(ghosttyHexColor: String) {
