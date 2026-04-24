@@ -20,15 +20,31 @@ struct AppearanceSettingsView: View {
               }
             }
           }
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Terminal theming follows Ghostty config")
-            Text("For example, add the following line to `~/.config/ghostty/config`")
+          VStack(alignment: .leading, spacing: 6) {
+            Text(
+              """
+              Terminal theming follows your Ghostty configuration. \
+              Browse [all built-in themes](https://iterm2colorschemes.com/), \
+              then add a dual-theme line such as:
+              """
+            )
             Text("theme = light:Monokai Pro Light Sun,dark:Dimmed Monokai")
               .monospaced()
+              .textSelection(.enabled)
+            HStack(spacing: 8) {
+              Button("Open Config") {
+                GhosttyRuntime.openGhosttyConfig()
+              }
+              .help("Open your Ghostty config file in the default text editor.")
+              Button("Reload") {
+                GhosttyRuntime.shared?.reloadAppConfig()
+              }
+              .help("Re-read the Ghostty config from disk and apply it to running terminals.")
+            }
+            .controlSize(.small)
           }
           .font(.footnote)
           .foregroundStyle(.secondary)
-          .textSelection(.enabled)
         }
         Section("Default View") {
           Picker("Launch in", selection: $store.defaultViewMode) {
