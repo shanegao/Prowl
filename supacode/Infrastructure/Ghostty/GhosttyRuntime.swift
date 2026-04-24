@@ -15,6 +15,12 @@ final class GhosttyRuntime {
   nonisolated(unsafe) private static var cachedGhosttyExecutablePath: String?
   nonisolated(unsafe) private static var ghosttyExecutableResolutionAttempted = false
   nonisolated(unsafe) private static var cachedFallbackThemePair: GhosttyThemePair?
+  // Prowl constructs a single GhosttyRuntime for the whole app lifetime
+  // (see `supacodeApp.init`). This weak reference gives UI surfaces that
+  // don't otherwise have access to the runtime (e.g. the Settings window) a
+  // direct way to trigger app-level actions without threading the instance
+  // through SwiftUI's environment or reducers.
+  static weak var shared: GhosttyRuntime?
 
   final class SurfaceReference {
     let surface: ghostty_surface_t
@@ -76,6 +82,7 @@ final class GhosttyRuntime {
     }
     self.app = app
 
+    Self.shared = self
     registerNotificationObservers()
   }
 
@@ -232,6 +239,16 @@ final class GhosttyRuntime {
     guard let config = Self.loadConfig() else { return }
     applyConfig(config, target: target, app: app)
     ghostty_config_free(config)
+  }
+
+  /// Re-reads the user's Ghostty config from disk and re-applies Prowl's
+  /// runtime overrides on top of it. Intended for the Settings UI so users
+  /// can pick up edits without restarting the app.
+  func reloadAppConfig() {
+    // Force `applyRuntimeOverridesIfNeeded` to rebuild and push a fresh
+    // config to ghostty, regardless of whether our override contents changed.
+    runtimeOverrideSignature = ""
+    applyRuntimeOverridesIfNeeded()
   }
 
   private func applyConfig(
@@ -480,7 +497,7 @@ final class GhosttyRuntime {
     }
   }
 
-  private static func openGhosttyConfig() {
+  static func openGhosttyConfig() {
     let configStr = ghostty_config_open_path()
     defer { ghostty_string_free(configStr) }
     guard let ptr = configStr.ptr else { return }
