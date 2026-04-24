@@ -6,6 +6,14 @@ import UniformTypeIdentifiers
 private let ghosttyLogger = SupaLogger("GhosttyRuntime")
 
 final class GhosttyRuntime {
+  private static let ghosttyExecutableCandidates = [
+    "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+    "/opt/homebrew/bin/ghostty",
+    "/usr/local/bin/ghostty",
+  ]
+  private static var cachedGhosttyExecutablePath: String?
+  private static var cachedFallbackThemePair: GhosttyThemePair?
+
   final class SurfaceReference {
     let surface: ghostty_surface_t
     var isValid = true
@@ -24,8 +32,11 @@ final class GhosttyRuntime {
   private var observers: [NSObjectProtocol] = []
   private var surfaceRefs: [SurfaceReference] = []
   private var lastColorScheme: ghostty_color_scheme_e?
+  private var currentColorScheme: ColorScheme?
   private var appKeybindOverrideContents = ""
   private var appKeybindOverrideEntries: [String] = []
+  private var themeFallbackOverrideContents = ""
+  private var runtimeOverrideSignature = ""
   var onConfigChange: (() -> Void)?
   var onQuit: (() -> Void)?
 
@@ -182,6 +193,7 @@ final class GhosttyRuntime {
 
   func setColorScheme(_ scheme: ColorScheme) {
     guard let app else { return }
+    currentColorScheme = scheme
     let ghosttyScheme: ghostty_color_scheme_e =
       scheme == .dark
       ? GHOSTTY_COLOR_SCHEME_DARK
@@ -189,6 +201,7 @@ final class GhosttyRuntime {
     lastColorScheme = ghosttyScheme
     ghostty_app_set_color_scheme(app, ghosttyScheme)
     applyColorSchemeToSurfaces(ghosttyScheme)
+    reconcileThemeFallback(for: scheme)
   }
 
   func registerSurface(_ surface: ghostty_surface_t) -> SurfaceReference {
@@ -423,6 +436,9 @@ final class GhosttyRuntime {
         let config = action.action.config_change.config
         guard let clone = ghostty_config_clone(config) else { return false }
         runtime.setConfig(clone)
+        if let scheme = runtime.currentColorScheme {
+          runtime.reconcileThemeFallback(for: scheme)
+        }
         runtime.onConfigChange?()
         NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: runtime)
       }
@@ -552,23 +568,83 @@ final class GhosttyRuntime {
     guard contents != appKeybindOverrideContents else { return }
     appKeybindOverrideEntries = entries
     appKeybindOverrideContents = contents
+    applyRuntimeOverridesIfNeeded()
+  }
 
-    let overrideURL = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("prowl-ghostty-keybind-overrides.conf")
-    do {
-      try contents.write(to: overrideURL, atomically: true, encoding: .utf8)
-    } catch {
-      ghosttyLogger.warning("Failed to write ghostty keybind override file: \(error.localizedDescription)")
+  private func reconcileThemeFallback(for scheme: ColorScheme) {
+    guard let snapshot = Self.userConfigSnapshotFromCLI() else {
+      setThemeFallbackOverride("")
+      return
+    }
+    guard snapshot.themeMode == .single else {
+      setThemeFallbackOverride("")
       return
     }
 
+    let targetTone: GhosttyTerminalTone = scheme == .dark ? .dark : .light
+    guard snapshot.backgroundTone == .light || snapshot.backgroundTone == .dark else {
+      setThemeFallbackOverride("")
+      return
+    }
+
+    if snapshot.backgroundTone == targetTone {
+      setThemeFallbackOverride("")
+      return
+    }
+
+    guard let pair = Self.resolveFallbackThemePair() else {
+      setThemeFallbackOverride("")
+      return
+    }
+
+    setThemeFallbackOverride("theme = light:\(pair.light),dark:\(pair.dark)")
+  }
+
+  private func setThemeFallbackOverride(_ contents: String) {
+    guard contents != themeFallbackOverrideContents else { return }
+    themeFallbackOverrideContents = contents
+    applyRuntimeOverridesIfNeeded()
+  }
+
+  private func applyRuntimeOverridesIfNeeded() {
     guard let app else { return }
+
+    let nextSignature = [appKeybindOverrideContents, themeFallbackOverrideContents].joined(separator: "\n---\n")
+    guard nextSignature != runtimeOverrideSignature else { return }
+
+    var overrideURLs: [URL] = []
+    if !appKeybindOverrideContents.isEmpty {
+      let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("prowl-ghostty-keybind-overrides.conf")
+      do {
+        try appKeybindOverrideContents.write(to: url, atomically: true, encoding: .utf8)
+        overrideURLs.append(url)
+      } catch {
+        ghosttyLogger.warning("Failed to write ghostty keybind override file: \(error.localizedDescription)")
+        return
+      }
+    }
+
+    if !themeFallbackOverrideContents.isEmpty {
+      let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("prowl-ghostty-theme-overrides.conf")
+      do {
+        try themeFallbackOverrideContents.write(to: url, atomically: true, encoding: .utf8)
+        overrideURLs.append(url)
+      } catch {
+        ghosttyLogger.warning("Failed to write ghostty theme override file: \(error.localizedDescription)")
+        return
+      }
+    }
+
     guard let updated = ghostty_config_new() else { return }
     ghostty_config_load_default_files(updated)
     ghostty_config_load_recursive_files(updated)
     ghostty_config_load_cli_args(updated)
-    overrideURL.path.withCString { path in
-      ghostty_config_load_file(updated, path)
+    for url in overrideURLs {
+      url.path.withCString { path in
+        ghostty_config_load_file(updated, path)
+      }
     }
     ghostty_config_finalize(updated)
     ghostty_app_update_config(app, updated)
@@ -576,8 +652,109 @@ final class GhosttyRuntime {
       setConfig(clone)
     }
     ghostty_config_free(updated)
+    runtimeOverrideSignature = nextSignature
     onConfigChange?()
     NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: self)
+  }
+
+  private static func userConfigSnapshotFromCLI() -> GhosttyUserConfigSnapshot? {
+    guard let output = runGhosttyCommand(arguments: ["+show-config"]) else { return nil }
+    return GhosttyUserConfigSnapshot.parse(showConfigOutput: output)
+  }
+
+  private static func runGhosttyCommand(arguments: [String]) -> String? {
+    guard let executablePath = resolveGhosttyExecutablePath() else { return nil }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executablePath)
+    process.arguments = arguments
+    let outputPipe = Pipe()
+    process.standardOutput = outputPipe
+    process.standardError = Pipe()
+    do {
+      try process.run()
+      process.waitUntilExit()
+    } catch {
+      ghosttyLogger.warning("Failed to run ghostty command \(arguments.joined(separator: " ")): \(error.localizedDescription)")
+      return nil
+    }
+    guard process.terminationStatus == 0 else { return nil }
+    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+    guard !data.isEmpty else { return "" }
+    return String(data: data, encoding: .utf8)
+  }
+
+  private static func resolveGhosttyExecutablePath() -> String? {
+    if let cachedGhosttyExecutablePath,
+      FileManager.default.isExecutableFile(atPath: cachedGhosttyExecutablePath)
+    {
+      return cachedGhosttyExecutablePath
+    }
+
+    for candidate in ghosttyExecutableCandidates where FileManager.default.isExecutableFile(atPath: candidate) {
+      cachedGhosttyExecutablePath = candidate
+      return candidate
+    }
+
+    let which = Process()
+    which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+    which.arguments = ["ghostty"]
+    let outputPipe = Pipe()
+    which.standardOutput = outputPipe
+    which.standardError = Pipe()
+    do {
+      try which.run()
+      which.waitUntilExit()
+    } catch {
+      return nil
+    }
+
+    guard which.terminationStatus == 0 else { return nil }
+    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+    guard let path = String(data: data, encoding: .utf8)?
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      !path.isEmpty,
+      FileManager.default.isExecutableFile(atPath: path)
+    else {
+      return nil
+    }
+    cachedGhosttyExecutablePath = path
+    return path
+  }
+
+  private static func resolveFallbackThemePair() -> GhosttyThemePair? {
+    if let cachedFallbackThemePair {
+      return cachedFallbackThemePair
+    }
+
+    let knownLightCandidates = ["Ghostty Default Style Light", "Catppuccin Latte"]
+    let knownDarkCandidates = ["Ghostty Default Style Dark", "Catppuccin Frappe"]
+
+    if let output = runGhosttyCommand(arguments: ["+list-themes"]) {
+      let availableThemes = Set(
+        output
+          .split(whereSeparator: \.isNewline)
+          .map { line -> String in
+            let raw = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+            if let index = raw.lastIndex(of: "("), raw.hasSuffix(")") {
+              return String(raw[..<index]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return raw
+          }
+          .filter { !$0.isEmpty }
+      )
+
+      if let light = knownLightCandidates.first(where: { availableThemes.contains($0) }),
+        let dark = knownDarkCandidates.first(where: { availableThemes.contains($0) })
+      {
+        let pair = GhosttyThemePair(light: light, dark: dark)
+        cachedFallbackThemePair = pair
+        return pair
+      }
+    }
+
+    let pair = GhosttyThemePair(light: "Catppuccin Latte", dark: "Ghostty Default Style Dark")
+    cachedFallbackThemePair = pair
+    return pair
   }
 
   private static func keybindEntries(from keybindArguments: [String]) -> [String] {
@@ -744,6 +921,92 @@ final class GhosttyRuntime {
   ]
 }
 
+struct GhosttyThemePair: Equatable {
+  let light: String
+  let dark: String
+}
+
+enum GhosttyThemeMode: Equatable {
+  case none
+  case single
+  case dual
+}
+
+enum GhosttyTerminalTone: Equatable {
+  case light
+  case dark
+  case unknown
+}
+
+struct GhosttyUserConfigSnapshot: Equatable {
+  let themeMode: GhosttyThemeMode
+  let backgroundTone: GhosttyTerminalTone
+
+  static func parse(showConfigOutput: String) -> GhosttyUserConfigSnapshot {
+    var themeSpec: String?
+    var backgroundSpec: String?
+
+    for rawLine in showConfigOutput.split(whereSeparator: \.isNewline) {
+      let line = String(rawLine)
+      guard let separator = line.firstIndex(of: "=") else { continue }
+      let key = line[..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
+      let value = line[line.index(after: separator)...].trimmingCharacters(in: .whitespacesAndNewlines)
+      switch key {
+      case "theme":
+        themeSpec = value
+      case "background":
+        backgroundSpec = value
+      default:
+        continue
+      }
+    }
+
+    let themeMode = parseThemeMode(from: themeSpec)
+    let backgroundTone = classifyBackgroundTone(from: backgroundSpec)
+    return .init(themeMode: themeMode, backgroundTone: backgroundTone)
+  }
+
+  private static func parseThemeMode(from spec: String?) -> GhosttyThemeMode {
+    guard let spec, !spec.isEmpty else { return .none }
+
+    var hasLight = false
+    var hasDark = false
+
+    for rawPart in spec.split(separator: ",", omittingEmptySubsequences: true) {
+      let part = rawPart.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let separator = part.firstIndex(of: ":") else { continue }
+      let key = part[..<separator].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      switch key {
+      case "light":
+        hasLight = true
+      case "dark":
+        hasDark = true
+      default:
+        continue
+      }
+    }
+
+    return (hasLight && hasDark) ? .dual : .single
+  }
+
+  private static func classifyBackgroundTone(from spec: String?) -> GhosttyTerminalTone {
+    guard let spec, let color = NSColor(ghosttyHexColor: spec) else { return .unknown }
+
+    if color.saturation > 0.20 {
+      return .unknown
+    }
+
+    let luminance = color.luminance
+    if luminance >= 0.65 {
+      return .light
+    }
+    if luminance <= 0.35 {
+      return .dark
+    }
+    return .unknown
+  }
+}
+
 extension Notification.Name {
   static let ghosttyRuntimeConfigDidChange = Notification.Name("ghosttyRuntimeConfigDidChange")
 }
@@ -761,6 +1024,30 @@ extension NSColor {
     guard let rgb = usingColorSpace(.sRGB) else { return 0 }
     rgb.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
     return (0.299 * red) + (0.587 * green) + (0.114 * blue)
+  }
+
+  var saturation: Double {
+    var hue: CGFloat = 0
+    var saturation: CGFloat = 0
+    var brightness: CGFloat = 0
+    var alpha: CGFloat = 0
+    guard let rgb = usingColorSpace(.sRGB) else { return 1 }
+    rgb.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+    return saturation
+  }
+
+  fileprivate convenience init?(ghosttyHexColor: String) {
+    let cleaned = ghosttyHexColor
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: "#", with: "")
+    guard cleaned.count == 6, let value = Int(cleaned, radix: 16) else {
+      return nil
+    }
+
+    let red = Double((value >> 16) & 0xFF) / 255
+    let green = Double((value >> 8) & 0xFF) / 255
+    let blue = Double(value & 0xFF) / 255
+    self.init(red: red, green: green, blue: blue, alpha: 1)
   }
 
   fileprivate convenience init(ghostty: ghostty_config_color_s) {
