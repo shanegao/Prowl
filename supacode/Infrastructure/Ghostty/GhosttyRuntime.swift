@@ -674,7 +674,10 @@ final class GhosttyRuntime {
       try process.run()
       process.waitUntilExit()
     } catch {
-      ghosttyLogger.warning("Failed to run ghostty command \(arguments.joined(separator: " ")): \(error.localizedDescription)")
+      let command = arguments.joined(separator: " ")
+      ghosttyLogger.warning(
+        "Failed to run ghostty command \(command): \(error.localizedDescription)"
+      )
       return nil
     }
     guard process.terminationStatus == 0 else { return nil }
