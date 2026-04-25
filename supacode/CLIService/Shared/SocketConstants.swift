@@ -16,12 +16,27 @@ public enum ProwlSocket {
   public static let cliOpenPathArgument = "--prowl-cli-open-path"
 
   /// Default Unix domain socket path.
-  /// Located in user's temporary directory to avoid permission issues.
+  ///
+  /// Located under `~/Library/Application Support/com.onevcat.prowl/` because macOS periodically
+  /// sweeps `/var/folders/.../T/` (NSTemporaryDirectory) and removes the socket file out from
+  /// under a long-running app, leaving a bound FD with no path entry — connect() then fails with
+  /// ENOENT and the CLI mistakenly reports `APP_NOT_RUNNING`.
   ///
   /// If `PROWL_CLI_SOCKET` is set and not empty, it takes precedence.
+  /// Falls back to NSTemporaryDirectory if the preferred path would exceed the AF_UNIX limit.
   public static var defaultPath: String {
     if let override = ProcessInfo.processInfo.environment[environmentKey], !override.isEmpty {
       return override
+    }
+    let preferred = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library", directoryHint: .isDirectory)
+      .appending(path: "Application Support", directoryHint: .isDirectory)
+      .appending(path: "com.onevcat.prowl", directoryHint: .isDirectory)
+      .appending(path: "cli.sock", directoryHint: .notDirectory)
+      .path(percentEncoded: false)
+    // sockaddr_un.sun_path is 104 bytes on Darwin (including NUL terminator).
+    if preferred.utf8.count < 104 {
+      return preferred
     }
     let tmpDir = NSTemporaryDirectory()
     return (tmpDir as NSString).appendingPathComponent("prowl-cli.sock")

@@ -24,6 +24,13 @@ final class CLISocketServer {
 
   /// Start listening for CLI connections.
   func start() throws {
+    // Ensure parent directory exists (e.g. ~/Library/Application Support/com.onevcat.prowl)
+    let parentDir = (socketPath as NSString).deletingLastPathComponent
+    try? FileManager.default.createDirectory(
+      atPath: parentDir,
+      withIntermediateDirectories: true
+    )
+
     // Clean up stale socket file
     unlink(socketPath)
 
