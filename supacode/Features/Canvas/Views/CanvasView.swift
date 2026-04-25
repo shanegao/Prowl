@@ -1,5 +1,4 @@
 import AppKit
-import GameController
 import SwiftUI
 
 struct CanvasView: View {
@@ -19,11 +18,7 @@ struct CanvasView: View {
   @State private var activeResize: [TerminalTabID: ActiveResize] = [:]
   @State private var hasPerformedInitialFit = false
   @State private var viewportSize: CGSize = .zero
-  @State private var hasConnectedMouse: Bool = !GCMouse.mice().isEmpty
-  @State private var hasMouseWithMiddleButton: Bool =
-    GCMouse.mice().contains { $0.mouseInput?.middleButton != nil }
-  @State private var showsMouseHelp = false
-  @State private var mouseConnectionObservers: [NSObjectProtocol] = []
+  @State private var showsCanvasHelp = false
 
   private let minCardWidth: CGFloat = 300
   private let minCardHeight: CGFloat = 200
@@ -172,12 +167,8 @@ struct CanvasView: View {
       canvasToolbar
     }
     .overlay(alignment: .bottomLeading) {
-      if hasConnectedMouse {
-        mouseHelpButton
-      }
+      canvasHelpButton
     }
-    .onAppear { startObservingMouseConnections() }
-    .onDisappear { stopObservingMouseConnections() }
     .onKeyPress(.escape) {
       guard selectionState.isBroadcasting else { return .ignored }
       clearSelection(states: terminalManager.activeWorktreeStates)
@@ -436,78 +427,55 @@ struct CanvasView: View {
     layoutStore.cardLayouts = layouts
   }
 
-  private var mouseHelpButton: some View {
+  private var canvasHelpButton: some View {
     Button {
-      showsMouseHelp.toggle()
+      showsCanvasHelp.toggle()
     } label: {
       Image(systemName: "questionmark.circle")
         .font(.body)
-        .accessibilityLabel("Canvas mouse shortcuts")
+        .accessibilityLabel("Canvas navigation help")
     }
     .buttonStyle(.bordered)
-    .help("Canvas mouse shortcuts")
-    .popover(isPresented: $showsMouseHelp, arrowEdge: .bottom) {
-      mouseHelpContent
+    .help("Canvas navigation help")
+    .popover(isPresented: $showsCanvasHelp, arrowEdge: .bottom) {
+      canvasHelpContent
     }
     .padding()
   }
 
-  private var mouseHelpContent: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Canvas Mouse Shortcuts")
+  private var canvasHelpContent: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Canvas Navigation")
         .font(.headline)
 
-      VStack(alignment: .leading, spacing: 8) {
-        Label {
-          Text("Hold ⌘ + scroll to zoom")
-        } icon: {
-          Image(systemName: "plus.magnifyingglass")
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-        }
-        if hasMouseWithMiddleButton {
-          Label {
-            Text("Middle-click and drag to pan canvas")
-          } icon: {
-            Image(systemName: "hand.draw")
-              .foregroundStyle(.secondary)
-              .accessibilityHidden(true)
-          }
-        }
+      VStack(alignment: .leading, spacing: 12) {
+        canvasHelpRow(
+          icon: "plus.magnifyingglass",
+          title: "Zoom in/out",
+          detail: "⌘ + scroll, or pinch gesture"
+        )
+        canvasHelpRow(
+          icon: "hand.draw",
+          title: "Pan canvas",
+          detail: "Drag empty area, middle-click drag, or two-finger swipe"
+        )
       }
-      .font(.callout)
     }
     .padding()
-    .frame(maxWidth: 280, alignment: .leading)
+    .frame(maxWidth: 320, alignment: .leading)
   }
 
-  private func startObservingMouseConnections() {
-    refreshMouseState()
-    // queue: .main guarantees main-thread delivery, so MainActor.assumeIsolated
-    // is safe for touching @State from this @Sendable closure.
-    let recheck: @Sendable (Notification) -> Void = { _ in
-      MainActor.assumeIsolated {
-        refreshMouseState()
+  private func canvasHelpRow(icon: String, title: String, detail: String) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 10) {
+      Image(systemName: icon)
+        .foregroundStyle(.secondary)
+        .frame(width: 18)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(.callout).fontWeight(.medium)
+        Text(detail).font(.caption).foregroundStyle(.secondary)
       }
     }
-    let center = NotificationCenter.default
-    mouseConnectionObservers = [
-      center.addObserver(forName: .GCMouseDidConnect, object: nil, queue: .main, using: recheck),
-      center.addObserver(forName: .GCMouseDidDisconnect, object: nil, queue: .main, using: recheck),
-    ]
-  }
-
-  private func refreshMouseState() {
-    let mice = GCMouse.mice()
-    hasConnectedMouse = !mice.isEmpty
-    hasMouseWithMiddleButton = mice.contains { $0.mouseInput?.middleButton != nil }
-  }
-
-  private func stopObservingMouseConnections() {
-    for observer in mouseConnectionObservers {
-      NotificationCenter.default.removeObserver(observer)
-    }
-    mouseConnectionObservers = []
   }
 
   private var canvasToolbar: some View {
