@@ -1,4 +1,5 @@
 import AppKit
+import GameController
 import SwiftUI
 
 struct CanvasView: View {
@@ -18,6 +19,9 @@ struct CanvasView: View {
   @State private var activeResize: [TerminalTabID: ActiveResize] = [:]
   @State private var hasPerformedInitialFit = false
   @State private var viewportSize: CGSize = .zero
+  @State private var hasConnectedMouse: Bool = !GCMouse.mice().isEmpty
+  @State private var showsMouseHelp = false
+  @State private var mouseConnectionObservers: [NSObjectProtocol] = []
 
   private let minCardWidth: CGFloat = 300
   private let minCardHeight: CGFloat = 200
@@ -165,6 +169,13 @@ struct CanvasView: View {
     .overlay(alignment: .bottomTrailing) {
       canvasToolbar
     }
+    .overlay(alignment: .bottomLeading) {
+      if hasConnectedMouse {
+        mouseHelpButton
+      }
+    }
+    .onAppear { startObservingMouseConnections() }
+    .onDisappear { stopObservingMouseConnections() }
     .onKeyPress(.escape) {
       guard selectionState.isBroadcasting else { return .ignored }
       clearSelection(states: terminalManager.activeWorktreeStates)
@@ -421,6 +432,72 @@ struct CanvasView: View {
       layouts.removeValue(forKey: key)
     }
     layoutStore.cardLayouts = layouts
+  }
+
+  private var mouseHelpButton: some View {
+    Button {
+      showsMouseHelp.toggle()
+    } label: {
+      Image(systemName: "questionmark.circle")
+        .font(.body)
+        .accessibilityLabel("Canvas mouse shortcuts")
+    }
+    .buttonStyle(.bordered)
+    .help("Canvas mouse shortcuts")
+    .popover(isPresented: $showsMouseHelp, arrowEdge: .bottom) {
+      mouseHelpContent
+    }
+    .padding()
+  }
+
+  private var mouseHelpContent: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Canvas Mouse Shortcuts")
+        .font(.headline)
+
+      VStack(alignment: .leading, spacing: 8) {
+        Label {
+          Text("Hold ⌘ + scroll wheel to zoom")
+        } icon: {
+          Image(systemName: "plus.magnifyingglass")
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
+        Label {
+          Text("Middle-click and drag to pan canvas")
+        } icon: {
+          Image(systemName: "hand.draw")
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
+      }
+      .font(.callout)
+    }
+    .padding()
+    .frame(maxWidth: 280, alignment: .leading)
+  }
+
+  private func startObservingMouseConnections() {
+    hasConnectedMouse = !GCMouse.mice().isEmpty
+    // queue: .main guarantees main-thread delivery, so MainActor.assumeIsolated
+    // is safe for touching @State from this @Sendable closure.
+    let recheck: @Sendable (Notification) -> Void = { _ in
+      MainActor.assumeIsolated {
+        hasConnectedMouse = !GCMouse.mice().isEmpty
+      }
+    }
+    let center = NotificationCenter.default
+    mouseConnectionObservers = [
+      center.addObserver(forName: .GCMouseDidConnect, object: nil, queue: .main, using: recheck),
+      center.addObserver(forName: .GCMouseDidDisconnect, object: nil, queue: .main, using: recheck),
+    ]
+  }
+
+  private func stopObservingMouseConnections() {
+    for observer in mouseConnectionObservers {
+      NotificationCenter.default.removeObserver(observer)
+    }
+    mouseConnectionObservers = []
   }
 
   private var canvasToolbar: some View {
@@ -811,7 +888,7 @@ enum CanvasZoomMath {
     anchor: CGPoint,
     isPrecise: Bool
   ) -> Result {
-    let sensitivity: CGFloat = isPrecise ? 0.005 : 0.01
+    let sensitivity: CGFloat = isPrecise ? 0.0025 : 0.005
     let factor = exp(deltaY * sensitivity)
     let newScale = max(minScale, min(maxScale, currentScale * factor))
     guard newScale != currentScale else {
