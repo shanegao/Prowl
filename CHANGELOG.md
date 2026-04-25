@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026.4.25](https://github.com/onevcat/Prowl/releases/tag/v2026.4.25)
+
+This release brings mouse-driven Canvas navigation and improves reliability for long-running sessions.
+
+## New
+
+- **Canvas zoom with Cmd+scroll wheel**: hold Cmd and scroll to zoom in or out, anchored on the cursor position. Works with both mouse wheels and trackpads.
+- **Canvas pan with middle-click drag**: press and drag the middle mouse button to pan the Canvas. Terminals never see the click, and middle-click works normally outside Canvas mode.
+
+## Fixed
+
+- The `prowl` CLI no longer loses its connection to the app after a few days. macOS periodically cleans `/tmp`, which was deleting the socket file and causing `APP_NOT_RUNNING` errors even with the app running. The socket is now stored in `~/Library/Application Support/com.onevcat.prowl/`. A one-time app relaunch is required after upgrading to bind the new path.
+- Prowl now applies a runtime Ghostty theme fallback when you have a single theme configured and it mismatches the current macOS appearance (light/dark). No changes are written to your Ghostty config file.
+- Canvas auto-fit now reserves space for toolbars and gives cards a bit more room, so cards no longer end up hidden under UI chrome.
+- The Canvas navigation help popover no longer truncates its content, and the middle-click hint is hidden for Magic Mouse users who cannot middle-click.
+
 ## [2026.4.23](https://github.com/onevcat/Prowl/releases/tag/v2026.4.23)
 
 Tab icons now update automatically based on the running command, making it easy to tell at a glance what each terminal tab is doing.
