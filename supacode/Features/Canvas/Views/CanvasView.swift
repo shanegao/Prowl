@@ -26,6 +26,10 @@ struct CanvasView: View {
   private let maxCardHeight: CGFloat = 1600
   private let titleBarHeight: CGFloat = 28
   private let cardSpacing: CGFloat = 20
+  /// Reserved height at the bottom of the viewport for the help button and
+  /// layout toolbar so cards don't sit underneath them after auto-fit.
+  /// Cards end up shifted upward by half of this amount.
+  private let bottomToolbarReserve: CGFloat = 30
 
   var body: some View {
     let selectAllCanvasShortcut = AppShortcuts.resolvedShortcut(
@@ -408,7 +412,7 @@ struct CanvasView: View {
 
     canvasOffset = CGSize(
       width: canvasSize.width / 2 - bboxCenterX * newScale,
-      height: canvasSize.height / 2 - bboxCenterY * newScale
+      height: (canvasSize.height - bottomToolbarReserve) / 2 - bboxCenterY * newScale
     )
     canvasScale = newScale
     lastCanvasScale = newScale
