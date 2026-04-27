@@ -39,23 +39,21 @@ nonisolated struct RepositoryIconAssetStore: Sendable {
     ) -> Bool
 }
 
-nonisolated enum RepositoryIconAssetStoreError: Error, Equatable {
-  case unsupportedExtension(String)
-}
-
 nonisolated extension RepositoryIconAssetStore {
-  /// Allowed input extensions. PNG and SVG only — JPEG and other
-  /// formats either don't suit repo icon use (no transparency) or
-  /// don't render well at small sidebar sizes.
-  static let supportedExtensions: Set<String> = ["png", "svg"]
-
   static var liveValue: RepositoryIconAssetStore {
     RepositoryIconAssetStore(
       importImage: { sourceURL, rootURL in
-        let normalizedExt = sourceURL.pathExtension.lowercased()
-        guard Self.supportedExtensions.contains(normalizedExt) else {
-          throw RepositoryIconAssetStoreError.unsupportedExtension(normalizedExt)
-        }
+        // No extension whitelist — the file picker filters down to
+        // image UTTypes already, and anything that NSImage can't
+        // render later falls back to the dashed-questionmark
+        // placeholder in `RepositoryIconImage`. The `.svg` suffix
+        // remains the lone meaningful signal because it gates the
+        // template-tinting branch downstream; everything else is
+        // treated as an opaque bitmap.
+        let normalizedExt =
+          sourceURL.pathExtension.lowercased().isEmpty
+          ? "img"
+          : sourceURL.pathExtension.lowercased()
         let directory = SupacodePaths.repositoryIconsDirectory(for: rootURL)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let filename = "\(UUID().uuidString.lowercased()).\(normalizedExt)"

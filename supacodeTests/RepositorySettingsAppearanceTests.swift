@@ -179,24 +179,6 @@ struct RepositorySettingsAppearanceTests {
     await store.finish()
   }
 
-  @Test func importFailureSurfacesErrorMessage() async throws {
-    let store = makeStore(
-      iconAssetStore: RepositoryIconAssetStore(
-        importImage: { _, _ in throw RepositoryIconAssetStoreError.unsupportedExtension("jpeg") },
-        remove: { _, _ in },
-        exists: { _, _ in false }
-      )
-    )
-
-    await store.send(.importUserImage(URL(fileURLWithPath: "/tmp/source.jpeg")))
-    await store.receive(\.userImageImportFailed) {
-      $0.appearanceImportError = """
-        Repository icons must be PNG or SVG. JPEG files aren't supported.
-        """.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    await store.finish()
-  }
-
   @Test func importGenericErrorSurfacesLocalizedDescription() async throws {
     struct Boom: LocalizedError { var errorDescription: String? { "boom" } }
     let store = makeStore(

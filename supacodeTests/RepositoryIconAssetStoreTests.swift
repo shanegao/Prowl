@@ -80,15 +80,36 @@ struct RepositoryIconAssetStoreTests {
     #expect(filename.hasSuffix(".svg"))
   }
 
-  @Test func importImageRejectsUnsupportedExtension() throws {
+  @Test func importImageAcceptsArbitraryImageExtensions() throws {
+    // The store no longer enforces a PNG/SVG whitelist — the file
+    // picker filters down to image UTTypes already, and anything
+    // that NSImage can't decode falls back to a placeholder at
+    // render time. JPG / WebP / HEIC / GIF / TIFF / etc. all flow
+    // through the same byte-copy path and round-trip through
+    // `repositoryIconFileURL` like PNG does.
+    let store = RepositoryIconAssetStore.liveValue
+    let repoRoot = makeRepoRootScratch()
+
+    for ext in ["jpg", "jpeg", "webp", "heic", "gif", "tiff", "bmp"] {
+      let source = ScratchDirectory(prefix: "prowl-icon-source")
+      let sourceFile = try writeSourceFile(in: source, extension: ext)
+      let filename = try store.importImage(sourceFile, repoRoot.url)
+      #expect(filename.hasSuffix(".\(ext)"))
+    }
+  }
+
+  @Test func importImageHandlesFileWithNoExtension() throws {
+    // Defensive: a dragged-in file without an extension shouldn't
+    // crash the importer. The destination filename gets a generic
+    // fallback so the round-trip still works.
     let store = RepositoryIconAssetStore.liveValue
     let repoRoot = makeRepoRootScratch()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
-    let sourceFile = try writeSourceFile(in: source, extension: "jpeg")
+    let sourceFile = source.url.appending(path: "icon", directoryHint: .notDirectory)
+    try Data([0xDE, 0xAD]).write(to: sourceFile)
 
-    #expect(throws: RepositoryIconAssetStoreError.self) {
-      _ = try store.importImage(sourceFile, repoRoot.url)
-    }
+    let filename = try store.importImage(sourceFile, repoRoot.url)
+    #expect(!filename.isEmpty)
   }
 
   @Test func importImageCreatesIconsDirectoryWhenMissing() throws {

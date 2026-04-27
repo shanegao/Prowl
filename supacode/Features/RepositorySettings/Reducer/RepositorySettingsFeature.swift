@@ -222,8 +222,6 @@ struct RepositorySettingsFeature {
           do {
             let filename = try store.importImage(sourceURL, rootURL)
             await send(.userImageImported(filename: filename))
-          } catch let error as RepositoryIconAssetStoreError {
-            await send(.userImageImportFailed(Self.errorMessage(for: error)))
           } catch {
             await send(.userImageImportFailed(error.localizedDescription))
           }
@@ -326,10 +324,4 @@ struct RepositorySettingsFeature {
     }
   }
 
-  private static func errorMessage(for error: RepositoryIconAssetStoreError) -> String {
-    switch error {
-    case .unsupportedExtension(let ext):
-      return "Repository icons must be PNG or SVG. \(ext.uppercased()) files aren't supported."
-    }
-  }
 }

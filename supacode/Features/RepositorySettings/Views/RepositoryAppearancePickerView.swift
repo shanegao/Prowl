@@ -39,15 +39,21 @@ struct RepositoryAppearancePickerView: View {
         title: "Repository Icon",
         subtitle:
           "Pick a preset or enter any SF Symbol name. SVG and SF Symbol icons are tinted "
-          + "with the repo color; PNG keeps its own colors.",
+          + "with the repo color; bitmap formats keep their own colors.",
         presets: RepositoryIconPresets.presets,
         onApply: { applySymbolFromPicker($0) },
         onCancel: { isSymbolPickerPresented = false }
       )
     }
+    // Accept any image UTType — PNG / JPEG / WebP / HEIC / TIFF / GIF
+    // / etc. all flow through the same `NSImage(contentsOf:)` render
+    // path. SVG is listed explicitly because it's a structured-text
+    // format that doesn't always conform to `.image` in older
+    // UTType conformance tables. Anything that fails to decode falls
+    // back to the dashed placeholder at render time.
     .fileImporter(
       isPresented: $isImageImporterPresented,
-      allowedContentTypes: [.png, .svg],
+      allowedContentTypes: [.image, .svg],
       allowsMultipleSelection: false
     ) { result in
       handleImageImportResult(result)
@@ -171,7 +177,7 @@ struct RepositoryAppearancePickerView: View {
   private var iconHelpText: String {
     switch store.appearance.icon {
     case .userImage(let filename) where !filename.lowercased().hasSuffix(".svg"):
-      return "PNG icons keep their original colors and ignore the repo color."
+      return "Bitmap icons keep their original colors and ignore the repo color."
     case .userImage:
       return "User-provided SVGs are tinted with the repo color."
     case .sfSymbol:
