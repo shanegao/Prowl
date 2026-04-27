@@ -1,0 +1,359 @@
+import AppKit
+import ComposableArchitecture
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// Inline section that drives a repository's icon and color choice.
+/// Hosted at the top of `RepositorySettingsView`'s Form. The actual SF
+/// Symbol picker is presented as a sheet via `TabIconPickerView`,
+/// parameterised with `RepositoryIconPresets.presets` so the shared
+/// picker code surfaces repo-flavored vocabulary instead of the
+/// terminal one used by tab icons.
+///
+/// All mutations go through `RepositorySettingsFeature` actions —
+/// never via direct `store.appearance.* = ...` writes — so the
+/// `store_state_mutation_in_views` SwiftLint rule stays clean and
+/// reducer tests can exercise every code path.
+struct RepositoryAppearancePickerView: View {
+  @Bindable var store: StoreOf<RepositorySettingsFeature>
+
+  @State private var isSymbolPickerPresented = false
+  @State private var isImageImporterPresented = false
+  @State private var isHoveringIconTile = false
+
+  private let previewSize: CGFloat = 40
+  /// Diameter of the colored swatch itself.
+  private let swatchDotSize: CGFloat = 20
+  /// Diameter of the "selected" ring drawn around the swatch. The
+  /// (ring − dot) / 2 gap (3pt) lives between the dot's edge and the
+  /// ring's inside, matching macOS-native color pickers.
+  private let swatchRingSize: CGFloat = 26
+  /// Outer slot every swatch occupies in the HStack so the row layout
+  /// stays stable whether or not a swatch is selected (without a fixed
+  /// slot the selection ring would expand the cell and shove its
+  /// neighbors aside on hover/select).
+  private let swatchSlotSize: CGFloat = 28
+  private let swatchRingLineWidth: CGFloat = 1.5
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      iconRow
+      colorRow
+      if let message = store.appearanceImportError {
+        importErrorBanner(message: message)
+      }
+    }
+    .sheet(isPresented: $isSymbolPickerPresented) {
+      TabIconPickerView(
+        initialIcon: currentSymbolName,
+        defaultIcon: "folder.fill",
+        title: "Repository Icon",
+        subtitle:
+          "Pick a preset or enter any SF Symbol name. SVG and SF Symbol icons are tinted "
+          + "with the repo color; bitmap formats keep their own colors.",
+        presets: RepositoryIconPresets.presets,
+        onApply: { applySymbolFromPicker($0) },
+        onCancel: { isSymbolPickerPresented = false }
+      )
+    }
+    // Accept any image UTType — PNG / JPEG / WebP / HEIC / TIFF / GIF
+    // / etc. all flow through the same `NSImage(contentsOf:)` render
+    // path. SVG is listed explicitly because it's a structured-text
+    // format that doesn't always conform to `.image` in older
+    // UTType conformance tables. Anything that fails to decode falls
+    // back to the dashed placeholder at render time.
+    .fileImporter(
+      isPresented: $isImageImporterPresented,
+      allowedContentTypes: [.image, .svg],
+      allowsMultipleSelection: false
+    ) { result in
+      handleImageImportResult(result)
+    }
+  }
+
+  // MARK: - Icon row
+
+  @ViewBuilder
+  private var iconRow: some View {
+    HStack(alignment: .center, spacing: 12) {
+      iconMenu
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Icon")
+          .font(.headline)
+        Text(iconHelpText)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      Spacer(minLength: 0)
+    }
+  }
+
+  /// Click target + menu trigger for the icon. The whole preview tile
+  /// is the action surface — clicking opens a popover menu with the
+  /// three options. Drops the trailing button cluster so narrow
+  /// Settings windows don't truncate "Choose Symbol…" / "Clear Icon".
+  /// Pattern matches macOS native flows (System Settings user picture,
+  /// Finder "Get Info" icon).
+  ///
+  /// Implementation notes — `.buttonStyle(.plain)` (NOT
+  /// `.menuStyle(.borderlessButton)`) is critical: the borderless
+  /// menu style applies its own padding and a system tint that
+  /// silently overrides the icon's `foregroundStyle`, so the user's
+  /// chosen color stops appearing on the preview. Plain button style
+  /// lets the label render exactly as authored. Hover detection,
+  /// overlay border, pointer style, and tooltip all sit on the
+  /// **outer** Menu — `.onHover` placed inside the Menu's label is
+  /// swallowed by the menu's pointer interception.
+  @ViewBuilder
+  private var iconMenu: some View {
+    Menu {
+      Button("Choose Symbol…") {
+        isSymbolPickerPresented = true
+      }
+      Button("Choose Image…") {
+        isImageImporterPresented = true
+      }
+      if store.appearance.icon != nil {
+        Divider()
+        Button("Clear Icon", role: .destructive) {
+          store.send(.setAppearanceIcon(nil))
+        }
+      }
+    } label: {
+      iconPreviewTile
+    }
+    .buttonStyle(.plain)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .overlay {
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .stroke(
+          Color.accentColor.opacity(isHoveringIconTile ? 0.65 : 0),
+          lineWidth: 1.5
+        )
+    }
+    .onHover { isHoveringIconTile = $0 }
+    .pointerStyle(.link)
+    .animation(.easeOut(duration: 0.12), value: isHoveringIconTile)
+    .help("Click the icon preview to pick a symbol or import an image")
+  }
+
+  /// Visual label for the menu trigger. The frame is locked to
+  /// `previewSize × previewSize` so the row layout (and the title /
+  /// description text alignment to its right) doesn't shift when the
+  /// inner content swaps between the user's icon and the
+  /// no-icon placeholder. `.contentShape` confines the click hit-test
+  /// to the rounded rectangle so clicks just outside the visible
+  /// tile don't open the menu.
+  ///
+  /// When no icon is set, a dashed border replaces the questionmark's
+  /// silence with a "drop zone"-style affordance — the same pattern
+  /// macOS uses for empty avatar / drag-target slots — so users see
+  /// the tile is interactive even before they hover.
+  @ViewBuilder
+  private var iconPreviewTile: some View {
+    let frame = RoundedRectangle(cornerRadius: 8, style: .continuous)
+    let fill = Color.secondary.opacity(0.12)
+    let hasIcon = store.appearance.icon != nil
+    Group {
+      if let icon = store.appearance.icon {
+        RepositoryIconImage(
+          icon: icon,
+          repositoryRootURL: store.rootURL,
+          tintColor: tintColor,
+          size: 22
+        )
+      } else {
+        Image(systemName: "questionmark")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundStyle(.tertiary)
+          .accessibilityHidden(true)
+      }
+    }
+    .frame(width: previewSize, height: previewSize)
+    .background(fill, in: frame)
+    .overlay {
+      if !hasIcon {
+        frame.stroke(
+          Color.secondary.opacity(0.55),
+          style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+        )
+      }
+    }
+    .contentShape(.rect(cornerRadius: 8, style: .continuous))
+    .accessibilityLabel("Icon picker")
+  }
+
+  private var iconHelpText: String {
+    switch store.appearance.icon {
+    case .userImage(let filename) where !filename.lowercased().hasSuffix(".svg"):
+      return "Bitmap icons keep their original colors and ignore the repo color."
+    case .userImage:
+      return "User-provided SVGs are tinted with the repo color."
+    case .sfSymbol:
+      return "SF Symbols pick up the repo color when one is set."
+    case .bundledAsset:
+      return "Bundled icons keep their original artwork."
+    case nil:
+      return "No icon set. Click the icon preview to pick a symbol or import an image."
+    }
+  }
+
+  private var tintColor: Color {
+    store.appearance.color?.color ?? .accentColor
+  }
+
+  private var currentSymbolName: String? {
+    if case .sfSymbol(let name) = store.appearance.icon {
+      return name
+    }
+    return nil
+  }
+
+  // MARK: - Color row
+
+  @ViewBuilder
+  private var colorRow: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Color")
+        .font(.headline)
+      Text(
+        "Tints the row in the sidebar, the shelf spine background, and the canvas card title bar."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+      HStack(spacing: 8) {
+        ForEach(RepositoryColorChoice.allCases, id: \.self) { choice in
+          colorSwatch(for: choice)
+        }
+        noColorSwatch
+        Spacer(minLength: 0)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func colorSwatch(for choice: RepositoryColorChoice) -> some View {
+    let isSelected = store.appearance.color == choice
+    Button {
+      store.send(.setAppearanceColor(choice))
+    } label: {
+      swatchSlot(isSelected: isSelected) {
+        Circle()
+          .fill(choice.color)
+          .frame(width: swatchDotSize, height: swatchDotSize)
+      }
+      .help(choice.displayName)
+      .accessibilityLabel(choice.displayName)
+      .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+    .buttonStyle(.plain)
+  }
+
+  @ViewBuilder
+  private var noColorSwatch: some View {
+    let isSelected = store.appearance.color == nil
+    Button {
+      store.send(.setAppearanceColor(nil))
+    } label: {
+      swatchSlot(isSelected: isSelected) {
+        Circle()
+          .stroke(
+            Color.secondary.opacity(0.5),
+            style: StrokeStyle(lineWidth: 1, dash: [2, 2])
+          )
+          .frame(width: swatchDotSize, height: swatchDotSize)
+          .overlay {
+            Image(systemName: "slash.circle")
+              .font(.system(size: 11))
+              .foregroundStyle(.secondary)
+              .accessibilityHidden(true)
+          }
+      }
+      .help("No color")
+      .accessibilityLabel("No color")
+      .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+    .buttonStyle(.plain)
+  }
+
+  /// Centers the swatch content in a fixed-size slot and overlays a
+  /// selection ring on top, sized larger than the swatch so a 3pt
+  /// transparent gap separates the swatch's edge from the ring's
+  /// inside — mirroring macOS-native color picker selection chrome.
+  /// The slot bounds stay constant whether selected or not so swatch
+  /// row layout doesn't reflow on selection change.
+  @ViewBuilder
+  private func swatchSlot<Content: View>(
+    isSelected: Bool, @ViewBuilder content: () -> Content
+  ) -> some View {
+    ZStack {
+      content()
+      if isSelected {
+        Circle()
+          .stroke(Color.primary, lineWidth: swatchRingLineWidth)
+          .frame(width: swatchRingSize, height: swatchRingSize)
+      }
+    }
+    .frame(width: swatchSlotSize, height: swatchSlotSize)
+  }
+
+  // MARK: - Error banner
+
+  @ViewBuilder
+  private func importErrorBanner(message: String) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundStyle(.orange)
+        .accessibilityHidden(true)
+      Text(message)
+        .font(.caption)
+        .foregroundStyle(.primary)
+      Spacer(minLength: 0)
+      Button("Dismiss") {
+        store.send(.dismissAppearanceImportError)
+      }
+      .buttonStyle(.plain)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+    .padding(.vertical, 4)
+    .padding(.horizontal, 8)
+    .background(
+      RoundedRectangle(cornerRadius: 6, style: .continuous)
+        .fill(Color.orange.opacity(0.12))
+    )
+  }
+
+  // MARK: - Actions
+
+  private func applySymbolFromPicker(_ name: String?) {
+    isSymbolPickerPresented = false
+    if let name {
+      store.send(.setAppearanceIcon(.sfSymbol(name)))
+    } else {
+      store.send(.setAppearanceIcon(nil))
+    }
+  }
+
+  private func handleImageImportResult(_ result: Result<[URL], Error>) {
+    isImageImporterPresented = false
+    switch result {
+    case .success(let urls):
+      guard let url = urls.first else { return }
+      // `fileImporter` returns security-scoped URLs on macOS — we need
+      // to start access before reading and stop it on the way out so
+      // the import store can copy the bytes into the sandboxed app
+      // support directory.
+      let needsScope = url.startAccessingSecurityScopedResource()
+      defer {
+        if needsScope { url.stopAccessingSecurityScopedResource() }
+      }
+      store.send(.importUserImage(url))
+    case .failure(let error):
+      store.send(.userImageImportFailed(error.localizedDescription))
+    }
+  }
+}
