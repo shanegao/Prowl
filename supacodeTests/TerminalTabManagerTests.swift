@@ -69,7 +69,7 @@ struct TerminalTabManagerTests {
     let tabId = manager.createTab(title: "one", icon: "terminal")
     manager.overrideIcon(tabId, icon: "sparkles")
     #expect(manager.tabs.first?.icon == "sparkles")
-    #expect(manager.tabs.first?.isIconLocked == true)
+    #expect(manager.tabs.first?.iconLock == .user)
   }
 
   @Test func updateIconRespectsLock() {
@@ -85,7 +85,7 @@ struct TerminalTabManagerTests {
     let tabId = manager.createTab(title: "one", icon: "terminal")
     manager.overrideIcon(tabId, icon: "sparkles")
     manager.clearIconOverride(tabId)
-    #expect(manager.tabs.first?.isIconLocked == false)
+    #expect(manager.tabs.first?.iconLock == .auto)
     manager.updateIcon(tabId, icon: "play.fill")
     #expect(manager.tabs.first?.icon == "play.fill")
   }
@@ -95,11 +95,10 @@ struct TerminalTabManagerTests {
     let tabId = manager.createTab(title: "one", icon: "terminal")
     manager.setScriptIcon(tabId, icon: "play.fill")
     #expect(manager.tabs.first?.icon == "play.fill")
-    #expect(manager.tabs.first?.isScriptIconActive == true)
-    #expect(manager.tabs.first?.isIconLocked == false)
+    #expect(manager.tabs.first?.iconLock == .script)
   }
 
-  @Test func updateIconRespectsScriptIconActive() {
+  @Test func updateIconYieldsToScriptLock() {
     let manager = TerminalTabManager()
     let tabId = manager.createTab(title: "one", icon: "terminal")
     manager.setScriptIcon(tabId, icon: "play.fill")
@@ -107,14 +106,13 @@ struct TerminalTabManagerTests {
     #expect(manager.tabs.first?.icon == "play.fill")
   }
 
-  @Test func userOverrideClearsScriptIconActive() {
+  @Test func userOverrideSupersedesScriptLock() {
     let manager = TerminalTabManager()
     let tabId = manager.createTab(title: "one", icon: "terminal")
     manager.setScriptIcon(tabId, icon: "play.fill")
     manager.overrideIcon(tabId, icon: "sparkles")
     #expect(manager.tabs.first?.icon == "sparkles")
-    #expect(manager.tabs.first?.isIconLocked == true)
-    #expect(manager.tabs.first?.isScriptIconActive == false)
+    #expect(manager.tabs.first?.iconLock == .user)
   }
 
   @Test func setScriptIconYieldsToUserLock() {
@@ -123,15 +121,15 @@ struct TerminalTabManagerTests {
     manager.overrideIcon(tabId, icon: "sparkles")
     manager.setScriptIcon(tabId, icon: "play.fill")
     #expect(manager.tabs.first?.icon == "sparkles")
-    #expect(manager.tabs.first?.isScriptIconActive == false)
+    #expect(manager.tabs.first?.iconLock == .user)
   }
 
-  @Test func clearIconOverrideAlsoClearsScriptIconActive() {
+  @Test func clearIconOverrideReleasesScriptLock() {
     let manager = TerminalTabManager()
     let tabId = manager.createTab(title: "one", icon: "terminal")
     manager.setScriptIcon(tabId, icon: "play.fill")
     manager.clearIconOverride(tabId)
-    #expect(manager.tabs.first?.isScriptIconActive == false)
+    #expect(manager.tabs.first?.iconLock == .auto)
     manager.updateIcon(tabId, icon: "@asset:Npm")
     #expect(manager.tabs.first?.icon == "@asset:Npm")
   }

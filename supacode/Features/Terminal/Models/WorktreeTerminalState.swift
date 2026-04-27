@@ -752,9 +752,9 @@ final class WorktreeTerminalState {
       }
       // Skip title/icon for blocking-script tabs as they are transient.
       // Persist the icon only when the user has explicitly overridden it; otherwise
-      // restore should pick up the current default ("terminal").
+      // restore should pick up the current default ("terminal") or auto-detection.
       let isBlockingScriptTab = tab.id == runScriptTabId
-      let snapshotIcon: String? = (isBlockingScriptTab || !tab.isIconLocked) ? nil : tab.icon
+      let snapshotIcon: String? = (isBlockingScriptTab || tab.iconLock != .user) ? nil : tab.icon
       snapshotTabs.append(
         TerminalLayoutSnapshotPayload.SnapshotTab(
           tabID: tab.id.rawValue.uuidString,
@@ -848,7 +848,7 @@ final class WorktreeTerminalState {
           title: entry.snapshotTab.title ?? "\(worktree.name) \(index + 1)",
           icon: entry.snapshotTab.icon ?? "terminal",
           isTitleLocked: entry.snapshotTab.title != nil,
-          isIconLocked: entry.snapshotTab.icon != nil
+          iconLock: entry.snapshotTab.icon != nil ? .user : .auto
         )
       )
     }
@@ -1528,7 +1528,7 @@ final class WorktreeTerminalState {
     // user is currently looking at.
     guard focusedSurfaceIdByTab[tabId] == surfaceId else { return }
     guard let tab = tabManager.tabs.first(where: { $0.id == tabId }) else { return }
-    guard !tab.isIconLocked, !tab.isScriptIconActive else { return }
+    guard tab.iconLock == .auto else { return }
     let serialised = icon.storageString
     guard tab.icon != serialised else { return }
     tabManager.updateIcon(tabId, icon: serialised)
