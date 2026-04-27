@@ -182,6 +182,7 @@ struct ShelfSpineView: View {
         }
       }
       .padding(.horizontal, ShelfMetrics.slotHorizontalPadding)
+      .padding(.top, ShelfMetrics.sectionGap)
       .padding(.bottom, ShelfMetrics.slotSpacing)
     }
   }
@@ -258,7 +259,7 @@ struct ShelfSpineView: View {
       }
     }
     .padding(.horizontal, ShelfMetrics.slotHorizontalPadding)
-    .padding(.top, ShelfMetrics.slotSpacing)
+    .padding(.top, ShelfMetrics.sectionGap)
   }
 
 }
@@ -510,6 +511,11 @@ enum ShelfMetrics {
   static let slotCornerRadius: CGFloat = 5
   static let slotSpacing: CGFloat = 3
   static let slotHorizontalPadding: CGFloat = 3
+  /// Vertical gap between major spine sections (header → tab list,
+  /// tab list → bottom controls). Larger than `slotSpacing` so the
+  /// rotated title doesn't crowd into the first tab and the last tab
+  /// doesn't crowd into the divider above the `+` button.
+  static let sectionGap: CGFloat = 10
   static let aggregatedDotSize: CGFloat = 6
   /// Max pre-rotation width (i.e. visual height after 90° rotation) of the
   /// spine header title. Texts longer than this get middle-truncated.
