@@ -43,7 +43,7 @@ final class TerminalTabManager {
 
   func updateIcon(_ id: TerminalTabID, icon: String?) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-    guard !tabs[index].isIconLocked else { return }
+    guard !tabs[index].isIconLocked, !tabs[index].isScriptIconActive else { return }
     tabs[index].icon = icon
   }
 
@@ -51,11 +51,27 @@ final class TerminalTabManager {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
     tabs[index].icon = icon
     tabs[index].isIconLocked = true
+    // User-set lock supersedes any active script-command override so the
+    // precedence chain (user > script > auto) can't ambiguously stack.
+    tabs[index].isScriptIconActive = false
   }
 
   func clearIconOverride(_ id: TerminalTabID) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
     tabs[index].isIconLocked = false
+    // Reset to default also drops the script-level pin so the next
+    // auto-detection can take over.
+    tabs[index].isScriptIconActive = false
+  }
+
+  /// Apply a Run Script / Custom Command icon and mark it as the active
+  /// "script" override. No-op when the user has already locked an icon
+  /// — manual lock always wins.
+  func setScriptIcon(_ id: TerminalTabID, icon: String) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    guard !tabs[index].isIconLocked else { return }
+    tabs[index].icon = icon
+    tabs[index].isScriptIconActive = true
   }
 
   func updateDirty(_ id: TerminalTabID, isDirty: Bool) {
