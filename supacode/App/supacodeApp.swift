@@ -129,6 +129,7 @@ struct SupacodeApp: App {
           options.environment = environment
           if let releaseName { options.releaseName = releaseName }
           options.tracesSampleRate = 0.05
+          options.enableAppHangTracking = false
         }
       }
       if initialSettings.analyticsEnabled,
