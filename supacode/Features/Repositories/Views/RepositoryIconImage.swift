@@ -74,6 +74,7 @@ struct RepositoryIconImage: View {
         Image(nsImage: nsImage)
           .resizable()
           .aspectRatio(contentMode: .fit)
+          .clipShape(.rect(cornerRadius: size * 0.18))
           .accessibilityHidden(true)
       }
     } else {
