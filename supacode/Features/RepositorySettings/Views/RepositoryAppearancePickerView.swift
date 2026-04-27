@@ -22,7 +22,18 @@ struct RepositoryAppearancePickerView: View {
   @State private var isHoveringIconTile = false
 
   private let previewSize: CGFloat = 40
-  private let dotSize: CGFloat = 22
+  /// Diameter of the colored swatch itself.
+  private let swatchDotSize: CGFloat = 20
+  /// Diameter of the "selected" ring drawn around the swatch. The
+  /// (ring − dot) / 2 gap (3pt) lives between the dot's edge and the
+  /// ring's inside, matching macOS-native color pickers.
+  private let swatchRingSize: CGFloat = 26
+  /// Outer slot every swatch occupies in the HStack so the row layout
+  /// stays stable whether or not a swatch is selected (without a fixed
+  /// slot the selection ring would expand the cell and shove its
+  /// neighbors aside on hover/select).
+  private let swatchSlotSize: CGFloat = 28
+  private let swatchRingLineWidth: CGFloat = 1.5
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -229,17 +240,14 @@ struct RepositoryAppearancePickerView: View {
     Button {
       store.send(.setAppearanceColor(choice))
     } label: {
-      Circle()
-        .fill(choice.color)
-        .frame(width: dotSize, height: dotSize)
-        .overlay {
-          Circle()
-            .stroke(Color.primary, lineWidth: isSelected ? 2 : 0)
-            .padding(2)
-        }
-        .help(choice.displayName)
-        .accessibilityLabel(choice.displayName)
-        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+      swatchSlot(isSelected: isSelected) {
+        Circle()
+          .fill(choice.color)
+          .frame(width: swatchDotSize, height: swatchDotSize)
+      }
+      .help(choice.displayName)
+      .accessibilityLabel(choice.displayName)
+      .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
     .buttonStyle(.plain)
   }
@@ -250,24 +258,46 @@ struct RepositoryAppearancePickerView: View {
     Button {
       store.send(.setAppearanceColor(nil))
     } label: {
-      Circle()
-        .stroke(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-        .frame(width: dotSize, height: dotSize)
-        .overlay {
-          Image(systemName: "slash.circle")
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
-        }
-        .overlay {
-          Circle()
-            .stroke(Color.primary, lineWidth: isSelected ? 2 : 0)
-            .padding(2)
-        }
-        .help("No color")
-        .accessibilityLabel("No color")
-        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+      swatchSlot(isSelected: isSelected) {
+        Circle()
+          .stroke(
+            Color.secondary.opacity(0.5),
+            style: StrokeStyle(lineWidth: 1, dash: [2, 2])
+          )
+          .frame(width: swatchDotSize, height: swatchDotSize)
+          .overlay {
+            Image(systemName: "slash.circle")
+              .font(.system(size: 11))
+              .foregroundStyle(.secondary)
+              .accessibilityHidden(true)
+          }
+      }
+      .help("No color")
+      .accessibilityLabel("No color")
+      .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
     .buttonStyle(.plain)
+  }
+
+  /// Centers the swatch content in a fixed-size slot and overlays a
+  /// selection ring on top, sized larger than the swatch so a 3pt
+  /// transparent gap separates the swatch's edge from the ring's
+  /// inside — mirroring macOS-native color picker selection chrome.
+  /// The slot bounds stay constant whether selected or not so swatch
+  /// row layout doesn't reflow on selection change.
+  @ViewBuilder
+  private func swatchSlot<Content: View>(
+    isSelected: Bool, @ViewBuilder content: () -> Content
+  ) -> some View {
+    ZStack {
+      content()
+      if isSelected {
+        Circle()
+          .stroke(Color.primary, lineWidth: swatchRingLineWidth)
+          .frame(width: swatchRingSize, height: swatchRingSize)
+      }
+    }
+    .frame(width: swatchSlotSize, height: swatchSlotSize)
   }
 
   // MARK: - Error banner
