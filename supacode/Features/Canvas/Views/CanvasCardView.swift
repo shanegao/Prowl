@@ -197,23 +197,28 @@ struct CanvasCardView: View {
 
   @ViewBuilder
   private var titleBarBackground: some View {
-    // Layering: existing notification orange + selected accent stay
-    // BELOW the `.bar` material so their behavior is unchanged from
-    // before this feature shipped. The repo color sits ABOVE the bar
-    // as a thin always-on identity strip — putting it below would
-    // dilute it to invisibility against the 0.9-opaque material, and
-    // moving the bar to the bottom would amplify the existing tints.
+    // Layering, back-to-front:
+    //
+    //  1. selected-but-unfocused accent (subtle, sits under the bar
+    //     material — same behavior as before this feature shipped)
+    //  2. `.bar` material substrate
+    //  3. **either** the notification orange **or** the repo color
+    //     identity strip — never both. Without this mutual exclusion
+    //     the orange used to muddle into the repo color (e.g. a blue
+    //     repo's notification looked brownish-grey instead of the
+    //     intended attention-grabbing orange). The notification wins
+    //     on top with a much higher alpha (0.55) than the previous
+    //     under-bar 0.3 so the unread signal actually pops.
     ZStack {
-      if hasUnseenNotification {
-        Color.orange.opacity(0.3)
-      }
       if isSelected && !isFocused {
         Color.accentColor.opacity(0.12)
       }
       Rectangle()
         .fill(.bar)
         .opacity(0.9)
-      if let repositoryColor {
+      if hasUnseenNotification {
+        Color.orange.opacity(0.55)
+      } else if let repositoryColor {
         repositoryColor.opacity(isFocused ? 0.18 : 0.10)
       }
     }
