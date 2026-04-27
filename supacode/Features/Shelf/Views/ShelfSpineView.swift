@@ -32,6 +32,10 @@ struct ShelfSpineView: View {
   /// enum into this view.
   let closeMenuTitle: String
   let onCloseBook: (() -> Void)?
+  /// "Repo Settings" — opens the per-repo Settings tab. Always
+  /// available regardless of book kind since every book belongs to a
+  /// repository.
+  let onOpenRepositorySettings: () -> Void
 
   @State private var isHovering = false
   @Shared(.repositoryAppearances) private var repositoryAppearances
@@ -140,7 +144,13 @@ struct ShelfSpineView: View {
 
   @ViewBuilder
   private var bookContextMenu: some View {
+    Button {
+      onOpenRepositorySettings()
+    } label: {
+      Text("Repo Settings")
+    }
     if let onCloseBook {
+      Divider()
       Button {
         onCloseBook()
       } label: {

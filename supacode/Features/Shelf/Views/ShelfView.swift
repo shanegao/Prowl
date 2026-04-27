@@ -89,7 +89,10 @@ struct ShelfView: View {
           onSplitVertical: open ? { performSplit(direction: "new_split:right") } : nil,
           onSplitHorizontal: open ? { performSplit(direction: "new_split:down") } : nil,
           closeMenuTitle: closeMenuTitle(for: book),
-          onCloseBook: { closeBook(book) }
+          onCloseBook: { closeBook(book) },
+          onOpenRepositorySettings: {
+            store.send(.repositoryManagement(.openRepositorySettings(book.repositoryID)))
+          }
         )
         .matchedGeometryEffect(id: book.id, in: spineNamespace)
       }
