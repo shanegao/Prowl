@@ -42,7 +42,6 @@ struct ShelfView: View {
         spine(book: book, index: index, openIndex: openIndex)
         if book.id == openBookID {
           openBookArea(for: book, state: state)
-            .transition(.opacity)
         }
       }
       if openBookID == nil {
