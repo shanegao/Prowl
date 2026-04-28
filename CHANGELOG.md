@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026.4.28](https://github.com/onevcat/Prowl/releases/tag/v2026.4.28)
+
+This release adds per-repository visual identity across the entire app.
+
+## New
+
+- Each repository can now have a custom icon and color. Pick an SF Symbol or upload any image, and choose from 10 system colors in Repo Settings. The identity appears in the sidebar row, shelf spine header and background, and canvas card title bar.
+- Custom Command tabs now display the command's configured icon for the lifetime of the tab. Run Script tabs keep the play icon throughout the run instead of briefly flashing before switching to the detected command icon.
+- Repo Settings is now accessible from the shelf spine context menu.
+
+## Fixed
+
+- The "Choose Image" file picker in Repo Settings now opens inside the repository's working directory instead of the last-used Finder location.
+- Hovering the spine's New Tab, Split Vertically, and Split Horizontally buttons now shows the correct per-button tooltip with the associated shortcut key. Previously, the book-level tooltip masked all three buttons.
+- User-uploaded repository icon images now display with rounded corners.
+
 ## [2026.4.27](https://github.com/onevcat/Prowl/releases/tag/v2026.4.27)
 
 **Fixed**
