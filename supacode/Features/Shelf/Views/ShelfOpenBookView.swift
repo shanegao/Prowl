@@ -68,6 +68,13 @@ struct ShelfOpenBookView: View {
         state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
       }
     }
+    .onDisappear {
+      // Long-term diagnostic — pairs with `OpenBook.onAppear` so that
+      // any future regression in the per-book-switch teardown/remount
+      // cadence shows up as a count delta on the Points of Interest
+      // timeline.
+      shelfLogger.event("OpenBook.onDisappear")
+    }
     .onChange(of: state.tabManager.selectedTabId) { _, _ in
       shelfLogger.interval("OpenBook.onChange.selectedTabId") {
         if shouldAutoFocusTerminal {

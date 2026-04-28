@@ -8,9 +8,16 @@ nonisolated struct SupaLogger: Sendable {
   /// Signposter for emitting `os_signpost` intervals/events visible in
   /// Instruments. Signposts are essentially zero-cost when no Instruments
   /// session is attached (a single TLS read), so they are always live —
-  /// no DEBUG gating. Intervals show up under the logger's category in
-  /// the os_signpost track of any trace template that includes it
-  /// (Animation Hitches and SwiftUI both do).
+  /// no DEBUG gating.
+  ///
+  /// The signposter uses the well-known `"PointsOfInterest"` category
+  /// regardless of the logger's own `category` so that intervals and
+  /// events automatically surface in Apple's **Points of Interest**
+  /// instrument (the discoverable, "just drag it in" track most people
+  /// will reach for). The signpost `name:` argument carries the actual
+  /// origin (e.g. `"OpenBook.onAppear"`, `"focusSelectedTab"`) so source
+  /// granularity is preserved — only the routing category differs from
+  /// the regular log channel.
   let signposter: OSSignposter
 
   init(_ category: String) {
@@ -19,7 +26,7 @@ nonisolated struct SupaLogger: Sendable {
     #if !DEBUG
       self.logger = Logger(subsystem: subsystem, category: category)
     #endif
-    self.signposter = OSSignposter(subsystem: subsystem, category: category)
+    self.signposter = OSSignposter(subsystem: subsystem, category: "PointsOfInterest")
   }
 
   func debug(_ message: String) {

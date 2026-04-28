@@ -29,10 +29,12 @@ struct ShelfView: View {
   @Environment(\.surfaceBackgroundOpacity) private var surfaceBackgroundOpacity
 
   var body: some View {
-    // Note: `body` is a `@ViewBuilder` getter so we can't add a
-    // `defer`-based signpost interval directly here. Body-level cost is
-    // already visible via the SwiftUI instrument's "View Body" track —
-    // signposts in this file focus on user-input moments instead.
+    // Body-invocation counter. The @ViewBuilder getter rules out a
+    // `defer`-based interval, but a fire-and-forget event marker is a
+    // simple expression and has no impact on the rendered tree. Each
+    // marker corresponds to one full body re-evaluation — useful for
+    // sanity-checking how often the root re-renders during animation.
+    let _ = shelfLogger.event("ShelfView.body")
     let state = store.state
     let books = state.orderedShelfBooks()
     let openBookID = state.openShelfBookID
