@@ -15,6 +15,7 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
   var copyIgnoredOnWorktreeCreate: Bool?
   var copyUntrackedOnWorktreeCreate: Bool?
   var pullRequestMergeStrategy: PullRequestMergeStrategy?
+  var customTitle: String?
   private var schemaVersion: Int
 
   private enum CodingKeys: String, CodingKey {
@@ -28,6 +29,7 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     case copyIgnoredOnWorktreeCreate
     case copyUntrackedOnWorktreeCreate
     case pullRequestMergeStrategy
+    case customTitle
   }
 
   static let `default` = RepositorySettings(
@@ -39,7 +41,8 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     worktreeBaseDirectoryPath: nil,
     copyIgnoredOnWorktreeCreate: nil,
     copyUntrackedOnWorktreeCreate: nil,
-    pullRequestMergeStrategy: nil
+    pullRequestMergeStrategy: nil,
+    customTitle: nil
   )
 
   init(
@@ -51,7 +54,8 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     worktreeBaseDirectoryPath: String? = nil,
     copyIgnoredOnWorktreeCreate: Bool? = nil,
     copyUntrackedOnWorktreeCreate: Bool? = nil,
-    pullRequestMergeStrategy: PullRequestMergeStrategy? = nil
+    pullRequestMergeStrategy: PullRequestMergeStrategy? = nil,
+    customTitle: String? = nil
   ) {
     self.setupScript = setupScript
     self.archiveScript = archiveScript
@@ -62,6 +66,7 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     self.copyIgnoredOnWorktreeCreate = copyIgnoredOnWorktreeCreate
     self.copyUntrackedOnWorktreeCreate = copyUntrackedOnWorktreeCreate
     self.pullRequestMergeStrategy = pullRequestMergeStrategy
+    self.customTitle = customTitle
     schemaVersion = Self.currentSchemaVersion
   }
 
@@ -86,6 +91,8 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(String.self, forKey: .worktreeBaseRef)
     worktreeBaseDirectoryPath =
       try container.decodeIfPresent(String.self, forKey: .worktreeBaseDirectoryPath)
+    customTitle =
+      try container.decodeIfPresent(String.self, forKey: .customTitle)
     if decodedSchemaVersion >= Self.currentSchemaVersion {
       copyIgnoredOnWorktreeCreate =
         try container.decodeIfPresent(

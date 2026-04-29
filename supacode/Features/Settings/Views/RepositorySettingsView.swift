@@ -63,9 +63,25 @@ struct RepositorySettingsView: View {
       get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
       set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },
     )
+    let customTitle = Binding(
+      get: { settings.customTitle.wrappedValue ?? "" },
+      set: { settings.customTitle.wrappedValue = $0 },
+    )
     let exampleWorktreePath = store.exampleWorktreePath
+    let folderName = Repository.name(for: store.rootURL)
 
     Form {
+      Section {
+        TextField(folderName, text: customTitle)
+          .textFieldStyle(.roundedBorder)
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Display Name")
+          Text("Custom name shown in the sidebar. Leave empty to use the folder name.")
+            .foregroundStyle(.secondary)
+        }
+      }
+
       Section {
         RepositoryAppearancePickerView(store: store)
       } header: {
