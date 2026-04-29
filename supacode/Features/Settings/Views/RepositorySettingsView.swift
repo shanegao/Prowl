@@ -63,19 +63,22 @@ struct RepositorySettingsView: View {
       get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
       set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },
     )
+    let customTitle = Binding(
+      get: { settings.customTitle.wrappedValue ?? "" },
+      set: { settings.customTitle.wrappedValue = $0 },
+    )
     let exampleWorktreePath = store.exampleWorktreePath
+    let folderName = Repository.name(for: store.rootURL)
 
     Form {
-      Section {
-        RepositoryAppearancePickerView(store: store)
-      } header: {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Appearance")
-          Text(
-            "Pick an icon and color to make this repository easy to spot in the sidebar, shelf, and canvas."
-          )
-          .foregroundStyle(.secondary)
+      Section("Display") {
+        VStack(alignment: .leading, spacing: 12) {
+          TextField("Name", text: customTitle, prompt: Text(folderName))
+            .textFieldStyle(.roundedBorder)
+          Divider()
+          RepositoryAppearancePickerView(store: store)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       if store.showsWorktreeSettings {

@@ -275,6 +275,11 @@ struct RepositorySettingsFeature {
           normalizedSettings.worktreeBaseDirectoryPath,
           repositoryRootURL: rootURL
         )
+        let trimmedCustomTitle =
+          normalizedSettings.customTitle?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        normalizedSettings.customTitle =
+          (trimmedCustomTitle?.isEmpty ?? true) ? nil : trimmedCustomTitle
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         $repositorySettings.withLock { $0 = normalizedSettings }

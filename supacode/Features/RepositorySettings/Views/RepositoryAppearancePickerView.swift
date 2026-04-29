@@ -35,7 +35,7 @@ struct RepositoryAppearancePickerView: View {
   private let swatchRingLineWidth: CGFloat = 1.5
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 10) {
       iconRow
       colorRow
       if let message = store.appearanceImportError {
@@ -201,22 +201,26 @@ struct RepositoryAppearancePickerView: View {
 
   @ViewBuilder
   private var colorRow: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("Color")
-        .font(.headline)
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .center, spacing: 12) {
+        Text("Color")
+          .font(.headline)
+          .frame(width: previewSize, alignment: .center)
+        HStack(spacing: 8) {
+          ForEach(RepositoryColorChoice.allCases, id: \.self) { choice in
+            colorSwatch(for: choice)
+          }
+          noColorSwatch
+          Spacer(minLength: 0)
+        }
+      }
       Text(
         "Tints the row in the sidebar, the shelf spine background, and the canvas card title bar."
       )
       .font(.caption)
       .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
-      HStack(spacing: 8) {
-        ForEach(RepositoryColorChoice.allCases, id: \.self) { choice in
-          colorSwatch(for: choice)
-        }
-        noColorSwatch
-        Spacer(minLength: 0)
-      }
+      .padding(.leading, previewSize + 12)
     }
   }
 
