@@ -4,11 +4,11 @@
 
 This release focuses on Shelf-mode responsiveness — switching books, especially via keyboard shortcuts, is noticeably snappier after a sweep of unnecessary SwiftUI invalidations.
 
-## New
+### New
 
 - Repositories can now have a custom display name. Open Repo Settings and set a **Display Name** to override the folder-derived title in the sidebar, toolbar, and canvas. Useful when multiple checkouts share a generic folder name like `src`. Clearing the field reverts to the original folder name.
 
-## Fixed
+### Fixed
 
 - Switching between books in Shelf mode is noticeably smoother, particularly when using keyboard shortcuts. A cascade of unnecessary SwiftUI invalidations was traced and removed.
 - A trailing space typed at the end of the Display Name field is no longer silently dropped.
@@ -17,13 +17,13 @@ This release focuses on Shelf-mode responsiveness — switching books, especiall
 
 This release adds per-repository visual identity across the entire app.
 
-## New
+### New
 
 - Each repository can now have a custom icon and color. Pick an SF Symbol or upload any image, and choose from 10 system colors in Repo Settings. The identity appears in the sidebar row, shelf spine header and background, and canvas card title bar.
 - Custom Command tabs now display the command's configured icon for the lifetime of the tab. Run Script tabs keep the play icon throughout the run instead of briefly flashing before switching to the detected command icon.
 - Repo Settings is now accessible from the shelf spine context menu.
 
-## Fixed
+### Fixed
 
 - The "Choose Image" file picker in Repo Settings now opens inside the repository's working directory instead of the last-used Finder location.
 - Hovering the spine's New Tab, Split Vertically, and Split Horizontally buttons now shows the correct per-button tooltip with the associated shortcut key. Previously, the book-level tooltip masked all three buttons.
@@ -31,7 +31,7 @@ This release adds per-repository visual identity across the entire app.
 
 ## [2026.4.27](https://github.com/onevcat/Prowl/releases/tag/v2026.4.27)
 
-## Fixed
+### Fixed
 
 - Fixed a bug where terminal windows could open in the wrong Light or Dark appearance at startup.
 
@@ -39,12 +39,12 @@ This release adds per-repository visual identity across the entire app.
 
 This release brings mouse-driven Canvas navigation and improves reliability for long-running sessions.
 
-## New
+### New
 
 - **Canvas zoom with Cmd+scroll wheel**: hold Cmd and scroll to zoom in or out, anchored on the cursor position. Works with both mouse wheels and trackpads.
 - **Canvas pan with middle-click drag**: press and drag the middle mouse button to pan the Canvas. Terminals never see the click, and middle-click works normally outside Canvas mode.
 
-## Fixed
+### Fixed
 
 - The `prowl` CLI no longer loses its connection to the app after a few days. macOS periodically cleans `/tmp`, which was deleting the socket file and causing `APP_NOT_RUNNING` errors even with the app running. The socket is now stored in `~/Library/Application Support/com.onevcat.prowl/`. A one-time app relaunch is required after upgrading to bind the new path.
 - Prowl now applies a runtime Ghostty theme fallback when you have a single theme configured and it mismatches the current macOS appearance (light/dark). No changes are written to your Ghostty config file.
@@ -55,12 +55,12 @@ This release brings mouse-driven Canvas navigation and improves reliability for 
 
 Tab icons now update automatically based on the running command, making it easy to tell at a glance what each terminal tab is doing.
 
-## New
+### New
 
 - **Auto-detecting tab icons**: Prowl now detects the running command from the terminal title and displays a matching icon in the tab bar and Shelf spine. Brand icons are available for coding agents (Claude, Codex, Gemini, Copilot, Amp, and more), editors, package managers, runtimes, VCS tools, containers, and databases — over 55 command mappings in total. The icon stays visible after a short-lived command finishes as a "what is this tab for" hint, and is never overridden if you have manually locked an icon via the Icon Picker.
 - **Context-aware Shelf close action**: The Shelf spine context menu now shows "Close Worktree" or "Close Folder" depending on the book type, replacing the old "Remove Book" entry. Closing removes the book from the Shelf without touching the underlying directory or worktree. This also works on the main worktree, which previously showed the option but did nothing.
 
-## Fixed
+### Fixed
 
 - Staggered background refresh schedules across worktrees so periodic git and pull-request checks no longer fire simultaneously, reducing CPU spikes when many repos are open.
 - Shelf empty-state wording now consistently refers to worktrees, matching the rest of the UI.
@@ -69,18 +69,18 @@ Tab icons now update automatically based on the running command, making it easy 
 
 This release introduces Shelf, a new way to view and navigate your worktrees, along with a significant performance improvement that eliminates a source of main-thread hangs.
 
-## New
+### New
 
 - **Shelf view**: a new presentation mode that stacks your worktrees as books with vertical spines. Press `Cmd+Shift+Enter` or click the Shelf button in the sidebar toolbar to toggle it. Each spine shows the worktree name, branch, and tab slots; click any spine to open that book.
 - **Navigation shortcuts in Shelf**: navigate between books with `Cmd+Ctrl+←` / `Cmd+Ctrl+→`, navigate between tabs with `Cmd+Ctrl+↑` / `Cmd+Ctrl+↓`, or jump directly to a specific book with `Ctrl+Option+1–9`. All bindings are rebindable in Settings → Shortcuts.
 - **Command-key tab hints**: hold `Cmd` while in Shelf to swap each tab slot's icon for its `1–9` digit, making keyboard switching more discoverable.
 - **Default View setting**: choose whether Prowl launches into the standard view or Shelf in Settings → General.
 
-## Improved
+### Improved
 
 - Eliminated a main-thread hang (App Hang) triggered by rapid file-change or pull-request-refresh bursts. A repeated `standardizedFileURL` comparison in the sidebar render loop was accumulating enough work to stall the UI for 3+ seconds; the result is now computed once per worktree at construction time, so the sidebar stays responsive under heavy activity.
 
-## Fixed
+### Fixed
 
 - Shelf now correctly restores focus to the open book's terminal after SwiftUI reparenting, and properly tracks which worktrees the user has actually opened rather than showing all known worktrees.
 - Toggling into Shelf from Canvas now honors the card that was focused in Canvas as the open book, rather than falling back to a default.
@@ -89,7 +89,7 @@ This release introduces Shelf, a new way to view and navigate your worktrees, al
 
 This release focuses on canvas usability improvements and broader code host support.
 
-## New
+### New
 
 - Canvas cards now show close and expand buttons in the title bar when you hover over them, letting you act on any card without focusing it first.
 - When a focused canvas card is closed (via button, Cmd+W, or any other method), focus automatically moves to the nearest surviving card so the highlighted state stays consistent.
@@ -97,7 +97,7 @@ This release focuses on canvas usability improvements and broader code host supp
 - Code host actions in the toolbar and command palette are now labeled with the detected host name (e.g., "Open on GitHub" vs. "Open on GitLab").
 - "Change Tab Icon..." and "Open Repository on Code Host" are now hidden from the command palette's empty-query list to reduce noise. Type to search for either action.
 
-## Fixed
+### Fixed
 
 - Restored two-finger scroll for TUI programs (pagers, editors, etc.) inside canvas mode. A previous optimization incorrectly forwarded scroll events to the canvas when Ghostty reported no scrollback buffer, breaking apps like `nvim`, `less`, and `htop`.
 - Fixed a crash (EXC_BREAKPOINT abort) that could occur during ANR detection due to Sentry invoking a Swift concurrency callback off the main thread.
@@ -106,14 +106,14 @@ This release focuses on canvas usability improvements and broader code host supp
 
 This release focuses on tab customization and a less-interrupting update experience.
 
-## New
+### New
 
 - **Tab icons**: Right-click any terminal tab and choose "Change Tab Icon..." to pick from a curated SF Symbol preset grid or enter any SF Symbol name directly. You can also invoke this from the Command Palette (Cmd+P, search "icon"). Custom icons survive app restarts when *Restore Terminal Layout on Launch* is enabled.
 - **Rename from context menu**: "Change Tab Title..." is now available directly in the tab right-click menu, in addition to the existing keyboard shortcut flow.
 - **Quiet update notifications**: Available updates no longer interrupt your session with a dialog. A badge appears in the toolbar instead; click it (or use "Check for Updates...") when you are ready to install.
 - **Anonymous quality telemetry**: To help improve Prowl, this release adds lightweight anonymous crash reporting and memory usage telemetry. No personal data is collected. If you prefer not to participate, you can opt out in Settings.
 
-## Fixed
+### Fixed
 
 - The "Download and install automatically" setting has been removed; it conflicted with the new silent update detection flow and was not functional in this build.
 
@@ -121,32 +121,32 @@ This release focuses on tab customization and a less-interrupting update experie
 
 This release focuses on Custom Command power-ups and two Canvas reliability fixes.
 
-## New
+### New
 
 - **Custom Commands can now open a New Split**, running your command in a new pane alongside the current terminal. Choose split direction (left, right, up, down) per command in Settings.
 - **Close on success** toggle for New Tab and New Split targets: when enabled, the tab or split is automatically dismissed after the command exits with code 0, leaving it open on failure so you can inspect the output.
 - The toolbar status badge now animates in and out smoothly, and a brief toast appears when a Custom Command completes successfully.
 
-## Fixed
+### Fixed
 
 - Creating split panes with Cmd+D or Cmd+Shift+D while in Canvas mode no longer freezes rendering. All panes now display and accept input correctly.
 - Two-finger pan on the Canvas is no longer interrupted when the cursor drifts over a focused terminal card mid-gesture. Scrolling on a card with no scrollback content now pans the canvas instead of being silently consumed.
 
 ## [2026.4.16](https://github.com/onevcat/Prowl/releases/tag/v2026.4.16)
 
-## Fixed
+### Fixed
 
 - Fixed a race condition when entering Canvas view that could leave the terminal surface blank.
 
 ## [2026.4.15](https://github.com/onevcat/Prowl/releases/tag/v2026.4.15)
 
-## New
+### New
 
 - **Fetch before worktree creation**: Prowl can now run `git fetch` against the relevant remote before creating a new worktree. The option is on by default and can be toggled in Settings > Worktree. Fetch errors are logged but do not block worktree creation.
 - **Merged worktree action**: The "auto-archive on merge" toggle has been replaced with a three-option picker — Do Nothing, Archive, or Delete — controlling what happens to a worktree when its pull request is merged. Find it in Settings > Worktree. Existing configurations migrate automatically.
 - **Global defaults for copy flags and merge strategy**: The "copy ignored files", "copy untracked files", and "pull request merge strategy" settings can now be configured once as global defaults in Settings, with optional per-repository overrides. Repository-level pickers show the current global value when no override is set.
 
-## Fixed
+### Fixed
 
 - Terminals could appear blank after exiting Canvas view due to the surface losing its host attachment. Prowl now detects and recovers from this state automatically.
 
@@ -154,13 +154,13 @@ This release focuses on Custom Command power-ups and two Canvas reliability fixe
 
 This release focuses on worktree management improvements and quality-of-life fixes.
 
-## New
+### New
 
 - **Auto-delete archived worktrees**: A new setting in Worktree Settings lets you configure a period (1, 3, 7, 14, or 30 days) after which archived worktrees are deleted automatically.
 - **Reveal in Sidebar**: Press Shift+Cmd+L to scroll the sidebar to the currently selected worktree, expanding its repository section if collapsed.
 - **Archived worktrees discoverability**: Archive confirmation dialogs now tell you where to find archived worktrees (Menu Bar > Worktrees, or Control+Cmd+A). A "View Archived Worktrees" entry is also available in the command palette.
 
-## Fixed
+### Fixed
 
 - Restored terminal surfaces no longer spin the CPU and GPU when they are not displayed, keeping resource usage low for non-visible tabs after session restore.
 
@@ -168,19 +168,19 @@ This release focuses on worktree management improvements and quality-of-life fix
 
 Tab layout and Worktrees menu discoverability are the main themes of this release.
 
-## New
+### New
 
 - All worktrees and plain folders now appear in the Worktrees menu, regardless of count. Previously only the first 9 were shown. Items beyond the 9th no longer have keyboard shortcuts but remain reachable via the menu or **Help > Search**.
 - Manually renamed tab titles and icons are now saved in the terminal layout snapshot and restored when the layout is reloaded.
 - Added Homepage and Release Notes links to the Help menu and sidebar footer.
 
-## Fixed
+### Fixed
 
 - Plain folders were missing from the Worktrees menu entirely; they now appear in the same order as the sidebar.
 
 ## [2026.4.7](https://github.com/onevcat/Prowl/releases/tag/v2026.4.7)
 
-## Fixed
+### Fixed
 
 - When using a transparent background (`background-opacity < 1`) in dark mode on macOS 26, the titlebar and window border now correctly appear dark-tinted instead of showing an unwanted light glass effect.
 - The sidebar footer now displays a proper frosted glass effect when the background is transparent, rather than a plain semi-transparent fill that let the wallpaper bleed through without blur.
@@ -190,7 +190,7 @@ Tab layout and Worktrees menu discoverability are the main themes of this releas
 
 This release brings a redesigned sidebar with a modern, cleaner, and more compact layout, along with reliability fixes across the terminal surface and CLI.
 
-## New
+### New
 
 - **Redesigned Sidebar** — the sidebar has been completely re-laid out for a modern, cleaner, and more compact look, giving you more room to focus on your work.
 - **Reveal in Finder** is now available in the worktree context menu, opening the worktree directory directly in Finder.
@@ -199,7 +199,7 @@ This release brings a redesigned sidebar with a modern, cleaner, and more compac
 - CLI tool install and uninstall results now show a toolbar toast on the main window for all entry points (Command Palette, menu bar), so you always get feedback regardless of whether Settings is open.
 - `prowl key` now correctly emits ANSI control characters for `Ctrl-[`, `Ctrl-\`, `Ctrl-]`, `Ctrl-^`, and `Ctrl-_` combos, and uppercase letters preserve their shift meaning.
 
-## Fixed
+### Fixed
 
 - Hovering a worktree row no longer causes a vertical layout jump when pin and archive buttons appear.
 - Archive, Delete, pin, and archive buttons are now hidden for the main worktree, where those actions do not apply.

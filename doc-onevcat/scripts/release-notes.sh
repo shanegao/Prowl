@@ -130,10 +130,12 @@ concise, user-facing changelog in Markdown.
 5. **Format**:
    - Start with a one-line summary sentence of the release theme if there is a
      clear one; otherwise jump straight to the section.
-   - Group items into sections using literal Markdown level-2 headings:
-     `## New` for features/enhancements, `## Fixed` for bug fixes. Omit a
-     section if it has no items. Always use the `## ` heading syntax — never
-     bold-paragraph forms like `**New**` or `**Fixed**`, and never `### `.
+   - Group items into sections using literal Markdown level-3 headings:
+     `### New` for features/enhancements, `### Fixed` for bug fixes, and
+     optionally `### Improved` for non-feature, non-bug enhancements. Omit a
+     section if it has no items. Always use the `### ` heading syntax — never
+     bold-paragraph forms like `**New**` or `**Fixed**`, and never `## `
+     (which is reserved for the version header).
    - Use a flat bullet list (`-`) within each section.
    - Each bullet should be one or two sentences maximum.
    - End with nothing — no sign-off, no footer.
@@ -180,9 +182,10 @@ generate_fallback_notes() {
 
 # Lint a release-notes file against the CHANGELOG format used by Prowl-Site.
 # Returns 0 on clean, 1 if violations were found (also prints them).
-# Section headings must be `## New` / `## Fixed` / `## Improved` (level 2),
-# never bold paragraphs (`**Fixed**`) or level-3 headings (`### Fixed`), since
-# the site CSS targets `:global(h3)` after a one-level heading shift.
+# Section headings must be `### New` / `### Fixed` / `### Improved` (level 3)
+# so they sit one level below the `## [VERSION]` header that release.sh
+# prepends. Bold paragraphs (`**Fixed**`) and `## Fixed` are both rejected:
+# the site CSS targets `:global(h3)`, so anything else renders unstyled.
 lint_release_notes() {
   local file="$1"
   local violations=()
@@ -190,15 +193,15 @@ lint_release_notes() {
   # Bold-paragraph section headers (whole-line)
   if grep -nE '^\*\*(New|Fixed|Improved)\*\*[[:space:]]*$' "$file" >/dev/null; then
     while IFS= read -r line; do
-      violations+=("$line  (use '## …' instead of bold paragraph)")
+      violations+=("$line  (use '### …' instead of bold paragraph)")
     done < <(grep -nE '^\*\*(New|Fixed|Improved)\*\*[[:space:]]*$' "$file")
   fi
 
-  # Level-3 section headers
-  if grep -nE '^### (New|Fixed|Improved)[[:space:]]*$' "$file" >/dev/null; then
+  # Level-2 section headers (collide with the version header)
+  if grep -nE '^## (New|Fixed|Improved)[[:space:]]*$' "$file" >/dev/null; then
     while IFS= read -r line; do
-      violations+=("$line  (use '## …' instead of '### …')")
-    done < <(grep -nE '^### (New|Fixed|Improved)[[:space:]]*$' "$file")
+      violations+=("$line  (use '### …' instead of '## …')")
+    done < <(grep -nE '^## (New|Fixed|Improved)[[:space:]]*$' "$file")
   fi
 
   if [[ ${#violations[@]} -gt 0 ]]; then
@@ -238,7 +241,7 @@ echo
 log "saved to $NOTES_FILE"
 
 if ! lint_release_notes "$NOTES_FILE"; then
-  log "fix the headings above (use '## New' / '## Fixed' / '## Improved'),"
+  log "fix the headings above (use '### New' / '### Fixed' / '### Improved'),"
   log "then re-run this script or edit $NOTES_FILE before invoking release.sh."
   exit 1
 fi
