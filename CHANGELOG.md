@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.4.30](https://github.com/onevcat/Prowl/releases/tag/v2026.4.30)
+
+### New
+
+- When you have more than 10 repositories in the sidebar, a "Repositories" header appears with an expand/collapse-all toggle. The toggle collapses all open repositories if any are currently expanded, and expands all when every repository is collapsed.
+
+### Fixed
+
+- The terminal now correctly regains focus when selecting a single item in the sidebar.
+- The terminal now correctly regains focus after making a selection in the Shelf panel.
+- Fixed an incorrect empty state displayed in the Shelf under certain conditions.
+
 ## [2026.4.29](https://github.com/onevcat/Prowl/releases/tag/v2026.4.29)
 
 This release focuses on Shelf-mode responsiveness — switching books, especially via keyboard shortcuts, is noticeably snappier after a sweep of unnecessary SwiftUI invalidations.
