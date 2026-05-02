@@ -37,6 +37,14 @@ Three agents running, one just finished — _where_? Canvas gives you a bird's-e
 
 <br clear="all">
 
+### 📚 Shelf — your worktrees, lined up like books on a shelf
+
+<img align="left" width="360" src="https://prowl.onev.cat/images/shelf-view.webp" alt="Shelf view with vertical worktree spines and tabs">
+
+Every worktree becomes a vertical **spine** stacked on the side, with its tabs nested underneath. Flip through your stack from the keyboard — **`⌘⌃←` / `⌘⌃→` cycles books · `⌘⌃↑` / `⌘⌃↓` cycles tabs** — so when you've got six agents in flight, you triage them one keystroke at a time, never losing your place.
+
+<br clear="all">
+
 ### ⚡ Custom Actions — one keystroke, any workflow
 
 <img align="right" width="360" src="https://prowl.onev.cat/images/feature-custom-actions.png" alt="Custom Actions with per-repo buttons and shortcuts">
