@@ -50,6 +50,7 @@ enum SidebarDragProvider {
 }
 
 struct SidebarRepositoryDropDelegate: DropDelegate {
+  let isEnabled: Bool
   let destination: (DropInfo) -> Int
   let repositoryOrderIDs: [Repository.ID]
   @Binding var targetedDestination: Int?
@@ -57,6 +58,10 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
   let onDragEnded: () -> Void
 
   func dropEntered(info: DropInfo) {
+    guard isEnabled else {
+      targetedDestination = nil
+      return
+    }
     targetedDestination = destination(info)
   }
 
@@ -65,11 +70,19 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
   }
 
   func dropUpdated(info: DropInfo) -> DropProposal? {
+    guard isEnabled else {
+      targetedDestination = nil
+      return nil
+    }
     targetedDestination = destination(info)
     return DropProposal(operation: .move)
   }
 
   func performDrop(info: DropInfo) -> Bool {
+    guard isEnabled else {
+      targetedDestination = nil
+      return false
+    }
     let dropDestination = destination(info)
     targetedDestination = nil
     guard let provider = info.itemProviders(for: [.prowlSidebarDragPayload]).first else {
@@ -96,6 +109,7 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
 }
 
 struct SidebarWorktreeDropDelegate: DropDelegate {
+  let isEnabled: Bool
   let destination: (DropInfo) -> Int
   let sectionIDs: [Worktree.ID]
   @Binding var targetedDestination: Int?
@@ -103,6 +117,10 @@ struct SidebarWorktreeDropDelegate: DropDelegate {
   let onDragEnded: () -> Void
 
   func dropEntered(info: DropInfo) {
+    guard isEnabled else {
+      targetedDestination = nil
+      return
+    }
     targetedDestination = destination(info)
   }
 
@@ -111,11 +129,19 @@ struct SidebarWorktreeDropDelegate: DropDelegate {
   }
 
   func dropUpdated(info: DropInfo) -> DropProposal? {
+    guard isEnabled else {
+      targetedDestination = nil
+      return nil
+    }
     targetedDestination = destination(info)
     return DropProposal(operation: .move)
   }
 
   func performDrop(info: DropInfo) -> Bool {
+    guard isEnabled else {
+      targetedDestination = nil
+      return false
+    }
     let dropDestination = destination(info)
     targetedDestination = nil
     guard let provider = info.itemProviders(for: [.prowlSidebarDragPayload]).first else {
@@ -294,22 +320,19 @@ private struct SidebarRepositoryDropTargetModifier: ViewModifier {
 
   @ViewBuilder
   func body(content: Content) -> some View {
-    if isEnabled {
-      content.onDrop(
-        of: [.prowlSidebarDragPayload],
-        delegate: SidebarRepositoryDropDelegate(
-          destination: { info in
-            info.location.y < 24 ? index : index + 1
-          },
-          repositoryOrderIDs: repositoryOrderIDs,
-          targetedDestination: $targetedDestination,
-          onDrop: actions.onDrop,
-          onDragEnded: actions.onDragEnded
-        )
+    content.onDrop(
+      of: [.prowlSidebarDragPayload],
+      delegate: SidebarRepositoryDropDelegate(
+        isEnabled: isEnabled,
+        destination: { info in
+          info.location.y < 24 ? index : index + 1
+        },
+        repositoryOrderIDs: repositoryOrderIDs,
+        targetedDestination: $targetedDestination,
+        onDrop: actions.onDrop,
+        onDragEnded: actions.onDragEnded
       )
-    } else {
-      content
-    }
+    )
   }
 }
 
@@ -322,21 +345,18 @@ private struct SidebarWorktreeDropTargetModifier: ViewModifier {
 
   @ViewBuilder
   func body(content: Content) -> some View {
-    if isEnabled {
-      content.onDrop(
-        of: [.prowlSidebarDragPayload],
-        delegate: SidebarWorktreeDropDelegate(
-          destination: { info in
-            info.location.y < 18 ? index : index + 1
-          },
-          sectionIDs: rowIDs,
-          targetedDestination: $targetedDestination,
-          onDrop: actions.onDrop,
-          onDragEnded: actions.onDragEnded
-        )
+    content.onDrop(
+      of: [.prowlSidebarDragPayload],
+      delegate: SidebarWorktreeDropDelegate(
+        isEnabled: isEnabled,
+        destination: { info in
+          info.location.y < 18 ? index : index + 1
+        },
+        sectionIDs: rowIDs,
+        targetedDestination: $targetedDestination,
+        onDrop: actions.onDrop,
+        onDragEnded: actions.onDragEnded
       )
-    } else {
-      content
-    }
+    )
   }
 }

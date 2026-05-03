@@ -14,6 +14,7 @@ struct WorktreeRowsView: View {
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
   @State private var draggingWorktreeIDs: Set<Worktree.ID> = []
   @State private var hoveredWorktreeID: Worktree.ID?
+  @State private var contextMenuHighlightedWorktreeID: Worktree.ID?
   @State private var targetedPinnedDropDestination: Int?
   @State private var targetedUnpinnedDropDestination: Int?
 
@@ -40,6 +41,9 @@ struct WorktreeRowsView: View {
       shortcutIndexByID: shortcutIndexByID
     )
     .animation(isSidebarDragActive ? nil : .easeOut(duration: 0.2), value: rowIDs)
+    .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in
+      contextMenuHighlightedWorktreeID = nil
+    }
   }
 
   @ViewBuilder
@@ -134,9 +138,13 @@ struct WorktreeRowsView: View {
       .contentShape(Rectangle())
     Group {
       if row.isRemovable, let worktree = store.state.worktree(for: row.id), !isRepositoryRemoving {
-        baseRow.contextMenu {
-          rowContextMenu(worktree: worktree, row: row)
-        }
+        baseRow
+          .contextMenu {
+            ContextMenuHighlightActivator {
+              scheduleContextMenuHighlight(for: row.id)
+            }
+            rowContextMenu(worktree: worktree, row: row)
+          }
       } else {
         baseRow
       }
@@ -324,6 +332,7 @@ struct WorktreeRowsView: View {
 
   private func worktreeRowView(_ row: WorktreeRowModel, config: WorktreeRowViewConfig) -> some View {
     let isSelected = selectedWorktreeIDs.contains(row.id)
+    let showsContextMenuHighlight = contextMenuHighlightedWorktreeID == row.id && !isSelected
     let taskStatus = terminalManager.taskStatus(for: row.id)
     let isRunScriptRunning = terminalManager.isRunScriptRunning(for: row.id)
     let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
@@ -359,8 +368,22 @@ struct WorktreeRowsView: View {
           .padding(.horizontal, 6)
       }
     }
+    .overlay {
+      if showsContextMenuHighlight {
+        RoundedRectangle(cornerRadius: 5)
+          .stroke(Color.accentColor, lineWidth: 2)
+          .padding(.horizontal, 6)
+      }
+    }
     .transition(.opacity)
     .moveDisabled(config.moveDisabled)
+  }
+
+  private func scheduleContextMenuHighlight(for worktreeID: Worktree.ID) {
+    guard !selectedWorktreeIDs.contains(worktreeID) else { return }
+    Task { @MainActor in
+      contextMenuHighlightedWorktreeID = worktreeID
+    }
   }
 
   @ViewBuilder
@@ -493,5 +516,14 @@ struct WorktreeRowsView: View {
       }
     }
     return row.name
+  }
+}
+
+private struct ContextMenuHighlightActivator: View {
+  let activate: () -> Void
+
+  var body: some View {
+    EmptyView()
+      .onAppear(perform: activate)
   }
 }
