@@ -12,7 +12,7 @@ This should fix the structural mismatch where the app treats repositories as reo
 
 - incorrect repository drag insertion indicators when dragging downward across expanded repositories
 - unstable bulk expand/collapse animations
-- potential sidebar flicker during drag when live terminal / notification / ordering updates arrive
+- potential sidebar flicker during drag when live terminal, notification, or ordering updates arrive
 
 ## Current Findings
 
@@ -56,7 +56,7 @@ SwiftUI is placing the indicator between list rows. It does not know that the ta
 
 The current `List` carries several behaviors at once:
 
-- special rows: Canvas, Shelf, archived worktrees, repository list header
+- archived worktree selection and repository list header
 - repository row selection for plain folders
 - worktree multi-selection
 - repository expand/collapse
@@ -65,7 +65,7 @@ The current `List` carries several behaviors at once:
 - reveal-in-sidebar via `ScrollViewReader.scrollTo`
 - native sidebar styling and accessibility
 
-This makes local fixes brittle because changing row structure affects selection, drag, animation, and scroll identity at the same time.
+Canvas, Shelf, and the footer are not `List` rows today; they are safe-area inset chrome around the list. The refactor should preserve that boundary unless a later design intentionally moves them into the scroll content.
 
 ### 3. Live state still reaches rows during drag
 
@@ -80,21 +80,29 @@ Remaining drag-time churn sources include:
 
 These are not necessarily the root cause of the drop-indicator bug, but they are credible contributors to #222-style flicker.
 
-## Recommended Direction
+## Revised Direction
 
 Use a custom sidebar scroll container rather than trying to keep the current flat `List` structure.
+
+Execution order matters: first stabilize the old `List` path with a reducer-level drag gate, then replace the visual structure. The drag gate is a hard prerequisite because it reduces #222 risk before the broader #249 rewrite starts.
 
 Recommended shape:
 
 ```text
-ScrollViewReader
-└── ScrollView
-    └── LazyVStack or VStack
-        ├── Special rows
-        ├── RepositoryContainerRow
-        │   ├── RepositoryHeaderRow
-        │   └── WorktreeRows
-        └── FailedRepositoryRow
+SidebarView chrome
+├── top safeAreaInset buttons
+│   ├── Canvas
+│   └── Shelf
+├── ScrollViewReader
+│   └── ScrollView
+│       └── LazyVStack or VStack
+│           ├── repository list header
+│           ├── RepositoryContainerRow
+│           │   ├── RepositoryHeaderRow
+│           │   └── WorktreeRows
+│           ├── FailedRepositoryRow
+│           └── ArchivedWorktreesRow
+└── bottom safeAreaInset footer
 ```
 
 Key property: repository containers are the only repository-level siblings in the outer stack. Expanded worktrees are children inside the container, not siblings beside it.
@@ -140,7 +148,7 @@ Cons:
 - must rebuild keyboard navigation, multi-selection, reorder, and accessibility affordances
 - more implementation work
 
-This is the recommended route for #249 if the goal is "fix the sidebar design once" rather than patch one symptom.
+This remains the recommended route for #249 if the goal is "fix the sidebar design once" rather than patch one symptom.
 
 ### Option C: Short-term drag-time freeze only
 
@@ -154,11 +162,47 @@ Cons:
 - does not fix repository insertion indicator because row boundaries remain wrong
 - leaves the main structural mismatch in place
 
-This can be kept as a subset of Option B, but it is not enough alone.
+This is now the mandatory M1 prerequisite for Option B, not a replacement for Option B.
+
+## Hard Requirements
+
+The refactor must preserve these behavior and state contracts.
+
+### Reducer actions and persistence
+
+- Keep the existing reducer actions and persistence paths for repository and worktree ordering unless a later implementation note explicitly proves a rename is worth it.
+- Preserve calls behind repository reorder, pinned worktree reorder, unpinned worktree reorder, and notification-driven reorder.
+- Treat failed repository reorder semantics as an explicit product decision:
+  - either failed repository rows are reorderable and their order persists through the same root ordering path
+  - or they are not reorderable and the UI gives consistent feedback with no insertion target around them
+
+### Expanded and collapsed state
+
+- Preserve `@Shared` write-back semantics for collapsed repository IDs.
+- Preserve cleanup of invalid collapsed IDs when repository IDs change.
+- Ensure bulk expand/collapse and single expand/collapse share the same model path.
+
+### Focused actions and selection synchronization
+
+- Preserve `SidebarView` focused values for `confirmWorktreeAction`, `archiveWorktreeAction`, `deleteWorktreeAction`, and `visibleHotkeyWorktreeRows`.
+- Preserve the `sidebarSelections -> setSidebarSelectedWorktreeIDs` synchronization currently owned by `SidebarView`.
+- Do not regress menu commands or numbered worktree hotkeys when replacing `List(selection:)`.
+
+### Existing row affordances
+
+- Preserve repository and worktree context menus.
+- Preserve drag previews.
+- Preserve current worktree row type-select behavior. Worktree rows currently use `.typeSelectEquivalent("")`; V1 should keep type-select effectively disabled for those rows.
+- Preserve root-level `dropDestination(for: URL.self)` on the sidebar container, including drops into blank sidebar space.
+
+### Ordered roots
+
+- Converge the current `orderedRoots.isEmpty` fallback and non-empty custom-order path into one presentation path.
+- The empty ordered-roots case is a valid user state and must have tests.
 
 ## Proposed Architecture
 
-### SidebarPresentationModel
+### SidebarPresentation
 
 Introduce a pure presentation model that flattens current repository state into explicit sidebar units.
 
@@ -171,9 +215,9 @@ struct SidebarPresentation: Equatable {
 
 enum SidebarItem: Equatable, Identifiable {
   case listHeader(SidebarListHeaderModel)
-  case special(SidebarSpecialRowModel)
   case repository(SidebarRepositoryContainerModel)
   case failedRepository(FailedRepositoryModel)
+  case archivedWorktrees(ArchivedWorktreesRowModel)
 }
 
 struct SidebarRepositoryContainerModel: Equatable, Identifiable {
@@ -189,25 +233,31 @@ struct SidebarRepositoryContainerModel: Equatable, Identifiable {
 
 Rules:
 
+- build `SidebarPresentation` from reducer/state-side pure functions or equivalent helpers
 - outer `items` contains one item per repository, not one item per row
 - worktree sections remain inside the repository container
-- presentation construction should be pure and unit-tested
-- live terminal state should not be part of the broad presentation model unless required for layout identity
+- presentation construction is pure and unit-tested
+- high-frequency terminal notification/task/run-script state stays in leaf views, not in broad presentation state
+- Canvas, Shelf, and footer chrome remain outside `SidebarPresentation` in V1
 
 ### Selection
 
 Replace `List(selection:)` with explicit selection handling.
 
-Keep `RepositoriesFeature.State.selection` and `sidebarSelectedWorktreeIDs` as the source of truth, but route clicks through helper functions:
+Keep `RepositoriesFeature.State.selection` and `sidebarSelectedWorktreeIDs` as the source of truth, but route clicks through helper functions.
 
-- repository header click:
-  - plain folder: select repository
-  - git repository: toggle expand by default, or select repository if a future repository-detail mode needs it
-- worktree row click:
-  - normal click: select worktree and focus terminal
-  - Cmd-click: toggle multi-selection
-  - Shift-click: optional follow-up, only if current behavior supports it through `List`
-- Canvas / Shelf / Archived rows: dispatch existing actions
+Compatibility matrix:
+
+| Interaction | State behavior | Focus behavior |
+| --- | --- | --- |
+| Canvas button | Selects Canvas and clears incompatible sidebar worktree selection. | Does not focus a terminal. |
+| Shelf button | Selects Shelf and clears incompatible sidebar worktree selection. | Does not focus a terminal. |
+| Archived worktrees row | Selects archived worktrees and clears incompatible worktree selection. | Does not focus a terminal. |
+| Git repository header click | Toggles expanded state by default. | Does not focus a terminal. |
+| Plain folder repository click | Selects the repository. | Does not focus a terminal unless current behavior already does. |
+| Worktree row normal click | Selects one worktree and updates sidebar selected worktree IDs to that one ID. | Focuses the terminal for the selected worktree. |
+| Worktree row Cmd-click | Toggles membership in sidebar selected worktree IDs, preserving multi-select priority. | Does not steal focus unless the resulting primary selection changes by existing rules. |
+| Empty sidebar selection | Clears sidebar selected worktree IDs. | Does not focus a terminal. |
 
 Selection visuals should be explicit in `RepositoryHeaderRow` and `WorktreeRow`, not inherited from `List`.
 
@@ -227,7 +277,7 @@ Required V1 behavior:
 - command shortcuts still select worktrees
 - selected row is scrolled into view on reveal
 - focus returns to terminal after single worktree selection
-- sidebar focus does not accidentally forward text while Canvas / Shelf rules say it should not
+- sidebar focus does not accidentally forward text while Canvas, Shelf, or Archived rules say it should not
 
 ### Repository Reorder
 
@@ -238,7 +288,7 @@ Suggested approach:
 - make `RepositoryContainerRow` draggable with repository ID payload
 - render a custom repository insertion indicator between repository containers
 - compute drop destination as a repository index
-- dispatch existing `.worktreeOrdering(.repositoriesMoved(offsets, destination))` or a new clearer action such as `.repositoriesReordered([Repository.ID])`
+- dispatch existing repository-ordering actions or a new reducer action that delegates to the same persistence path
 
 The custom indicator should always render at repository container boundaries:
 
@@ -267,7 +317,7 @@ Cross-repository worktree drag can stay out of scope. The current model does not
 
 ### Drag-Time Freeze
 
-Add a small sidebar drag state to suppress non-essential row churn.
+Add sidebar drag state at reducer level and use it in both the old and new sidebar paths.
 
 During any sidebar drag:
 
@@ -275,6 +325,13 @@ During any sidebar drag:
 - hide pull request / notification popover affordances that resize rows
 - suppress row-ID animations caused by notification-driven reorder
 - defer "move notified worktree to top" until drag ends, or apply it without animation after drop
+
+Reducer behavior:
+
+- drag begin records that sidebar drag is active
+- `worktreeNotificationReceived` while drag is active records pending reorder IDs instead of mutating row order immediately
+- drag end flushes pending notification reorders in deterministic order, dropping stale worktree IDs
+- `moveNotifiedWorktreeToTop == false` remains a no-op
 
 This addresses #222 without requiring every live data read to stop.
 
@@ -295,16 +352,16 @@ Rules:
 
 - repository container: `SidebarScrollID.repository(repositoryID)`
 - worktree row: `SidebarScrollID.worktree(worktreeID)`
-- special rows: `SidebarScrollID.canvas`, etc.
+- archived worktrees row: `SidebarScrollID.archivedWorktrees`
 
 When revealing a collapsed worktree:
 
 1. expand its repository
-2. yield for layout materialization
+2. wait for an event-driven row availability signal
 3. scroll to `SidebarScrollID.worktree(worktreeID)`
 4. consume pending reveal
 
-This matches the current two-yield approach but removes dependency on `List` row materialization.
+Do not rely on a fixed number of `Task.yield()` calls in the new architecture. The implementation can use a scroll target registry, preference key, or equivalent view materialization signal.
 
 ### Accessibility
 
@@ -328,7 +385,37 @@ If full native `List` accessibility cannot be matched in V1, document the gap an
   - sidebar multi-selection
   - reveal-in-sidebar
 - Add signposts around sidebar presentation build and drag state transitions if trace work is needed.
-- Keep current `List` code untouched until presentation tests exist.
+- Establish `LazyVStack` vs `VStack` decision metrics before replacing the list:
+  - expand/collapse latency for 10+ repositories
+  - frame stability during repository drag
+  - CPU peak during drag and bulk expand/collapse
+  - body recomputation count for repository container and worktree row views
+- Keep current `List` code untouched until M1 and presentation tests exist.
+
+### M1: Stabilize Old `List` Drag Behavior
+
+Files likely involved:
+
+- `supacode/Features/Repositories/Reducer/RepositoriesFeature.swift`
+- `supacode/Features/Repositories/Reducer/RepositoriesFeature+WorktreeOrdering.swift`
+- `supacode/Features/Repositories/Views/SidebarListView.swift`
+- `supacodeTests/RepositoriesFeatureTests.swift`
+
+Deliver:
+
+- reducer-level sidebar drag state
+- view action for drag begin/end from the old `List` path
+- delayed or no-animation handling for notification-driven reorder during drag
+- deterministic pending reorder flush on drag end
+
+Tests:
+
+- notification during sidebar drag does not mutate visible worktree order immediately
+- drag end applies the pending notification reorder in deterministic order
+- multiple notifications during one drag produce stable ordering
+- stale pending worktree IDs are ignored
+- `moveNotifiedWorktreeToTop == false` remains a no-op
+- persistence is called only when the reorder is actually applied
 
 ### Phase 1: Pure Presentation and Reorder Mapping
 
@@ -343,13 +430,18 @@ Deliver:
 - pure sidebar presentation builder
 - stable scroll IDs
 - pure drop-destination mapping for repository and worktree reorder
-- tests for:
-  - expanded repository keeps one outer item with child rows
-  - failed repositories preserve order
-  - plain folders produce repository containers with no worktree children
-  - pinned/main/pending/unpinned sections are preserved
-  - repository drop destinations map to expected order
-  - worktree drop destinations map within pinned/unpinned sections
+- one unified presentation path for empty and non-empty ordered roots
+- explicit failed repository row reorder semantics
+
+Tests:
+
+- expanded repository keeps one outer item with child rows
+- failed repositories preserve the chosen reorder semantics
+- plain folders produce repository containers with no worktree children
+- pinned/main/pending/unpinned sections are preserved
+- empty ordered roots and custom ordered roots produce equivalent presentation rules
+- repository drop destinations map to expected order
+- worktree drop destinations map within pinned/unpinned sections
 
 ### Phase 2: New Container Views Behind a Switch
 
@@ -366,23 +458,28 @@ Deliver:
 - render the new container sidebar behind a local compile-time or private runtime switch
 - no reducer changes except new presentation helpers if needed
 - preserve row styling visually before enabling custom drag/drop
+- preserve root-level URL drop for files dragged into blank sidebar space
+- preserve context menus and drag previews
 
 This phase should be screenshot/manual verified before deleting the old `List` path.
 
-### Phase 3: Explicit Selection and Reveal
+### Phase 3: Explicit Selection, Focus, and Reveal
 
 Deliver:
 
 - click handling for repository and worktree rows
 - explicit selection visuals
-- multi-selection behavior matching current sidebar expectations
-- reveal-in-sidebar via new scroll IDs
+- multi-selection behavior matching the compatibility matrix
+- `sidebarSelections -> setSidebarSelectedWorktreeIDs` synchronization
+- focused actions and hotkey row values
+- reveal-in-sidebar via new scroll IDs and row availability events
 - focused terminal handoff after single worktree selection
 
 Tests:
 
-- pure selection helper tests if logic is factored out
-- existing reducer selection tests should keep passing
+- pure selection helper tests
+- reducer tests for sidebar selected worktree synchronization
+- focused action manual checklist for confirm/archive/delete and numbered hotkeys
 
 ### Phase 4: Custom Repository Reorder
 
@@ -390,14 +487,14 @@ Deliver:
 
 - repository drag payload
 - custom repo-level insertion indicator
-- drop handling that dispatches repository reorder
+- drop handling that dispatches repository reorder through the existing persistence path
 - drag-time UI freeze for non-essential row affordances
 
 Manual verification:
 
 - dragging a repository upward shows indicator below the target repository container when appropriate
 - dragging a repository downward never shows the indicator between target header and target worktree rows
-- failed repository rows either reorder correctly or are explicitly non-reorderable
+- failed repository rows follow the documented reorder semantics
 
 ### Phase 5: Custom Worktree Reorder
 
@@ -429,6 +526,9 @@ Deliver:
 Automated:
 
 - `SidebarPresentationTests`
+- reducer tests for sidebar drag gate and notification reorder concurrency
+- reducer tests for expanded/collapsed state write-back and invalid collapsed ID cleanup
+- reducer tests for sidebar selected worktree synchronization
 - existing `RepositoriesFeatureTests` ordering tests
 - existing `RepositorySectionViewTests` migrated or renamed
 - `make check`
@@ -437,16 +537,23 @@ Automated:
 Manual:
 
 1. Select a plain folder repository row.
-2. Select a git repository worktree row and confirm terminal focus.
-3. Cmd-click multiple worktree rows and confirm bulk archive/delete commands still target selected rows.
-4. Expand/collapse one repository.
-5. Bulk expand/collapse at least 10 repositories.
-6. Drag repository upward and downward across expanded repositories.
-7. Drag pinned worktrees within a repository.
-8. Drag unpinned worktrees within a repository.
-9. Trigger reveal-in-sidebar from Canvas or command.
-10. Verify Canvas / Shelf / Archived rows remain selectable.
-11. Verify notification/task/run-script indicators update without moving rows during a drag.
+2. Click a git repository header and confirm it expands/collapses without selecting a worktree.
+3. Select a git repository worktree row and confirm terminal focus.
+4. Cmd-click multiple worktree rows and confirm bulk archive/delete commands still target selected rows.
+5. Verify confirm/archive/delete menu commands target the same worktrees as before.
+6. Verify numbered worktree hotkeys use visible sidebar rows.
+7. Expand/collapse one repository.
+8. Bulk expand/collapse at least 10 repositories.
+9. Drag repository upward and downward across expanded repositories.
+10. Drag pinned worktrees within a repository.
+11. Drag unpinned worktrees within a repository.
+12. Trigger reveal-in-sidebar from Canvas or command.
+13. Verify Canvas / Shelf / Archived interactions remain correct.
+14. Verify notification/task/run-script indicators update without moving rows during a drag.
+15. Drop a repository URL onto a visible row and onto blank sidebar space.
+16. Verify repository and worktree context menus.
+17. Verify drag previews.
+18. Verify worktree rows do not gain type-select behavior in V1.
 
 ## Risks
 
@@ -477,7 +584,7 @@ Risk: replacing the sidebar in one PR touches selection, animation, and drag.
 Mitigation:
 
 - stage behind a private switch until visual behavior is verified
-- land presentation model tests first
+- land M1 and presentation model tests first
 - keep reducer actions and persistence shape stable
 
 ### Performance regressions
@@ -488,7 +595,7 @@ Mitigation:
 
 - start with `LazyVStack`
 - switch only repository containers to non-lazy child stacks if expand/collapse animation needs it
-- measure with the existing signpost / Instruments workflow if the sidebar feels worse
+- decide using the Phase 0 metrics rather than visual impression alone
 
 ## Recommendation
 
@@ -498,11 +605,13 @@ Do not attempt to fix the repository insertion indicator through reducer index c
 
 The safest execution path is:
 
-1. pure presentation model and tests
-2. render-only new sidebar path
-3. explicit selection/reveal
-4. custom repository reorder
-5. custom worktree reorder
-6. remove old `List` path
+1. baseline metrics and manual guardrails
+2. M1 old `List` drag gate and reducer concurrency tests
+3. pure presentation model and tests
+4. render-only new sidebar path
+5. explicit selection, focus, and reveal
+6. custom repository reorder
+7. custom worktree reorder
+8. remove old `List` path
 
 This is larger than a tactical #222 fix, but it addresses the underlying sidebar design mismatch and gives future sidebar features a cleaner foundation.
