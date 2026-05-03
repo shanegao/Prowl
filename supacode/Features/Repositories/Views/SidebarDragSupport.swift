@@ -114,8 +114,8 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
       actions.onDragEnded()
       return false
     }
-    actions.onDrop(IndexSet(integer: source), dropDestination)
     actions.onDragEnded()
+    actions.onDrop(IndexSet(integer: source), dropDestination)
     return true
   }
 }
@@ -185,8 +185,8 @@ struct SidebarWorktreeDropDelegate: DropDelegate {
       actions.onDragEnded()
       return false
     }
-    actions.onDrop(IndexSet(integer: source), dropDestination)
     actions.onDragEnded()
+    actions.onDrop(IndexSet(integer: source), dropDestination)
     return true
   }
 }
