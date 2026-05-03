@@ -35,6 +35,7 @@ struct SidebarListView: View {
   let terminalManager: WorktreeTerminalManager
   @FocusState private var isSidebarFocused: Bool
   @State private var isDragActive = false
+  @State private var draggingRepositoryID: Repository.ID?
   @State private var targetedRepositoryDropDestination: Int?
 
   var body: some View {
@@ -204,7 +205,9 @@ struct SidebarListView: View {
           .draggableRepository(
             id: model.repositoryID,
             isEnabled: !model.isRemoving,
-            beginDrag: beginSidebarDrag
+            beginDrag: {
+              beginSidebarDrag(repositoryID: model.repositoryID)
+            }
           )
         }
 
@@ -233,7 +236,9 @@ struct SidebarListView: View {
         .draggableRepository(
           id: model.id,
           isEnabled: model.isReorderable,
-          beginDrag: beginSidebarDrag
+          beginDrag: {
+            beginSidebarDrag(repositoryID: model.id)
+          }
         )
 
       case .listHeader, .archivedWorktrees:
@@ -246,28 +251,34 @@ struct SidebarListView: View {
       isEnabled: isDragActive,
       targetedDestination: $targetedRepositoryDropDestination,
       actions: SidebarDropTargetActions(
+        draggedItemID: draggingRepositoryID,
         onDrop: { offsets, destination in
-          store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
+          withAnimation(.easeOut(duration: 0.2)) {
+            _ = store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
+          }
         },
         onDragEnded: endSidebarDrag
       )
     )
   }
 
-  private func beginSidebarDrag() {
+  private func beginSidebarDrag(repositoryID: Repository.ID) {
     guard !isDragActive else { return }
+    draggingRepositoryID = repositoryID
     isDragActive = true
     store.send(.worktreeOrdering(.setSidebarDragActive(true)))
   }
 
   private func endSidebarDrag() {
     targetedRepositoryDropDestination = nil
+    draggingRepositoryID = nil
     isDragActive = false
     store.send(.worktreeOrdering(.setSidebarDragActive(false)))
   }
 
   private func resetSidebarDrag() {
     targetedRepositoryDropDestination = nil
+    draggingRepositoryID = nil
     isDragActive = false
     store.send(.worktreeOrdering(.setSidebarDragActive(false)))
   }

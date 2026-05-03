@@ -107,6 +107,7 @@ struct WorktreeRowsView: View {
         isEnabled: isWorktreeDragActive,
         targetedDestination: targetedDestination,
         actions: SidebarDropTargetActions(
+          draggedItemID: draggingWorktreeIDs.first,
           onDrop: { offsets, destination in
             moveWorktrees(section: section, offsets: offsets, destination: destination)
           },
@@ -139,10 +140,12 @@ struct WorktreeRowsView: View {
     Group {
       if row.isRemovable, let worktree = store.state.worktree(for: row.id), !isRepositoryRemoving {
         baseRow
-          .contextMenu {
-            ContextMenuHighlightActivator {
+          .overlay {
+            ContextMenuActivationOverlay {
               scheduleContextMenuHighlight(for: row.id)
             }
+          }
+          .contextMenu {
             rowContextMenu(worktree: worktree, row: row)
           }
       } else {
@@ -519,11 +522,38 @@ struct WorktreeRowsView: View {
   }
 }
 
-private struct ContextMenuHighlightActivator: View {
+private struct ContextMenuActivationOverlay: NSViewRepresentable {
   let activate: () -> Void
 
-  var body: some View {
-    EmptyView()
-      .onAppear(perform: activate)
+  func makeNSView(context: Context) -> RightClickForwardingView {
+    let view = RightClickForwardingView()
+    view.activate = activate
+    return view
+  }
+
+  func updateNSView(_ nsView: RightClickForwardingView, context: Context) {
+    nsView.activate = activate
+  }
+
+  final class RightClickForwardingView: NSView {
+    var activate: (() -> Void)?
+    private var isForwardingRightClick = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+      guard !isForwardingRightClick,
+        NSApp.currentEvent?.type == .rightMouseDown
+      else {
+        return nil
+      }
+      return bounds.contains(point) ? self : nil
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+      activate?()
+      guard let window else { return }
+      isForwardingRightClick = true
+      window.sendEvent(event)
+      isForwardingRightClick = false
+    }
   }
 }

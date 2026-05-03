@@ -54,8 +54,7 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
   let destination: (DropInfo) -> Int
   let repositoryOrderIDs: [Repository.ID]
   @Binding var targetedDestination: Int?
-  let onDrop: (IndexSet, Int) -> Void
-  let onDragEnded: () -> Void
+  let actions: SidebarDropTargetActions
 
   func dropEntered(info: DropInfo) {
     guard isEnabled else {
@@ -85,25 +84,38 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
     }
     let dropDestination = destination(info)
     targetedDestination = nil
+    if let repositoryID = actions.draggedItemID {
+      return performDrop(repositoryID: repositoryID, dropDestination: dropDestination)
+    }
     guard let provider = info.itemProviders(for: [.prowlSidebarDragPayload]).first else {
-      onDragEnded()
+      actions.onDragEnded()
       return false
     }
     provider.loadDataRepresentation(forTypeIdentifier: UTType.prowlSidebarDragPayload.identifier) { data, _ in
       guard let data,
-        let repositoryID = SidebarDragProvider.repositoryID(from: data),
-        let source = repositoryOrderIDs.firstIndex(of: repositoryID),
-        source != dropDestination,
-        source + 1 != dropDestination
+        let repositoryID = SidebarDragProvider.repositoryID(from: data)
       else {
-        Task { @MainActor in onDragEnded() }
+        Task { @MainActor in actions.onDragEnded() }
         return
       }
       Task { @MainActor in
-        onDrop(IndexSet(integer: source), dropDestination)
-        onDragEnded()
+        _ = performDrop(repositoryID: repositoryID, dropDestination: dropDestination)
       }
     }
+    return true
+  }
+
+  @MainActor
+  private func performDrop(repositoryID: Repository.ID, dropDestination: Int) -> Bool {
+    guard let source = repositoryOrderIDs.firstIndex(of: repositoryID),
+      source != dropDestination,
+      source + 1 != dropDestination
+    else {
+      actions.onDragEnded()
+      return false
+    }
+    actions.onDrop(IndexSet(integer: source), dropDestination)
+    actions.onDragEnded()
     return true
   }
 }
@@ -113,8 +125,7 @@ struct SidebarWorktreeDropDelegate: DropDelegate {
   let destination: (DropInfo) -> Int
   let sectionIDs: [Worktree.ID]
   @Binding var targetedDestination: Int?
-  let onDrop: (IndexSet, Int) -> Void
-  let onDragEnded: () -> Void
+  let actions: SidebarDropTargetActions
 
   func dropEntered(info: DropInfo) {
     guard isEnabled else {
@@ -144,25 +155,38 @@ struct SidebarWorktreeDropDelegate: DropDelegate {
     }
     let dropDestination = destination(info)
     targetedDestination = nil
+    if let worktreeID = actions.draggedItemID {
+      return performDrop(worktreeID: worktreeID, dropDestination: dropDestination)
+    }
     guard let provider = info.itemProviders(for: [.prowlSidebarDragPayload]).first else {
-      onDragEnded()
+      actions.onDragEnded()
       return false
     }
     provider.loadDataRepresentation(forTypeIdentifier: UTType.prowlSidebarDragPayload.identifier) { data, _ in
       guard let data,
-        let worktreeID = SidebarDragProvider.worktreeID(from: data),
-        let source = sectionIDs.firstIndex(of: worktreeID),
-        source != dropDestination,
-        source + 1 != dropDestination
+        let worktreeID = SidebarDragProvider.worktreeID(from: data)
       else {
-        Task { @MainActor in onDragEnded() }
+        Task { @MainActor in actions.onDragEnded() }
         return
       }
       Task { @MainActor in
-        onDrop(IndexSet(integer: source), dropDestination)
-        onDragEnded()
+        _ = performDrop(worktreeID: worktreeID, dropDestination: dropDestination)
       }
     }
+    return true
+  }
+
+  @MainActor
+  private func performDrop(worktreeID: Worktree.ID, dropDestination: Int) -> Bool {
+    guard let source = sectionIDs.firstIndex(of: worktreeID),
+      source != dropDestination,
+      source + 1 != dropDestination
+    else {
+      actions.onDragEnded()
+      return false
+    }
+    actions.onDrop(IndexSet(integer: source), dropDestination)
+    actions.onDragEnded()
     return true
   }
 }
@@ -211,6 +235,7 @@ enum SidebarDropIndicatorEdge: Equatable {
 }
 
 struct SidebarDropTargetActions {
+  var draggedItemID: String?
   let onDrop: (IndexSet, Int) -> Void
   let onDragEnded: () -> Void
 }
@@ -329,8 +354,7 @@ private struct SidebarRepositoryDropTargetModifier: ViewModifier {
         },
         repositoryOrderIDs: repositoryOrderIDs,
         targetedDestination: $targetedDestination,
-        onDrop: actions.onDrop,
-        onDragEnded: actions.onDragEnded
+        actions: actions
       )
     )
   }
@@ -354,8 +378,7 @@ private struct SidebarWorktreeDropTargetModifier: ViewModifier {
         },
         sectionIDs: rowIDs,
         targetedDestination: $targetedDestination,
-        onDrop: actions.onDrop,
-        onDragEnded: actions.onDragEnded
+        actions: actions
       )
     )
   }
