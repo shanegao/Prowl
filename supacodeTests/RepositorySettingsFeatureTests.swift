@@ -135,7 +135,7 @@ struct RepositorySettingsFeatureTests {
             key: "b",
             modifiers: UserCustomShortcutModifiers(command: true)
           )
-        ),
+        )
       ]
     )
 
@@ -239,7 +239,7 @@ struct RepositorySettingsFeatureTests {
           command: "echo updated",
           execution: .shellScript,
           shortcut: nil
-        ),
+        )
       ]
     )
 

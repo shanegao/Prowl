@@ -2424,7 +2424,9 @@ final class GhosttySurfaceScrollView: NSView {
   }
 
   isolated deinit {
-    observers.forEach { NotificationCenter.default.removeObserver($0) }
+    for observer in observers {
+      NotificationCenter.default.removeObserver(observer)
+    }
   }
 
   override func layout() {
@@ -2568,7 +2570,9 @@ final class GhosttySurfaceScrollView: NSView {
   }
 
   override func updateTrackingAreas() {
-    trackingAreas.forEach { removeTrackingArea($0) }
+    for trackingArea in trackingAreas {
+      removeTrackingArea(trackingArea)
+    }
     super.updateTrackingAreas()
     guard let scroller = scrollView.verticalScroller else { return }
     addTrackingArea(

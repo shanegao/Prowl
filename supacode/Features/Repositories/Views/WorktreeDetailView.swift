@@ -954,7 +954,7 @@ private struct WorktreeToolbarPreview: View {
             key: "u",
             modifiers: UserCustomShortcutModifiers()
           )
-        ),
+        )
       ],
       isUpdateAvailable: true,
       availableUpdateVersion: "2026.5.1"

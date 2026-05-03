@@ -100,7 +100,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 ### Formatting & Linting
 
 - 2-space indentation, 120 character line length (enforced by `.swift-format.json`)
-- Trailing commas are mandatory (enforced by `.swiftlint.yml`)
+- `swift-format` is the source of truth for trailing commas: multi-element collection literals keep trailing commas, while single-element collection literals may have them removed.
 - SwiftLint runs in strict mode; never disable lint rules without permission
 - Custom SwiftLint rule: `store_state_mutation_in_views` — do not mutate `store.*` directly in view files; send actions instead
 - Before creating a PR, run `make lint`.

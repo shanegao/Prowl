@@ -336,7 +336,9 @@ nonisolated private func lineStream(from handle: FileHandle) -> AsyncStream<Stri
         data.append(chunk)
         return consumeLines(from: &data)
       }
-      lines.forEach { continuation.yield($0) }
+      for line in lines {
+        continuation.yield(line)
+      }
     }
     continuation.onTermination = { _ in
       handle.readabilityHandler = nil
