@@ -27,7 +27,7 @@ enum SidebarDragProvider {
 
   private nonisolated static func itemProvider(payload: String) -> NSItemProvider {
     let provider = NSItemProvider()
-    let loadHandler: (@escaping (Data?, (any Error)?) -> Void) -> Progress? = { completion in
+    let loadHandler: @Sendable (@escaping @Sendable (Data?, (any Error)?) -> Void) -> Progress? = { completion in
       completion(Data(payload.utf8), nil)
       return nil
     }
@@ -161,31 +161,62 @@ struct SidebarDropIndicator: View {
   }
 }
 
+enum SidebarDropIndicatorEdge: Equatable {
+  case none
+  case top
+  case bottom
+
+  static func edge(
+    targetedDestination: Int?,
+    rowIndex: Int,
+    rowCount: Int
+  ) -> Self {
+    guard let targetedDestination else {
+      return .none
+    }
+    if targetedDestination == rowIndex {
+      return .top
+    }
+    if rowIndex == rowCount - 1, targetedDestination == rowCount {
+      return .bottom
+    }
+    return .none
+  }
+}
+
+struct SidebarDropTargetActions {
+  let onDrop: (IndexSet, Int) -> Void
+  let onDragEnded: () -> Void
+}
+
 extension View {
   func repositoryDropTarget(
     index: Int,
     repositoryOrderIDs: [Repository.ID],
+    isEnabled: Bool,
     targetedDestination: Binding<Int?>,
-    onDrop: @escaping (IndexSet, Int) -> Void,
-    onDragEnded: @escaping () -> Void
+    actions: SidebarDropTargetActions
   ) -> some View {
-    self
+    let edge = SidebarDropIndicatorEdge.edge(
+      targetedDestination: targetedDestination.wrappedValue,
+      rowIndex: index,
+      rowCount: repositoryOrderIDs.count
+    )
+    return
+      self
       .overlay(alignment: .top) {
-        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index)
+        SidebarDropIndicator(isVisible: edge == .top)
       }
       .overlay(alignment: .bottom) {
-        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index + 1)
+        SidebarDropIndicator(isVisible: edge == .bottom)
       }
-      .onDrop(
-        of: [.prowlSidebarDragPayload],
-        delegate: SidebarRepositoryDropDelegate(
-          destination: { info in
-            info.location.y < 24 ? index : index + 1
-          },
+      .modifier(
+        SidebarRepositoryDropTargetModifier(
+          isEnabled: isEnabled,
+          index: index,
           repositoryOrderIDs: repositoryOrderIDs,
           targetedDestination: targetedDestination,
-          onDrop: onDrop,
-          onDragEnded: onDragEnded
+          actions: actions
         )
       )
   }
@@ -193,27 +224,30 @@ extension View {
   func worktreeDropTarget(
     index: Int,
     rowIDs: [Worktree.ID],
+    isEnabled: Bool,
     targetedDestination: Binding<Int?>,
-    onDrop: @escaping (IndexSet, Int) -> Void,
-    onDragEnded: @escaping () -> Void
+    actions: SidebarDropTargetActions
   ) -> some View {
-    self
+    let edge = SidebarDropIndicatorEdge.edge(
+      targetedDestination: targetedDestination.wrappedValue,
+      rowIndex: index,
+      rowCount: rowIDs.count
+    )
+    return
+      self
       .overlay(alignment: .top) {
-        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index, horizontalPadding: 28)
+        SidebarDropIndicator(isVisible: edge == .top, horizontalPadding: 28)
       }
       .overlay(alignment: .bottom) {
-        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index + 1, horizontalPadding: 28)
+        SidebarDropIndicator(isVisible: edge == .bottom, horizontalPadding: 28)
       }
-      .onDrop(
-        of: [.prowlSidebarDragPayload],
-        delegate: SidebarWorktreeDropDelegate(
-          destination: { info in
-            info.location.y < 18 ? index : index + 1
-          },
-          sectionIDs: rowIDs,
+      .modifier(
+        SidebarWorktreeDropTargetModifier(
+          isEnabled: isEnabled,
+          index: index,
+          rowIDs: rowIDs,
           targetedDestination: targetedDestination,
-          onDrop: onDrop,
-          onDragEnded: onDragEnded
+          actions: actions
         )
       )
   }
@@ -247,6 +281,62 @@ extension View {
       }
     } else {
       self
+    }
+  }
+}
+
+private struct SidebarRepositoryDropTargetModifier: ViewModifier {
+  let isEnabled: Bool
+  let index: Int
+  let repositoryOrderIDs: [Repository.ID]
+  @Binding var targetedDestination: Int?
+  let actions: SidebarDropTargetActions
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isEnabled {
+      content.onDrop(
+        of: [.prowlSidebarDragPayload],
+        delegate: SidebarRepositoryDropDelegate(
+          destination: { info in
+            info.location.y < 24 ? index : index + 1
+          },
+          repositoryOrderIDs: repositoryOrderIDs,
+          targetedDestination: $targetedDestination,
+          onDrop: actions.onDrop,
+          onDragEnded: actions.onDragEnded
+        )
+      )
+    } else {
+      content
+    }
+  }
+}
+
+private struct SidebarWorktreeDropTargetModifier: ViewModifier {
+  let isEnabled: Bool
+  let index: Int
+  let rowIDs: [Worktree.ID]
+  @Binding var targetedDestination: Int?
+  let actions: SidebarDropTargetActions
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isEnabled {
+      content.onDrop(
+        of: [.prowlSidebarDragPayload],
+        delegate: SidebarWorktreeDropDelegate(
+          destination: { info in
+            info.location.y < 18 ? index : index + 1
+          },
+          sectionIDs: rowIDs,
+          targetedDestination: $targetedDestination,
+          onDrop: actions.onDrop,
+          onDragEnded: actions.onDragEnded
+        )
+      )
+    } else {
+      content
     }
   }
 }

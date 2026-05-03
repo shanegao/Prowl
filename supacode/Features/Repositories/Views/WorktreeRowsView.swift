@@ -89,6 +89,7 @@ struct WorktreeRowsView: View {
     shortcutIndexByID: [Worktree.ID: Int]
   ) -> some View {
     let rowIDs = rows.map(\.id)
+    let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
       rowView(
         row,
@@ -99,11 +100,14 @@ struct WorktreeRowsView: View {
       .worktreeDropTarget(
         index: index,
         rowIDs: rowIDs,
+        isEnabled: isWorktreeDragActive,
         targetedDestination: targetedDestination,
-        onDrop: { offsets, destination in
-          moveWorktrees(section: section, offsets: offsets, destination: destination)
-        },
-        onDragEnded: endWorktreeDrag
+        actions: SidebarDropTargetActions(
+          onDrop: { offsets, destination in
+            moveWorktrees(section: section, offsets: offsets, destination: destination)
+          },
+          onDragEnded: endWorktreeDrag
+        )
       )
     }
   }
@@ -116,69 +120,27 @@ struct WorktreeRowsView: View {
     shortcutHint: String?
   ) -> some View {
     let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
-    let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
-    let displayName =
-      if row.isDeleting {
-        "\(row.name) (deleting...)"
-      } else if row.isArchiving {
-        "\(row.name) (archiving...)"
-      } else {
-        row.name
-      }
-    let canShowRowActions = row.isRemovable && !isRepositoryRemoving && !isWorktreeDragActive
-    let pinAction: (() -> Void)? =
-      canShowRowActions && !row.isMainWorktree
-      ? { togglePin(for: row.id, isPinned: row.isPinned) }
-      : nil
-    let archiveAction: (() -> Void)? =
-      canShowRowActions && !row.isMainWorktree
-      ? { archiveWorktree(row.id) }
-      : nil
-    let notifications = terminalManager.stateIfExists(for: row.id)?.notifications ?? []
-    let onFocusNotification: (WorktreeTerminalNotification) -> Void = { notification in
-      guard let terminalState = terminalManager.stateIfExists(for: row.id) else {
-        return
-      }
-      _ = terminalState.focusSurface(id: notification.surfaceId)
-    }
-    let onDiffTap: (() -> Void)? = {
-      guard let worktree = store.state.worktree(for: row.id) else { return }
-      DiffWindowManager.shared.show(
-        worktreeURL: worktree.workingDirectory,
-        branchName: worktree.name,
-        resolvedKeybindings: resolvedKeybindings
-      )
-    }
-    let onStopRunScript: (() -> Void)? =
-      terminalManager.isRunScriptRunning(for: row.id)
-      ? { _ = terminalManager.stateIfExists(for: row.id)?.stopRunScript() }
-      : nil
-    let config = WorktreeRowViewConfig(
-      displayName: displayName,
-      worktreeName: worktreeName(for: row),
-      isHovered: !isWorktreeDragActive && hoveredWorktreeID == row.id,
-      showsNotificationIndicator: !isWorktreeDragActive && showsNotificationIndicator,
-      notifications: isWorktreeDragActive ? [] : notifications,
-      onFocusNotification: onFocusNotification,
-      shortcutHint: shortcutHint,
-      pinAction: pinAction,
-      archiveAction: archiveAction,
-      onDiffTap: onDiffTap,
-      onStopRunScript: onStopRunScript,
+    let config = rowConfig(
+      for: row,
+      isRepositoryRemoving: isRepositoryRemoving,
+      isWorktreeDragActive: isWorktreeDragActive,
       moveDisabled: moveDisabled,
+      shortcutHint: shortcutHint
     )
     let baseRow = worktreeRowView(row, config: config)
+      .disabled(isRepositoryRemoving)
+      .contentShape(.dragPreview, .rect)
+      .contentShape(.interaction, .rect)
+      .contentShape(Rectangle())
     Group {
       if row.isRemovable, let worktree = store.state.worktree(for: row.id), !isRepositoryRemoving {
         baseRow.contextMenu {
           rowContextMenu(worktree: worktree, row: row)
         }
       } else {
-        baseRow.disabled(isRepositoryRemoving)
+        baseRow
       }
     }
-    .contentShape(.dragPreview, .rect)
-    .contentShape(.interaction, .rect)
     .onTapGesture {
       selectWorktreeRow(row.id)
     }
@@ -216,6 +178,66 @@ struct WorktreeRowsView: View {
     }
   }
 
+  private func rowConfig(
+    for row: WorktreeRowModel,
+    isRepositoryRemoving: Bool,
+    isWorktreeDragActive: Bool,
+    moveDisabled: Bool,
+    shortcutHint: String?
+  ) -> WorktreeRowViewConfig {
+    let displayName =
+      if row.isDeleting {
+        "\(row.name) (deleting...)"
+      } else if row.isArchiving {
+        "\(row.name) (archiving...)"
+      } else {
+        row.name
+      }
+    let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
+    let notifications = terminalManager.stateIfExists(for: row.id)?.notifications ?? []
+    let canShowRowActions = row.isRemovable && !isRepositoryRemoving && !isWorktreeDragActive
+    return WorktreeRowViewConfig(
+      displayName: displayName,
+      worktreeName: worktreeName(for: row),
+      isHovered: !isWorktreeDragActive && hoveredWorktreeID == row.id,
+      showsNotificationIndicator: !isWorktreeDragActive && showsNotificationIndicator,
+      notifications: isWorktreeDragActive ? [] : notifications,
+      onFocusNotification: focusNotificationHandler(for: row.id),
+      shortcutHint: shortcutHint,
+      pinAction: canShowRowActions && !row.isMainWorktree ? { togglePin(for: row.id, isPinned: row.isPinned) } : nil,
+      archiveAction: canShowRowActions && !row.isMainWorktree ? { archiveWorktree(row.id) } : nil,
+      onDiffTap: diffTapHandler(for: row.id),
+      onStopRunScript: stopRunScriptHandler(for: row.id),
+      moveDisabled: moveDisabled,
+    )
+  }
+
+  private func focusNotificationHandler(for worktreeID: Worktree.ID) -> (WorktreeTerminalNotification) -> Void {
+    { notification in
+      guard let terminalState = terminalManager.stateIfExists(for: worktreeID) else {
+        return
+      }
+      _ = terminalState.focusSurface(id: notification.surfaceId)
+    }
+  }
+
+  private func diffTapHandler(for worktreeID: Worktree.ID) -> (() -> Void)? {
+    {
+      guard let worktree = store.state.worktree(for: worktreeID) else { return }
+      DiffWindowManager.shared.show(
+        worktreeURL: worktree.workingDirectory,
+        branchName: worktree.name,
+        resolvedKeybindings: resolvedKeybindings
+      )
+    }
+  }
+
+  private func stopRunScriptHandler(for worktreeID: Worktree.ID) -> (() -> Void)? {
+    terminalManager.isRunScriptRunning(for: worktreeID)
+      ? { _ = terminalManager.stateIfExists(for: worktreeID)?.stopRunScript() }
+      : nil
+  }
+
   private func handleWorktreeDragSession(
     draggedIDs: Set<Worktree.ID>,
     didEnd: Bool
@@ -224,7 +246,7 @@ struct WorktreeRowsView: View {
       endWorktreeDrag()
       return
     }
-    if draggedIDs != draggingWorktreeIDs {
+    if !draggedIDs.isEmpty, draggedIDs != draggingWorktreeIDs {
       draggingWorktreeIDs = draggedIDs
     }
   }

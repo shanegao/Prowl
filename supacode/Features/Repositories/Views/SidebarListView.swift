@@ -243,11 +243,14 @@ struct SidebarListView: View {
     .repositoryDropTarget(
       index: index,
       repositoryOrderIDs: repositoryOrderIDs,
+      isEnabled: isDragActive,
       targetedDestination: $targetedRepositoryDropDestination,
-      onDrop: { offsets, destination in
-        store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
-      },
-      onDragEnded: endSidebarDrag
+      actions: SidebarDropTargetActions(
+        onDrop: { offsets, destination in
+          store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
+        },
+        onDragEnded: endSidebarDrag
+      )
     )
   }
 
