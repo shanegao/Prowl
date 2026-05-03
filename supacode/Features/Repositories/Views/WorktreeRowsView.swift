@@ -363,7 +363,7 @@ struct WorktreeRowsView: View {
     .tag(SidebarSelection.worktree(row.id))
     .id(SidebarScrollID.worktree(row.id))
     .typeSelectEquivalent("")
-    .padding(.leading, 20)
+    .padding(.leading, 14)
     .padding(.trailing, 8)
     .background {
       if isSelected {
