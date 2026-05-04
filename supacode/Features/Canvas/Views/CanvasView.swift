@@ -98,6 +98,7 @@ struct CanvasView: View {
                 repositoryColor: repositoryAppearance.color?.color,
                 repositoryRootURL: state.repositoryRootURL,
                 tree: tree,
+                focusedSurfaceID: state.focusedSurfaceId(in: tab.id),
                 isFocused: selectionState.primaryTabID == tab.id,
                 isSelected: selectionState.selectedTabIDs.contains(tab.id),
                 hasUnseenNotification: state.hasUnseenNotification(for: tab.id),

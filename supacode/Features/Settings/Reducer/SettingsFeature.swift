@@ -33,6 +33,7 @@ struct SettingsFeature {
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
     var defaultViewMode: DefaultViewMode
+    var dimUnfocusedSplits: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     var selection: SettingsSection? = .general
@@ -70,6 +71,7 @@ struct SettingsFeature {
       terminalFontSize = settings.terminalFontSize
       keybindingUserOverrides = settings.keybindingUserOverrides
       defaultViewMode = settings.defaultViewMode
+      dimUnfocusedSplits = settings.dimUnfocusedSplits
     }
 
     var globalSettings: GlobalSettings {
@@ -103,7 +105,8 @@ struct SettingsFeature {
         archivedAutoDeletePeriod: archivedAutoDeletePeriod,
         terminalFontSize: terminalFontSize,
         keybindingUserOverrides: keybindingUserOverrides,
-        defaultViewMode: defaultViewMode
+        defaultViewMode: defaultViewMode,
+        dimUnfocusedSplits: dimUnfocusedSplits
       )
     }
   }
@@ -204,6 +207,7 @@ struct SettingsFeature {
         state.terminalFontSize = normalizedSettings.terminalFontSize
         state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
         state.defaultViewMode = normalizedSettings.defaultViewMode
+        state.dimUnfocusedSplits = normalizedSettings.dimUnfocusedSplits
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
