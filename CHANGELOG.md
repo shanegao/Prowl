@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.5.4](https://github.com/onevcat/Prowl/releases/tag/v2026.5.4)
+
+This release brings visual polish to split panes and the sidebar, along with a fix for keyboard-driven tab closing.
+
+### New
+
+- Inactive split panes now dim slightly so the focused pane stands out at a glance. The effect adapts to light and dark appearance — stronger in dark mode, subtler in light mode. To disable it, go to Settings → Appearance → Splits and turn off "Dim unfocused split panes".
+
+### Improved
+
+- The sidebar now groups each repository and its worktrees as a cohesive visual unit. Worktree rows are indented under their parent repository, and drag-and-drop indicators are drawn at repository boundaries for clearer reordering feedback.
+- The split divider between panes uses a softer separator color, reducing visual noise alongside the new dim treatment.
+
+### Fixed
+
+- Cmd-W now correctly closes a terminal tab when the default Ghostty keybinding for close-tab is not set.
+
 ## [2026.4.30](https://github.com/onevcat/Prowl/releases/tag/v2026.4.30)
 
 ### New
