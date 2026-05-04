@@ -46,6 +46,13 @@ struct AppearanceSettingsView: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
         }
+        Section("Splits") {
+          Toggle(
+            "Dim unfocused split panes",
+            isOn: $store.dimUnfocusedSplits
+          )
+          .help("Fade split panes that aren't focused so the active one stands out.")
+        }
         Section("Default View") {
           Picker("Launch in", selection: $store.defaultViewMode) {
             ForEach(DefaultViewMode.allCases) { mode in

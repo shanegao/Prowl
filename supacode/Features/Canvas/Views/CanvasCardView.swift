@@ -16,6 +16,7 @@ struct CanvasCardView: View {
   /// PNG/SVG filenames against the per-repo icons directory.
   var repositoryRootURL: URL?
   let tree: SplitTree<GhosttySurfaceView>
+  let focusedSurfaceID: UUID?
   let isFocused: Bool
   let isSelected: Bool
   let hasUnseenNotification: Bool
@@ -225,9 +226,14 @@ struct CanvasCardView: View {
   }
 
   private var terminalContent: some View {
-    TerminalSplitTreeView(tree: tree, pinnedSize: cardSize, action: onSplitOperation)
-      .frame(width: cardSize.width, height: cardSize.height)
-      .allowsHitTesting(isFocused && !showsSelectionShield)
+    TerminalSplitTreeView(
+      tree: tree,
+      pinnedSize: cardSize,
+      focusedSurfaceID: focusedSurfaceID,
+      action: onSplitOperation
+    )
+    .frame(width: cardSize.width, height: cardSize.height)
+    .allowsHitTesting(isFocused && !showsSelectionShield)
   }
 
   private var selectionShield: some View {

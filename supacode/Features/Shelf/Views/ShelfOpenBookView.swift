@@ -25,7 +25,10 @@ struct ShelfOpenBookView: View {
     Group {
       if let selectedId = state.tabManager.selectedTabId {
         TerminalTabContentStack(tabs: state.tabManager.tabs, selectedTabId: selectedId) { tabId in
-          TerminalSplitTreeAXContainer(tree: state.splitTree(for: tabId)) { operation in
+          TerminalSplitTreeAXContainer(
+            tree: state.splitTree(for: tabId),
+            focusedSurfaceID: state.focusedSurfaceId(in: tabId)
+          ) { operation in
             state.performSplitOperation(operation, in: tabId)
           }
         }
