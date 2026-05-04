@@ -38,8 +38,8 @@ struct EmptyStateView: View {
 
   private func promptText(shortcutDisplay: String?) -> String {
     if let shortcutDisplay {
-      return "Press \(shortcutDisplay) or click Open Repository to choose a folder."
+      return "Press \(shortcutDisplay) or click Open Repository to add a repository."
     }
-    return "Click Open Repository to choose a folder."
+    return "Click Open Repository to add a repository."
   }
 }

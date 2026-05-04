@@ -15,8 +15,9 @@ struct SidebarPresentationTests {
 
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: [repository.id])
 
-    #expect(presentation.items.count == 1)
-    guard case .repository(let model) = presentation.items.first else {
+    let repositoryItems = presentation.repositoryRowItems
+    #expect(repositoryItems.count == 1)
+    guard case .repository(let model) = repositoryItems.first else {
       Issue.record("Expected repository container")
       return
     }
@@ -34,7 +35,7 @@ struct SidebarPresentationTests {
 
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: [])
 
-    guard case .repository(let model) = presentation.items.first else {
+    guard case .repository(let model) = presentation.repositoryRowItems.first else {
       Issue.record("Expected repository container")
       return
     }
@@ -59,7 +60,7 @@ struct SidebarPresentationTests {
       presentation.repositoryOrderAfterMove(fromOffsets: IndexSet(integer: 0), toOffset: 2) == [
         repoA.id, "/tmp/missing",
       ])
-    guard case .failedRepository(let failed) = presentation.items.first else {
+    guard case .failedRepository(let failed) = presentation.repositoryRowItems.first else {
       Issue.record("Expected failed repository first")
       return
     }
@@ -73,7 +74,7 @@ struct SidebarPresentationTests {
 
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: [repository.id])
 
-    guard case .repository(let model) = presentation.items.first else {
+    guard case .repository(let model) = presentation.repositoryRowItems.first else {
       Issue.record("Expected repository container")
       return
     }
@@ -100,7 +101,7 @@ struct SidebarPresentationTests {
 
     let presentation = state.sidebarPresentation(expandedRepositoryIDs: [repository.id])
 
-    guard case .repository(let model) = presentation.items.first else {
+    guard case .repository(let model) = presentation.repositoryRowItems.first else {
       Issue.record("Expected repository container")
       return
     }
@@ -193,5 +194,11 @@ struct SidebarPresentationTests {
     state.repositories = IdentifiedArray(uniqueElements: repositories)
     state.repositoryRoots = repositories.map(\.rootURL)
     return state
+  }
+}
+
+extension SidebarPresentation {
+  fileprivate var repositoryRowItems: [SidebarItem] {
+    items.filter { $0.repositoryOrderID != nil }
   }
 }
