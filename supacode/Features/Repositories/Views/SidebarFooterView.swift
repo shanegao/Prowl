@@ -5,31 +5,10 @@ struct SidebarFooterView: View {
   let store: StoreOf<RepositoriesFeature>
   @Environment(\.surfaceBottomChromeBackgroundOpacity) private var surfaceBottomChromeBackgroundOpacity
   @Environment(\.openURL) private var openURL
-  @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   var body: some View {
     HStack {
-      Button {
-        store.send(.setOpenPanelPresented(true))
-      } label: {
-        HStack(spacing: 6) {
-          Label("Add Repository", systemImage: "folder.badge.plus")
-            .font(.callout)
-          if commandKeyObserver.isPressed,
-            let shortcut = shortcutDisplay(for: AppShortcuts.CommandID.openRepository)
-          {
-            ShortcutHintView(text: shortcut, color: .secondary)
-          }
-        }
-      }
-      .help(
-        AppShortcuts.helpText(
-          title: "Add Repository",
-          commandID: AppShortcuts.CommandID.openRepository,
-          in: resolvedKeybindings
-        ))
-      Spacer()
       Menu {
         Button("Homepage", systemImage: "house") {
           if let url = URL(string: "https://prowl.onev.cat/") {
@@ -56,6 +35,7 @@ struct SidebarFooterView: View {
       }
       .menuIndicator(.hidden)
       .help("Help")
+      Spacer()
       Button {
         store.send(.refreshWorktrees)
       } label: {
@@ -109,9 +89,5 @@ struct SidebarFooterView: View {
     .overlay(alignment: .top) {
       Divider()
     }
-  }
-
-  private func shortcutDisplay(for commandID: String) -> String? {
-    AppShortcuts.display(for: commandID, in: resolvedKeybindings)
   }
 }

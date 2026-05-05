@@ -7,16 +7,12 @@ struct EmptyStateView: View {
 
   var body: some View {
     let shortcutDisplay = AppShortcuts.display(for: AppShortcuts.CommandID.openRepository, in: resolvedKeybindings)
-    VStack {
-      Image(systemName: "tray")
-        .font(.title2)
-        .accessibilityHidden(true)
-      Text("Open a repository or folder")
-        .font(.headline)
+    ContentUnavailableView {
+      Label("Open a repository or folder", systemImage: "tray")
+    } description: {
       Text(promptText(shortcutDisplay: shortcutDisplay))
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-      Button("Open Repository...") {
+    } actions: {
+      Button("Add Repository...") {
         store.send(.setOpenPanelPresented(true))
       }
       .modifier(
@@ -26,20 +22,19 @@ struct EmptyStateView: View {
       )
       .help(
         AppShortcuts.helpText(
-          title: "Open Repository",
+          title: "Add Repository",
           commandID: AppShortcuts.CommandID.openRepository,
           in: resolvedKeybindings
         ))
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor))
-    .multilineTextAlignment(.center)
   }
 
   private func promptText(shortcutDisplay: String?) -> String {
     if let shortcutDisplay {
-      return "Press \(shortcutDisplay) or click Open Repository to choose a folder."
+      return "Press \(shortcutDisplay) or click Add Repository to add one."
     }
-    return "Click Open Repository to choose a folder."
+    return "Click Add Repository to add one."
   }
 }

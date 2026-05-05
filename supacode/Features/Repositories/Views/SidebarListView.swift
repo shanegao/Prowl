@@ -67,6 +67,10 @@ struct SidebarListView: View {
             )
           }
 
+          if repositoryItems.isEmpty {
+            emptyRepositoryHint()
+          }
+
           ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
             repositoryItemView(
               item,
@@ -145,11 +149,22 @@ struct SidebarListView: View {
     action: RepositoryListHeaderAction,
     expandableRepositoryIDs: Set<Repository.ID>
   ) -> some View {
-    HStack(spacing: 8) {
+    HStack(spacing: 4) {
       Text("Repositories")
         .font(.caption)
         .foregroundStyle(.tertiary)
         .frame(maxWidth: .infinity, alignment: .leading)
+      Button {
+        store.send(.setOpenPanelPresented(true))
+      } label: {
+        Label("Add Repository", systemImage: "plus")
+          .labelStyle(.iconOnly)
+          .frame(width: 20, height: 20)
+          .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
+      .help("Add Repository")
       if !expandableRepositoryIDs.isEmpty {
         Button {
           withAnimation(.easeOut(duration: 0.2)) {
@@ -177,6 +192,24 @@ struct SidebarListView: View {
     .padding(.trailing, 7)
     .padding(.top, 2)
     .padding(.bottom, 4)
+  }
+
+  private func emptyRepositoryHint() -> some View {
+    HStack(spacing: 6) {
+      Spacer(minLength: 0)
+      Text("Add your first repository")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Image(systemName: "arrow.turn.right.up")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .symbolEffect(.pulse, options: .repeating)
+        .accessibilityHidden(true)
+    }
+    .padding(.leading, 12)
+    .padding(.trailing, 14)
+    .padding(.top, 2)
+    .padding(.bottom, 6)
   }
 
   @ViewBuilder

@@ -4,7 +4,7 @@ struct SidebarPresentation: Equatable {
   var items: [SidebarItem]
 
   static func showsListHeader(repositoryCount: Int) -> Bool {
-    repositoryCount > 10
+    true
   }
 
   var repositoryOrderIDs: [Repository.ID] {

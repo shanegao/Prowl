@@ -63,9 +63,9 @@ struct RepositorySectionViewTests {
     )
   }
 
-  @Test func sidebarHeaderOnlyShowsForLongRepositoryLists() {
-    #expect(!SidebarListView.showsRepositoryListHeader(repositoryCount: 0))
-    #expect(!SidebarListView.showsRepositoryListHeader(repositoryCount: 10))
+  @Test func sidebarHeaderAlwaysShows() {
+    #expect(SidebarListView.showsRepositoryListHeader(repositoryCount: 0))
+    #expect(SidebarListView.showsRepositoryListHeader(repositoryCount: 1))
     #expect(SidebarListView.showsRepositoryListHeader(repositoryCount: 11))
   }
 
