@@ -9,7 +9,6 @@ struct SidebarFooterView: View {
 
   var body: some View {
     HStack {
-      Spacer()
       Menu {
         Button("Homepage", systemImage: "house") {
           if let url = URL(string: "https://prowl.onev.cat/") {
@@ -36,6 +35,7 @@ struct SidebarFooterView: View {
       }
       .menuIndicator(.hidden)
       .help("Help")
+      Spacer()
       Button {
         store.send(.refreshWorktrees)
       } label: {
