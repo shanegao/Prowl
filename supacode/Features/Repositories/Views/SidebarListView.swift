@@ -200,7 +200,7 @@ struct SidebarListView: View {
       Text("Add your first repository")
         .font(.caption)
         .foregroundStyle(.secondary)
-      Image(systemName: "arrow.turn.up.right")
+      Image(systemName: "arrow.turn.right.up")
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
         .symbolEffect(.pulse, options: .repeating)

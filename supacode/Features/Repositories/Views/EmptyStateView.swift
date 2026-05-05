@@ -7,18 +7,20 @@ struct EmptyStateView: View {
 
   var body: some View {
     let shortcutDisplay = AppShortcuts.display(for: AppShortcuts.CommandID.openRepository, in: resolvedKeybindings)
-    VStack {
+    VStack(spacing: 16) {
       Image(systemName: "tray")
         .font(.title2)
         .accessibilityHidden(true)
+        .padding(.bottom, 4)
       Text("Open a repository or folder")
         .font(.headline)
       Text(promptText(shortcutDisplay: shortcutDisplay))
         .font(.subheadline)
         .foregroundStyle(.secondary)
-      Button("Open Repository...") {
+      Button("Add Repository...") {
         store.send(.setOpenPanelPresented(true))
       }
+      .padding(.top, 4)
       .modifier(
         KeyboardShortcutModifier(
           shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openRepository)
@@ -26,11 +28,12 @@ struct EmptyStateView: View {
       )
       .help(
         AppShortcuts.helpText(
-          title: "Open Repository",
+          title: "Add Repository",
           commandID: AppShortcuts.CommandID.openRepository,
           in: resolvedKeybindings
         ))
     }
+    .padding(24)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor))
     .multilineTextAlignment(.center)
@@ -38,8 +41,8 @@ struct EmptyStateView: View {
 
   private func promptText(shortcutDisplay: String?) -> String {
     if let shortcutDisplay {
-      return "Press \(shortcutDisplay) or click Open Repository to add a repository."
+      return "Press \(shortcutDisplay) or click Add Repository to add one."
     }
-    return "Click Open Repository to add a repository."
+    return "Click Add Repository to add one."
   }
 }
