@@ -166,17 +166,11 @@ struct ShelfView: View {
 
   @ViewBuilder
   private func emptyOpenArea() -> some View {
-    VStack(spacing: 10) {
-      Image(systemName: "books.vertical")
-        .font(.system(size: 40))
-        .foregroundStyle(.secondary)
-        .accessibilityHidden(true)
-      Text("No worktree selected")
-        .font(.headline)
-      Text("Click a worktree to open it.")
-        .font(.callout)
-        .foregroundStyle(.secondary)
-    }
+    ContentUnavailableView(
+      "No worktree selected",
+      systemImage: "books.vertical",
+      description: Text("Click a worktree to open it.")
+    )
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
