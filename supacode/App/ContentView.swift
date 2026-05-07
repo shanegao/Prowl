@@ -100,6 +100,12 @@ struct ContentView: View {
       )
     }
     .background(WindowTabbingDisabler())
+    .navigationTitle(
+      WindowTitle.compute(
+        repositories: store.repositories,
+        terminalManager: terminalManager
+      )
+    )
   }
 
   private func toggleLeftSidebar() {

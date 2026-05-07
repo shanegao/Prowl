@@ -36,10 +36,7 @@ struct WindowCommands: Commands {
 
     CommandGroup(replacing: .windowArrangement) {
       Button("Prowl") {
-        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
-          window.makeKeyAndOrderFront(nil)
-          NSApp.activate(ignoringOtherApps: true)
-        }
+        NSApp.surfaceMainWindow()
       }
       .help("Show main window")
       Divider()

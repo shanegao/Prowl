@@ -109,6 +109,7 @@ struct AppFeature {
   @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
   @Dependency(WorkspaceClient.self) private var workspaceClient
   @Dependency(SettingsWindowClient.self) private var settingsWindowClient
+  @Dependency(AppLifecycleClient.self) private var appLifecycleClient
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(TerminalClient.self) private var terminalClient
@@ -578,31 +579,26 @@ struct AppFeature {
         return .none
 
       case .requestQuit:
-        #if !DEBUG
-          guard state.settings.confirmBeforeQuit else {
-            analyticsClient.capture("app_quit", appQuitProperties(launchedAt: state.launchedAt))
-            return .run { @MainActor _ in
-              NSApplication.shared.terminate(nil)
-            }
-          }
-          state.alert = AlertState {
-            TextState("Quit Prowl?")
-          } actions: {
-            ButtonState(action: .confirmQuit) {
-              TextState("Quit")
-            }
-            ButtonState(role: .cancel, action: .dismiss) {
-              TextState("Cancel")
-            }
-          } message: {
-            TextState("This will close all terminal sessions.")
-          }
-          return .none
-        #else
+        guard state.settings.confirmBeforeQuit else {
+          analyticsClient.capture("app_quit", appQuitProperties(launchedAt: state.launchedAt))
           return .run { @MainActor _ in
-            NSApplication.shared.terminate(nil)
+            appLifecycleClient.terminate()
           }
-        #endif
+        }
+        _ = appLifecycleClient.surfaceMainWindow()
+        state.alert = AlertState {
+          TextState("Quit Prowl?")
+        } actions: {
+          ButtonState(action: .confirmQuit) {
+            TextState("Quit")
+          }
+          ButtonState(role: .cancel, action: .dismiss) {
+            TextState("Cancel")
+          }
+        } message: {
+          TextState("This will close all terminal sessions.")
+        }
+        return .none
 
       case .newTerminal:
         guard let worktree = state.repositories.selectedTerminalWorktree else {
@@ -863,7 +859,7 @@ struct AppFeature {
         analyticsClient.capture("app_quit", appQuitProperties(launchedAt: state.launchedAt))
         state.alert = nil
         return .run { @MainActor _ in
-          NSApplication.shared.terminate(nil)
+          appLifecycleClient.terminate()
         }
 
       case .alert:
