@@ -29,7 +29,14 @@ private enum GhosttyCLI {
 
 @MainActor
 final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
-  var appStore: StoreOf<AppFeature>?
+  var appStore: StoreOf<AppFeature>? {
+    didSet {
+      guard let appStore else { return }
+      setSystemNotificationTapHandler { [weak appStore] worktreeID, surfaceID in
+        appStore?.send(.systemNotificationTapped(worktreeID: worktreeID, surfaceID: surfaceID))
+      }
+    }
+  }
   var terminalManager: WorktreeTerminalManager?
   var cliSocketServer: CLISocketServer?
 
@@ -191,17 +198,7 @@ struct SupacodeApp: App {
       AppFeature()
         .logActions()
     } withDependencies: { values in
-      values.terminalClient = TerminalClient(
-        send: { command in
-          terminalManager.handleCommand(command)
-        },
-        events: {
-          terminalManager.eventStream()
-        },
-        canvasFocusedWorktreeID: {
-          terminalManager.canvasFocusedWorktreeID
-        }
-      )
+      values.terminalClient = Self.makeTerminalClient(terminalManager: terminalManager)
       values.worktreeInfoWatcher = WorktreeInfoWatcherClient(
         send: { command in
           worktreeInfoWatcher.handleCommand(command)
@@ -246,6 +243,29 @@ struct SupacodeApp: App {
     #if DEBUG
       DebugWindowManager.shared.configure(store: appStore)
     #endif
+  }
+
+  private static func makeTerminalClient(terminalManager: WorktreeTerminalManager) -> TerminalClient {
+    TerminalClient(
+      send: { command in
+        terminalManager.handleCommand(command)
+      },
+      events: {
+        terminalManager.eventStream()
+      },
+      canvasFocusedWorktreeID: {
+        terminalManager.canvasFocusedWorktreeID
+      },
+      latestUnreadNotification: {
+        terminalManager.latestUnreadNotificationLocation()
+      },
+      focusSurface: { worktreeID, surfaceID in
+        terminalManager.focusSurface(worktreeID: worktreeID, surfaceID: surfaceID)
+      },
+      markNotificationRead: { worktreeID, notificationID in
+        terminalManager.markNotificationRead(worktreeID: worktreeID, notificationID: notificationID)
+      }
+    )
   }
 
   private static func makeTargetResolver(

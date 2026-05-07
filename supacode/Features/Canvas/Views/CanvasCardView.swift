@@ -230,6 +230,7 @@ struct CanvasCardView: View {
       tree: tree,
       pinnedSize: cardSize,
       focusedSurfaceID: focusedSurfaceID,
+      hasNotification: { _ in false },
       action: onSplitOperation
     )
     .frame(width: cardSize.width, height: cardSize.height)

@@ -214,6 +214,99 @@ struct WorktreeTerminalManagerTests {
     #expect(manager.hasUnseenNotifications(for: worktree.id) == false)
   }
 
+  @Test func markNotificationReadOnlyAffectsMatchingID() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let notificationA = UUID()
+    let notificationB = UUID()
+    let surfaceID = UUID()
+
+    state.notifications = [
+      makeNotification(id: notificationA, surfaceId: surfaceID, isRead: false),
+      makeNotification(id: notificationB, surfaceId: surfaceID, isRead: false),
+    ]
+
+    state.markNotificationRead(id: notificationB)
+
+    #expect(state.notifications.map(\.isRead) == [false, true])
+    #expect(manager.hasUnseenNotifications(for: worktree.id) == true)
+  }
+
+  @Test func latestUnreadNotificationLocationChoosesNewestFocusableAcrossWorktrees() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktreeA = makeWorktree(id: "/tmp/repo/wt-a", name: "wt-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo/wt-b", name: "wt-b")
+    let stateA = manager.state(for: worktreeA)
+    let stateB = manager.state(for: worktreeB)
+    let tabA = stateA.createTab()!
+    let tabB = stateB.createTab()!
+    let surfaceA = stateA.focusedSurfaceId(in: tabA)!
+    let surfaceB = stateB.focusedSurfaceId(in: tabB)!
+    let notificationA = UUID()
+    let notificationB = UUID()
+
+    stateA.notifications = [
+      makeNotification(
+        id: notificationA,
+        surfaceId: surfaceA,
+        createdAt: Date(timeIntervalSince1970: 10),
+        isRead: false
+      )
+    ]
+    stateB.notifications = [
+      makeNotification(
+        id: notificationB,
+        surfaceId: surfaceB,
+        createdAt: Date(timeIntervalSince1970: 20),
+        isRead: false
+      )
+    ]
+
+    #expect(
+      manager.latestUnreadNotificationLocation()
+        == NotificationLocation(
+          worktreeID: worktreeB.id,
+          tabID: tabB,
+          surfaceID: surfaceB,
+          notificationID: notificationB
+        )
+    )
+  }
+
+  @Test func latestUnreadNotificationLocationSkipsClosedSurfaces() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let tabID = state.createTab()!
+    let surfaceID = state.focusedSurfaceId(in: tabID)!
+    let focusableNotification = UUID()
+
+    state.notifications = [
+      makeNotification(
+        surfaceId: UUID(),
+        createdAt: Date(timeIntervalSince1970: 20),
+        isRead: false
+      ),
+      makeNotification(
+        id: focusableNotification,
+        surfaceId: surfaceID,
+        createdAt: Date(timeIntervalSince1970: 10),
+        isRead: false
+      ),
+    ]
+
+    #expect(
+      manager.latestUnreadNotificationLocation()
+        == NotificationLocation(
+          worktreeID: worktree.id,
+          tabID: tabID,
+          surfaceID: surfaceID,
+          notificationID: focusableNotification
+        )
+    )
+  }
+
   @Test func setNotificationsDisabledMarksAllRead() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()
@@ -314,12 +407,15 @@ struct WorktreeTerminalManagerTests {
     #expect(clearCount.value == 1)
   }
 
-  private func makeWorktree() -> Worktree {
+  private func makeWorktree(
+    id: Worktree.ID = "/tmp/repo/wt-1",
+    name: String = "wt-1"
+  ) -> Worktree {
     Worktree(
-      id: "/tmp/repo/wt-1",
-      name: "wt-1",
+      id: id,
+      name: name,
       detail: "detail",
-      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-1"),
+      workingDirectory: URL(fileURLWithPath: id),
       repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
     )
   }
@@ -335,13 +431,17 @@ struct WorktreeTerminalManagerTests {
   }
 
   private func makeNotification(
+    id: UUID = UUID(),
     surfaceId: UUID = UUID(),
+    createdAt: Date = .distantPast,
     isRead: Bool
   ) -> WorktreeTerminalNotification {
     WorktreeTerminalNotification(
+      id: id,
       surfaceId: surfaceId,
       title: "Title",
       body: "Body",
+      createdAt: createdAt,
       isRead: isRead
     )
   }
