@@ -100,11 +100,29 @@ extension TerminalLayoutSnapshotPayload {
   nonisolated struct SnapshotTab: Codable, Equatable, Sendable {
     let tabID: String
     let title: String?
+    let customTitle: String?
     let icon: String?
     let splitRoot: SnapshotSplitNode
 
+    init(
+      tabID: String,
+      title: String?,
+      customTitle: String? = nil,
+      icon: String?,
+      splitRoot: SnapshotSplitNode
+    ) {
+      self.tabID = tabID
+      self.title = title
+      self.customTitle = customTitle
+      self.icon = icon
+      self.splitRoot = splitRoot
+    }
+
     func isValid(maxSplitNodesPerTab: Int, maxSplitDepth: Int) -> Bool {
       guard hasContent(tabID) else {
+        return false
+      }
+      if let customTitle, !hasContent(customTitle) {
         return false
       }
       var nodeCount = 0

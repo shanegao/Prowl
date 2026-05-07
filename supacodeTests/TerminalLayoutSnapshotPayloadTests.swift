@@ -12,6 +12,16 @@ struct TerminalLayoutSnapshotPayloadTests {
     #expect(decoded == payload)
   }
 
+  @Test func decodeValidatedRoundTripsTabCustomTitle() throws {
+    let payload = makePayload(title: "live", customTitle: "Pinned")
+    let data = try JSONEncoder().encode(payload)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+
+    #expect(decoded == payload)
+    #expect(decoded?.worktrees.first?.tabs.first?.customTitle == "Pinned")
+  }
+
   @Test func decodeValidatedRoundTripsLeafCwdPath() throws {
     let payload = makePayload(splitRoot: .leaf(surfaceID: "surface-1", cwdPath: "/tmp/repo/wt-1/src"))
     let data = try JSONEncoder().encode(payload)
@@ -309,6 +319,8 @@ private func makePayload(
   version: Int = TerminalLayoutSnapshotPayload.currentVersion,
   worktreeID: String = "wt-1",
   tabID: String = "tab-1",
+  title: String? = nil,
+  customTitle: String? = nil,
   splitRoot: TerminalLayoutSnapshotPayload.SnapshotSplitNode = .leaf(surfaceID: "surface-1")
 ) -> TerminalLayoutSnapshotPayload {
   TerminalLayoutSnapshotPayload(
@@ -318,7 +330,7 @@ private func makePayload(
         worktreeID: worktreeID,
         selectedTabID: tabID,
         tabs: [
-          makeTab(tabID: tabID, splitRoot: splitRoot)
+          makeTab(tabID: tabID, title: title, customTitle: customTitle, splitRoot: splitRoot)
         ]
       )
     ]
@@ -340,12 +352,14 @@ private func makeWorktree(
 private func makeTab(
   tabID: String,
   title: String? = nil,
+  customTitle: String? = nil,
   icon: String? = nil,
   splitRoot: TerminalLayoutSnapshotPayload.SnapshotSplitNode = .leaf(surfaceID: "surface-1")
 ) -> TerminalLayoutSnapshotPayload.SnapshotTab {
   TerminalLayoutSnapshotPayload.SnapshotTab(
     tabID: tabID,
     title: title,
+    customTitle: customTitle,
     icon: icon,
     splitRoot: splitRoot
   )

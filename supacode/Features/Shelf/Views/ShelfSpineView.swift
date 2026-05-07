@@ -270,7 +270,7 @@ struct ShelfSpineView: View {
           tabId: tab.id,
           tabs: terminalState.tabManager.tabs,
           actions: TerminalTabContextMenuActions(
-            changeTitle: { terminalState.promptChangeTabTitle($0) },
+            renameTab: { terminalState.promptChangeTabTitle($0) },
             changeIcon: { terminalState.presentIconPicker(for: $0) },
             closeTab: { terminalState.closeTab($0) },
             closeOthers: { terminalState.closeOtherTabs(keeping: $0) },
@@ -449,7 +449,7 @@ private struct ShelfSpineTabSlot: View {
     .onHover { hovering in
       isHovering = hovering
     }
-    .help(tab.title)
+    .help(tab.displayTitle)
   }
 
   /// When ⌘ is held AND this tab has a `Cmd+N` hotkey, swap the icon

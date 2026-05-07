@@ -6,7 +6,7 @@ struct TerminalTabBarView: View {
   let splitHorizontally: () -> Void
   let splitVertically: () -> Void
   let canSplit: Bool
-  let changeTitle: (TerminalTabID) -> Void
+  let renameTab: (TerminalTabID) -> Void
   let changeIcon: (TerminalTabID) -> Void
   let closeTab: (TerminalTabID) -> Void
   let closeOthers: (TerminalTabID) -> Void
@@ -19,7 +19,7 @@ struct TerminalTabBarView: View {
     HStack(spacing: 0) {
       TerminalTabsView(
         manager: manager,
-        changeTitle: changeTitle,
+        renameTab: renameTab,
         changeIcon: changeIcon,
         closeTab: closeTab,
         closeOthers: closeOthers,

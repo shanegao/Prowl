@@ -93,7 +93,7 @@ struct CanvasView: View {
               let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
               CanvasCardView(
                 repositoryName: resolvedRepositoryName,
-                worktreeName: tab.title,
+                worktreeName: tab.displayTitle,
                 repositoryIcon: repositoryAppearance.icon,
                 repositoryColor: repositoryAppearance.color?.color,
                 repositoryRootURL: state.repositoryRootURL,
