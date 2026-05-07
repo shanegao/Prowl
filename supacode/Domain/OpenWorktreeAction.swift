@@ -7,6 +7,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   }
 
   case alacritty
+  case androidStudio
   case antigravity
   case editor
   case finder
@@ -41,6 +42,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "Open Finder"
     case .editor: "$EDITOR"
     case .alacritty: "Alacritty"
+    case .androidStudio: "Android Studio"
     case .antigravity: "Antigravity"
     case .cursor: "Cursor"
     case .githubDesktop: "GitHub Desktop"
@@ -72,9 +74,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder: "Finder"
     case .editor: "$EDITOR"
-    case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
-      .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+    case .alacritty, .androidStudio, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup,
+      .ghostty, .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge,
+      .terminal, .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf,
+      .xcode, .zed:
       title
     }
   }
@@ -94,9 +97,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder, .editor:
       return true
-    case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
-      .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+    case .alacritty, .androidStudio, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup,
+      .ghostty, .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge,
+      .terminal, .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf,
+      .xcode, .zed:
       return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
     }
   }
@@ -106,6 +110,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "finder"
     case .editor: "editor"
     case .alacritty: "alacritty"
+    case .androidStudio: "android-studio"
     case .antigravity: "antigravity"
     case .cursor: "cursor"
     case .fork: "fork"
@@ -138,6 +143,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "com.apple.finder"
     case .editor: ""
     case .alacritty: "org.alacritty"
+    case .androidStudio: "com.google.android.studio"
     case .antigravity: "com.google.antigravity"
     case .cursor: "com.todesktop.230313mzl4w4u92"
     case .fork: "com.DanPristupov.Fork"
@@ -174,6 +180,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     .windsurf,
     .vscodeInsiders,
     .vscodium,
+    .androidStudio,
     .intellij,
     .webstorm,
     .pycharm,
@@ -252,7 +259,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
     // Apps that require CLI arguments instead of Apple Events to open directories.
-    case .intellij, .webstorm, .pycharm, .rustrover:
+    case .androidStudio, .intellij, .webstorm, .pycharm, .rustrover:
       guard
         let appURL = NSWorkspace.shared.urlForApplication(
           withBundleIdentifier: bundleIdentifier
@@ -284,8 +291,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
         }
       }
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .kitty, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders, .vscodium,
-      .warp, .wezterm, .windsurf, .xcode, .zed:
+      .kitty, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders,
+      .vscodium, .warp, .wezterm, .windsurf, .xcode, .zed:
       guard
         let appURL = NSWorkspace.shared.urlForApplication(
           withBundleIdentifier: bundleIdentifier
