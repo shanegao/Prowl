@@ -53,6 +53,13 @@ struct KeybindingSchemaTests {
     #expect(selectAllCanvasCards?.conflictPolicy == .localOnly)
   }
 
+  @Test func worktreeHistoryShortcutsDoNotConflictWithShelfBookNavigation() {
+    #expect(AppShortcuts.worktreeHistoryBack != AppShortcuts.selectPreviousShelfBook)
+    #expect(AppShortcuts.worktreeHistoryForward != AppShortcuts.selectNextShelfBook)
+    #expect(AppShortcuts.worktreeHistoryBack.display == "⌘⌥⌃←")
+    #expect(AppShortcuts.worktreeHistoryForward.display == "⌘⌥⌃→")
+  }
+
   @Test func resolverAppliesUserOverrideOverMigratedOverride() {
     let schema = KeybindingSchemaDocument(
       version: 1,
