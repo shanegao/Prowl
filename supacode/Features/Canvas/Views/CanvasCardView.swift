@@ -16,7 +16,8 @@ struct CanvasCardView: View {
   /// PNG/SVG filenames against the per-repo icons directory.
   var repositoryRootURL: URL?
   let tree: SplitTree<GhosttySurfaceView>
-  let focusedSurfaceID: UUID?
+  let activeSurfaceID: UUID?
+  let unfocusedSplitOverlay: (fill: Color?, opacity: Double)
   let isFocused: Bool
   let isSelected: Bool
   let hasUnseenNotification: Bool
@@ -229,7 +230,8 @@ struct CanvasCardView: View {
     TerminalSplitTreeView(
       tree: tree,
       pinnedSize: cardSize,
-      focusedSurfaceID: focusedSurfaceID,
+      activeSurfaceID: activeSurfaceID,
+      unfocusedSplitOverlay: unfocusedSplitOverlay,
       action: onSplitOperation
     )
     .frame(width: cardSize.width, height: cardSize.height)

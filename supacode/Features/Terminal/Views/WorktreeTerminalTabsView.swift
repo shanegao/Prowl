@@ -8,9 +8,12 @@ struct WorktreeTerminalTabsView: View {
   let forceAutoFocus: Bool
   let createTab: () -> Void
   @State private var windowActivity = WindowActivityState.inactive
+  @State private var configReloadCounter = 0
 
   var body: some View {
     let state = manager.state(for: worktree) { shouldRunSetupScript }
+    let _ = configReloadCounter
+    let unfocusedSplitOverlay = manager.unfocusedSplitOverlay()
     VStack(spacing: 0) {
       TerminalTabBarView(
         manager: state.tabManager,
@@ -45,10 +48,12 @@ struct WorktreeTerminalTabsView: View {
         TerminalTabContentStack(tabs: state.tabManager.tabs, selectedTabId: selectedId) { tabId in
           TerminalSplitTreeAXContainer(
             tree: state.splitTree(for: tabId),
-            focusedSurfaceID: state.focusedSurfaceId(in: tabId)
-          ) { operation in
-            state.performSplitOperation(operation, in: tabId)
-          }
+            activeSurfaceID: state.activeSurfaceID(for: tabId),
+            unfocusedSplitOverlay: unfocusedSplitOverlay,
+            action: { operation in
+              state.performSplitOperation(operation, in: tabId)
+            }
+          )
         }
       } else {
         EmptyTerminalPaneView(message: "No terminals open")
@@ -93,6 +98,9 @@ struct WorktreeTerminalTabsView: View {
       }
       let activity = resolvedWindowActivity
       state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
+      configReloadCounter &+= 1
     }
   }
 

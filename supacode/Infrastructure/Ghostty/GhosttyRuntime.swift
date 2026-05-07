@@ -943,6 +943,31 @@ final class GhosttyRuntime {
     return min(max(value, 0.001), 1)
   }
 
+  func unfocusedSplitOverlayOpacity() -> Double {
+    guard let config else { return 0 }
+    var value: Double = 0.85
+    let key = "unfocused-split-opacity"
+    _ = ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8)))
+    return min(max(1 - value, 0), 1)
+  }
+
+  func unfocusedSplitFill() -> Color? {
+    guard let config else { return nil }
+    var color = ghostty_config_color_s()
+    let fillKey = "unfocused-split-fill"
+    if ghostty_config_get(config, &color, fillKey, UInt(fillKey.lengthOfBytes(using: .utf8))) {
+      return Color(nsColor: NSColor(ghostty: color))
+    }
+    let backgroundKey = "background"
+    if ghostty_config_get(config, &color, backgroundKey, UInt(backgroundKey.lengthOfBytes(using: .utf8))) {
+      return Color(nsColor: NSColor(ghostty: color))
+    }
+    ghosttyLogger.warning(
+      "Ghostty config missing both 'unfocused-split-fill' and 'background'; skipping unfocused split overlay."
+    )
+    return nil
+  }
+
   func backgroundColor() -> NSColor {
     backgroundColorFromConfig() ?? NSColor.windowBackgroundColor
   }
