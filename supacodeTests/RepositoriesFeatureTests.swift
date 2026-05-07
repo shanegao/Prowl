@@ -3306,7 +3306,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
-      $0.githubCLI.mergePullRequest = { _, number, _ in
+      $0.githubCLI.mergePullRequest = { _, _, number, _ in
         mergedNumbers.withValue { $0.append(number) }
       }
     }
@@ -3356,7 +3356,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
-      $0.githubCLI.mergePullRequest = { _, _, strategy in
+      $0.githubCLI.mergePullRequest = { _, _, _, strategy in
         mergedStrategies.withValue { $0.append(strategy) }
       }
     }
@@ -3371,6 +3371,57 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.worktreeInfoEvent)
     #expect(mergedStrategies.value == [.squash])
+    await store.finish()
+  }
+
+  @Test func pullRequestActionMergeUsesResolvedRemoteInfo() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openPullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name, number: 12)
+    let upstreamRemoteInfo = GithubRemoteInfo(host: "github.com", owner: "supabitapp", repo: "supacode")
+    var state = makeState(repositories: [repository])
+    state.githubIntegrationAvailability = .disabled
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: openPullRequest
+    )
+    let mutationRemoteInfos = LockIsolated<[GithubRemoteInfo?]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.resolveRemoteInfo = { root in
+        #expect(root == URL(fileURLWithPath: repoRoot))
+        return upstreamRemoteInfo
+      }
+      $0.gitClient.remoteInfo = { _ in
+        Issue.record("git remoteInfo should not be used when gh repo view succeeds")
+        return nil
+      }
+      $0.githubCLI.mergePullRequest = { root, remoteInfo, number, _ in
+        #expect(root == featureWorktree.workingDirectory)
+        #expect(number == 12)
+        mutationRemoteInfos.withValue { $0.append(remoteInfo) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .merge)))
+    await store.receive(\.showToast) {
+      $0.statusToast = .inProgress("Merging pull request…")
+    }
+    await store.receive(\.showToast) {
+      $0.statusToast = .success("Pull request merged")
+    }
+    await store.receive(\.worktreeInfoEvent)
+    #expect(mutationRemoteInfos.value == [upstreamRemoteInfo])
     await store.finish()
   }
 
@@ -3396,7 +3447,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
-      $0.githubCLI.closePullRequest = { _, number in
+      $0.githubCLI.closePullRequest = { _, _, number in
         closedNumbers.withValue { $0.append(number) }
       }
     }
@@ -3586,6 +3637,58 @@ struct RepositoriesFeatureTests {
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
+    await store.finish()
+  }
+
+  @Test func worktreeInfoEventRepositoryPullRequestRefreshPrefersResolvedRemoteInfo() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let upstreamRemoteInfo = GithubRemoteInfo(host: "github.com", owner: "supabitapp", repo: "supacode")
+    let requestedRemoteInfos = LockIsolated<[GithubRemoteInfo]>([])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .available
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubCLI.resolveRemoteInfo = { root in
+        #expect(root == URL(fileURLWithPath: repoRoot))
+        return upstreamRemoteInfo
+      }
+      $0.gitClient.remoteInfo = { _ in
+        Issue.record("git remoteInfo should not be used when gh repo view succeeds")
+        return nil
+      }
+      $0.githubCLI.batchPullRequests = { host, owner, repo, branches in
+        #expect(branches == ["main", "feature"])
+        requestedRemoteInfos.withValue {
+          $0.append(GithubRemoteInfo(host: host, owner: owner, repo: repo))
+        }
+        return [:]
+      }
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          worktreeIDs: [mainWorktree.id, featureWorktree.id]
+        )
+      )
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded)
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    #expect(requestedRemoteInfos.value == [upstreamRemoteInfo])
     await store.finish()
   }
 
