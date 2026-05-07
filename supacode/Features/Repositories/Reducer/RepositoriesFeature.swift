@@ -304,7 +304,7 @@ struct RepositoriesFeature {
     case markWorktreeClosed(Worktree.ID)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
-    case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
+    case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
     case selectNextWorktree
     case selectPreviousWorktree
     case worktreeHistoryBack
@@ -870,10 +870,10 @@ struct RepositoriesFeature {
           }
           return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
 
-        case .selectWorktree(let worktreeID, let focusTerminal):
+        case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
           let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
           defer { repositoriesLogger.endInterval(selectWtToken) }
-          setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: true)
+          setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: recordHistory)
           if focusTerminal, let worktreeID {
             state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
           }
@@ -1553,11 +1553,13 @@ extension RepositoriesFeature.State {
   }
 
   var canNavigateWorktreeHistoryBackward: Bool {
-    canNavigateWorktreeHistory(stack: worktreeHistoryBackStack)
+    guard canUseWorktreeHistory else { return false }
+    return canNavigateWorktreeHistory(stack: worktreeHistoryBackStack)
   }
 
   var canNavigateWorktreeHistoryForward: Bool {
-    canNavigateWorktreeHistory(stack: worktreeHistoryForwardStack)
+    guard canUseWorktreeHistory else { return false }
+    return canNavigateWorktreeHistory(stack: worktreeHistoryForwardStack)
   }
 
   var selectedRepositoryID: Repository.ID? {
@@ -1631,6 +1633,10 @@ extension RepositoriesFeature.State {
 
   var isShowingShelf: Bool {
     isShelfActive
+  }
+
+  private var canUseWorktreeHistory: Bool {
+    !isShowingShelf && !isShowingCanvas
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {
@@ -2435,7 +2441,7 @@ func shelfBookSelectionEffect(
 ) -> Effect<RepositoriesFeature.Action> {
   switch book.kind {
   case .worktree:
-    return .send(.selectWorktree(book.id, focusTerminal: true))
+    return .send(.selectWorktree(book.id, focusTerminal: true, recordHistory: false))
   case .plainFolder:
     return .send(.selectRepository(book.repositoryID))
   }
@@ -2484,6 +2490,7 @@ private func navigateWorktreeHistory(
   direction: WorktreeHistoryDirection,
   state: inout RepositoriesFeature.State
 ) -> Effect<RepositoriesFeature.Action> {
+  guard !state.isShowingShelf, !state.isShowingCanvas else { return .none }
   guard let currentID = state.selectedWorktreeID else { return .none }
   var sourceStack =
     direction == .backward
@@ -2516,6 +2523,7 @@ private func recordWorktreeHistoryTransition(
   to nextID: Worktree.ID?,
   state: inout RepositoriesFeature.State
 ) {
+  guard !state.isShowingShelf, !state.isShowingCanvas else { return }
   guard let previousID, let nextID, previousID != nextID else { return }
   guard isSelectionValid(previousID, state: state), isSelectionValid(nextID, state: state) else { return }
   pushWorktreeHistoryID(previousID, onto: &state.worktreeHistoryBackStack)

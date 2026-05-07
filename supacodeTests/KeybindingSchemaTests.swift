@@ -56,8 +56,12 @@ struct KeybindingSchemaTests {
   @Test func worktreeHistoryShortcutsDoNotConflictWithShelfBookNavigation() {
     #expect(AppShortcuts.worktreeHistoryBack != AppShortcuts.selectPreviousShelfBook)
     #expect(AppShortcuts.worktreeHistoryForward != AppShortcuts.selectNextShelfBook)
-    #expect(AppShortcuts.worktreeHistoryBack.display == "⌘⌥⌃←")
-    #expect(AppShortcuts.worktreeHistoryForward.display == "⌘⌥⌃→")
+    #expect(AppShortcuts.worktreeHistoryBack != AppShortcuts.selectPreviousTerminalPane)
+    #expect(AppShortcuts.worktreeHistoryForward != AppShortcuts.selectNextTerminalPane)
+    #expect(AppShortcuts.worktreeHistoryBack != AppShortcuts.selectPreviousTerminalTab)
+    #expect(AppShortcuts.worktreeHistoryForward != AppShortcuts.selectNextTerminalTab)
+    #expect(AppShortcuts.worktreeHistoryBack.display == "⌘⌥[")
+    #expect(AppShortcuts.worktreeHistoryForward.display == "⌘⌥]")
   }
 
   @Test func resolverAppliesUserOverrideOverMigratedOverride() {

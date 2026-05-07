@@ -238,12 +238,8 @@ enum AppShortcuts {
   static let selectPreviousWorktree = AppShortcut(
     keyEquivalent: .upArrow, ghosttyKeyName: "arrow_up", modifiers: [.command, .control]
   )
-  static let worktreeHistoryBack = AppShortcut(
-    keyEquivalent: .leftArrow, ghosttyKeyName: "arrow_left", modifiers: [.command, .option, .control]
-  )
-  static let worktreeHistoryForward = AppShortcut(
-    keyEquivalent: .rightArrow, ghosttyKeyName: "arrow_right", modifiers: [.command, .option, .control]
-  )
+  static let worktreeHistoryBack = AppShortcut(key: "[", modifiers: [.command, .option])
+  static let worktreeHistoryForward = AppShortcut(key: "]", modifiers: [.command, .option])
   static let selectWorktree1 = AppShortcut(key: "1", modifiers: [.control])
   static let selectWorktree2 = AppShortcut(key: "2", modifiers: [.control])
   static let selectWorktree3 = AppShortcut(key: "3", modifiers: [.control])
