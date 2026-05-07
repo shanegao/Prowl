@@ -1196,10 +1196,16 @@ final class GhosttySurfaceView: NSView, Identifiable {
     guard event.type == .keyDown else { return false }
     let isFontSizeShortcut = matchesFontSizeShortcut(event: event)
     guard let surface else { return false }
-    guard focused else { return false }
+    guard
+      Self.hasKeyEquivalentFocusOwnership(
+        cachedFocused: focused,
+        isActualFirstResponder: window?.firstResponder === self
+      )
+    else { return false }
 
     if UserCustomShortcutRegistry.shared.matches(event: event),
       let menu = NSApp.mainMenu,
+      Self.mainMenuHasMatchingItem(for: event, in: menu),
       menu.performKeyEquivalent(with: event)
     {
       return true
@@ -1208,6 +1214,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     if let bindingFlags = bindingFlags(for: event, surface: surface) {
       if shouldAttemptMenu(for: bindingFlags),
         let menu = NSApp.mainMenu,
+        Self.mainMenuHasMatchingItem(for: event, in: menu),
         menu.performKeyEquivalent(with: event)
       {
         return true
@@ -1437,6 +1444,39 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   @IBAction func changeTitle(_ sender: Any?) {
     performBindingAction("prompt_surface_title")
+  }
+
+  static func hasKeyEquivalentFocusOwnership(
+    cachedFocused: Bool,
+    isActualFirstResponder: Bool
+  ) -> Bool {
+    cachedFocused && isActualFirstResponder
+  }
+
+  static func mainMenuHasMatchingItem(for event: NSEvent, in menu: NSMenu) -> Bool {
+    guard let characters = event.charactersIgnoringModifiers?.lowercased(), !characters.isEmpty else { return false }
+    let shortcutMask: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+    let eventModifiers = event.modifierFlags.intersection(shortcutMask)
+
+    for item in menu.items {
+      if let submenu = item.submenu, mainMenuHasMatchingItem(for: event, in: submenu) {
+        return true
+      }
+
+      guard !item.keyEquivalent.isEmpty else { continue }
+      let itemKey = item.keyEquivalent
+      guard itemKey.lowercased() == characters else { continue }
+
+      var itemModifiers = item.keyEquivalentModifierMask.intersection(shortcutMask)
+      if itemKey != itemKey.lowercased() {
+        itemModifiers.insert(.shift)
+      }
+      if itemModifiers == eventModifiers {
+        return true
+      }
+    }
+
+    return false
   }
 
   private func shouldAttemptMenu(for flags: ghostty_binding_flags_e) -> Bool {

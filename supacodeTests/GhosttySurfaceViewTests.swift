@@ -7,6 +7,64 @@ import Testing
 
 @MainActor
 struct GhosttySurfaceViewTests {
+  @Test func mainMenuExactMatchRejectsShiftVariantOfCommandComma() {
+    let menu = NSMenu()
+    let item = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")
+    item.keyEquivalentModifierMask = [.command]
+    menu.addItem(item)
+
+    let event = makeKeyEvent(
+      characters: "<",
+      charactersIgnoringModifiers: ",",
+      modifiers: [.command, .shift],
+      keyCode: 43
+    )
+
+    #expect(!GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
+  }
+
+  @Test func mainMenuExactMatchAcceptsExactCommandComma() {
+    let menu = NSMenu()
+    let item = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")
+    item.keyEquivalentModifierMask = [.command]
+    menu.addItem(item)
+
+    let event = makeKeyEvent(
+      characters: ",",
+      charactersIgnoringModifiers: ",",
+      modifiers: [.command],
+      keyCode: 43
+    )
+
+    #expect(GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
+  }
+
+  @Test func mainMenuExactMatchFindsSubmenuItems() {
+    let menu = NSMenu()
+    let parent = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
+    let submenu = NSMenu()
+    let item = NSMenuItem(title: "Show Diff", action: nil, keyEquivalent: "y")
+    item.keyEquivalentModifierMask = [.command, .shift]
+    submenu.addItem(item)
+    parent.submenu = submenu
+    menu.addItem(parent)
+
+    let event = makeKeyEvent(
+      characters: "Y",
+      charactersIgnoringModifiers: "y",
+      modifiers: [.command, .shift],
+      keyCode: 16
+    )
+
+    #expect(GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
+  }
+
+  @Test func keyEquivalentFocusOwnershipRequiresActualFirstResponder() {
+    #expect(GhosttySurfaceView.hasKeyEquivalentFocusOwnership(cachedFocused: true, isActualFirstResponder: true))
+    #expect(!GhosttySurfaceView.hasKeyEquivalentFocusOwnership(cachedFocused: true, isActualFirstResponder: false))
+    #expect(!GhosttySurfaceView.hasKeyEquivalentFocusOwnership(cachedFocused: false, isActualFirstResponder: true))
+  }
+
   @Test func occlusionStateResendsDesiredValueAfterAttachmentChange() {
     var state = GhosttySurfaceView.OcclusionState()
 
@@ -370,5 +428,25 @@ struct GhosttySurfaceViewTests {
 
     #expect(!suppression.suppresses(keyCode: 49, timestamp: 11.1))
     #expect(suppression.isExpired(at: 11.1))
+  }
+
+  private func makeKeyEvent(
+    characters: String,
+    charactersIgnoringModifiers: String,
+    modifiers: NSEvent.ModifierFlags,
+    keyCode: UInt16
+  ) -> NSEvent {
+    NSEvent.keyEvent(
+      with: .keyDown,
+      location: .zero,
+      modifierFlags: modifiers,
+      timestamp: 1,
+      windowNumber: 0,
+      context: nil,
+      characters: characters,
+      charactersIgnoringModifiers: charactersIgnoringModifiers,
+      isARepeat: false,
+      keyCode: keyCode
+    )!
   }
 }
