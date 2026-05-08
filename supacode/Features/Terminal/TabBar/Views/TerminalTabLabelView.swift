@@ -11,21 +11,7 @@ struct TerminalTabLabelView: View {
   var body: some View {
     HStack(spacing: TerminalTabBarMetrics.contentSpacing) {
       if tab.isDirty || tab.icon != nil {
-        ZStack {
-          if tab.isDirty {
-            ProgressView()
-              .controlSize(.small)
-              .tint(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
-          } else if let icon = tab.icon {
-            TabIconImage(rawName: icon, pointSize: 12)
-              .foregroundStyle(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
-          }
-        }
-        .frame(
-          width: TerminalTabBarMetrics.closeButtonSize,
-          height: TerminalTabBarMetrics.closeButtonSize
-        )
-        .accessibilityHidden(true)
+        TerminalTabIconBadge(tab: tab, isActive: isActive)
       }
       Text(tab.displayTitle)
         .font(.caption)
@@ -42,5 +28,28 @@ struct TerminalTabLabelView: View {
     .contentShape(.rect)
     .padding(.horizontal, TerminalTabBarMetrics.tabHorizontalPadding)
     .padding(.trailing, TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing)
+  }
+}
+
+struct TerminalTabIconBadge: View {
+  let tab: TerminalTabItem
+  let isActive: Bool
+
+  var body: some View {
+    ZStack {
+      if tab.isDirty {
+        ProgressView()
+          .controlSize(.small)
+          .tint(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
+      } else if let icon = tab.icon {
+        TabIconImage(rawName: icon, pointSize: 12)
+          .foregroundStyle(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
+      }
+    }
+    .frame(
+      width: TerminalTabBarMetrics.closeButtonSize,
+      height: TerminalTabBarMetrics.closeButtonSize
+    )
+    .accessibilityHidden(true)
   }
 }

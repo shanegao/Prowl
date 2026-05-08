@@ -41,6 +41,9 @@ struct TerminalTabsRowView: View {
               onRename: { newTitle in
                 manager.setCustomTitle(id, title: newTitle)
               },
+              onChangeIcon: {
+                changeIcon(id)
+              },
               closeButtonGestureActive: $closeButtonGestureActive,
               isEditing: manager.editingTabID == id,
               onBeginRename: {

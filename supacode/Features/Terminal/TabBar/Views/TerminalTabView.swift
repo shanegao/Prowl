@@ -11,6 +11,7 @@ struct TerminalTabView: View {
   let onSelect: () -> Void
   let onClose: () -> Void
   let onRename: (String) -> Void
+  let onChangeIcon: () -> Void
   @Binding var closeButtonGestureActive: Bool
   let isEditing: Bool
   let onBeginRename: () -> Void
@@ -72,34 +73,39 @@ struct TerminalTabView: View {
     }
     .overlay {
       if isEditing {
-        RenameTextField(
-          text: $editingTitle,
-          onCommit: { onEndRename() },
-          onCancel: {
-            cancelOnExit = true
-            onEndRename()
+        HStack(spacing: TerminalTabBarMetrics.contentSpacing) {
+          if tab.isDirty || tab.icon != nil {
+            TerminalTabIconBadge(tab: tab, isActive: isActive)
           }
-        )
-        .padding(.horizontal, TerminalTabBarMetrics.contentSpacing)
-        .background(
-          RoundedRectangle(
-            cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
-            style: .continuous
+          RenameTextField(
+            text: $editingTitle,
+            onCommit: { onEndRename() },
+            onCancel: {
+              cancelOnExit = true
+              onEndRename()
+            }
           )
-          .fill(Color(nsColor: .textBackgroundColor))
-          .overlay(
+          .padding(.horizontal, TerminalTabBarMetrics.contentSpacing)
+          .background(
             RoundedRectangle(
               cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
               style: .continuous
             )
-            .strokeBorder(Color.accentColor, lineWidth: 1.5)
+            .fill(Color(nsColor: .textBackgroundColor))
+            .overlay(
+              RoundedRectangle(
+                cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
+                style: .continuous
+              )
+              .strokeBorder(Color.accentColor, lineWidth: 1.5)
+            )
           )
-        )
-        .padding(.leading, TerminalTabBarMetrics.tabHorizontalPadding - TerminalTabBarMetrics.contentSpacing)
+          .accessibilityLabel("Rename tab")
+        }
+        .padding(.leading, TerminalTabBarMetrics.tabHorizontalPadding)
         .padding(.trailing, TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing)
         .padding(.vertical, TerminalTabBarMetrics.renameFieldInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .accessibilityLabel("Rename tab")
       }
     }
     .background {
@@ -119,9 +125,12 @@ struct TerminalTabView: View {
       isHovering = hovering
     }
     .simultaneousGesture(
-      TapGesture(count: 2).onEnded {
-        guard !tab.isTitleLocked else { return }
-        onBeginRename()
+      SpatialTapGesture(count: 2, coordinateSpace: .local).onEnded { value in
+        if isInIconHitArea(value.location) {
+          onChangeIcon()
+        } else if !tab.isTitleLocked {
+          onBeginRename()
+        }
       }
     )
     .onChange(of: isEditing) { _, editing in
@@ -151,6 +160,16 @@ struct TerminalTabView: View {
 
   private var isShowingNotificationDot: Bool {
     hasNotification && !isHovering && !isHoveringClose && !isDragging && !showsShortcutHint
+  }
+
+  /// Hit zone for the icon in tab-local coordinates. Covers the leading
+  /// padding plus the icon column, so a double-click anywhere on the icon
+  /// (or the empty strip just to its left) opens the icon picker. The rest
+  /// of the tab routes to inline rename.
+  private func isInIconHitArea(_ point: CGPoint) -> Bool {
+    guard tab.isDirty || tab.icon != nil else { return false }
+    let maxX = TerminalTabBarMetrics.tabHorizontalPadding + TerminalTabBarMetrics.closeButtonSize
+    return point.x >= 0 && point.x <= maxX
   }
 }
 
