@@ -7,13 +7,13 @@ import Testing
 
 @MainActor
 struct GhosttySurfaceViewTests {
-  @Test func mainMenuExactMatchRejectsShiftVariantOfCommandComma() {
+  @Test func mainMenuExactMatchRejectsShiftVariantOfCommandComma() throws {
     let menu = NSMenu()
     let item = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")
     item.keyEquivalentModifierMask = [.command]
     menu.addItem(item)
 
-    let event = makeKeyEvent(
+    let event = try makeKeyEvent(
       characters: "<",
       charactersIgnoringModifiers: ",",
       modifiers: [.command, .shift],
@@ -23,13 +23,13 @@ struct GhosttySurfaceViewTests {
     #expect(!GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
   }
 
-  @Test func mainMenuExactMatchAcceptsExactCommandComma() {
+  @Test func mainMenuExactMatchAcceptsExactCommandComma() throws {
     let menu = NSMenu()
     let item = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")
     item.keyEquivalentModifierMask = [.command]
     menu.addItem(item)
 
-    let event = makeKeyEvent(
+    let event = try makeKeyEvent(
       characters: ",",
       charactersIgnoringModifiers: ",",
       modifiers: [.command],
@@ -39,7 +39,39 @@ struct GhosttySurfaceViewTests {
     #expect(GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
   }
 
-  @Test func mainMenuExactMatchFindsSubmenuItems() {
+  @Test func mainMenuExactMatchAcceptsShiftedSymbolKeyEquivalent() throws {
+    let menu = NSMenu()
+    let item = NSMenuItem(title: "Help", action: nil, keyEquivalent: "?")
+    item.keyEquivalentModifierMask = [.command]
+    menu.addItem(item)
+
+    let event = try makeKeyEvent(
+      characters: "?",
+      charactersIgnoringModifiers: "/",
+      modifiers: [.command, .shift],
+      keyCode: 44
+    )
+
+    #expect(GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
+  }
+
+  @Test func mainMenuExactMatchRejectsUnshiftedVariantOfShiftedSymbolKeyEquivalent() throws {
+    let menu = NSMenu()
+    let item = NSMenuItem(title: "Help", action: nil, keyEquivalent: "?")
+    item.keyEquivalentModifierMask = [.command]
+    menu.addItem(item)
+
+    let event = try makeKeyEvent(
+      characters: "/",
+      charactersIgnoringModifiers: "/",
+      modifiers: [.command],
+      keyCode: 44
+    )
+
+    #expect(!GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
+  }
+
+  @Test func mainMenuExactMatchFindsSubmenuItems() throws {
     let menu = NSMenu()
     let parent = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
     let submenu = NSMenu()
@@ -49,7 +81,7 @@ struct GhosttySurfaceViewTests {
     parent.submenu = submenu
     menu.addItem(parent)
 
-    let event = makeKeyEvent(
+    let event = try makeKeyEvent(
       characters: "Y",
       charactersIgnoringModifiers: "y",
       modifiers: [.command, .shift],
@@ -435,18 +467,20 @@ struct GhosttySurfaceViewTests {
     charactersIgnoringModifiers: String,
     modifiers: NSEvent.ModifierFlags,
     keyCode: UInt16
-  ) -> NSEvent {
-    NSEvent.keyEvent(
-      with: .keyDown,
-      location: .zero,
-      modifierFlags: modifiers,
-      timestamp: 1,
-      windowNumber: 0,
-      context: nil,
-      characters: characters,
-      charactersIgnoringModifiers: charactersIgnoringModifiers,
-      isARepeat: false,
-      keyCode: keyCode
-    )!
+  ) throws -> NSEvent {
+    try #require(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: modifiers,
+        timestamp: 1,
+        windowNumber: 0,
+        context: nil,
+        characters: characters,
+        charactersIgnoringModifiers: charactersIgnoringModifiers,
+        isARepeat: false,
+        keyCode: keyCode
+      )
+    )
   }
 }

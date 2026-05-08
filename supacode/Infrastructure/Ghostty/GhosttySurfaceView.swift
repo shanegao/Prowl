@@ -1454,9 +1454,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   static func mainMenuHasMatchingItem(for event: NSEvent, in menu: NSMenu) -> Bool {
-    guard let characters = event.charactersIgnoringModifiers?.lowercased(), !characters.isEmpty else { return false }
-    let shortcutMask: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
-    let eventModifiers = event.modifierFlags.intersection(shortcutMask)
+    let eventEquivalents = normalizedEventKeyEquivalents(for: event)
+    guard !eventEquivalents.isEmpty else { return false }
 
     for item in menu.items {
       if let submenu = item.submenu, mainMenuHasMatchingItem(for: event, in: submenu) {
@@ -1464,19 +1463,63 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
 
       guard !item.keyEquivalent.isEmpty else { continue }
-      let itemKey = item.keyEquivalent
-      guard itemKey.lowercased() == characters else { continue }
-
-      var itemModifiers = item.keyEquivalentModifierMask.intersection(shortcutMask)
-      if itemKey != itemKey.lowercased() {
-        itemModifiers.insert(.shift)
-      }
-      if itemModifiers == eventModifiers {
+      guard let itemEquivalent = normalizedKeyEquivalent(
+        key: item.keyEquivalent,
+        modifiers: item.keyEquivalentModifierMask
+      ) else { continue }
+      if eventEquivalents.contains(where: { $0 == itemEquivalent }) {
         return true
       }
     }
 
     return false
+  }
+
+  private static let shortcutMask: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+
+  private static let shiftedKeyEquivalentBases: [Character: Character] = [
+    "~": "`", "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7",
+    "*": "8", "(": "9", ")": "0", "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\",
+    ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/",
+  ]
+
+  private struct KeyEquivalentSignature: Equatable {
+    var key: String
+    var modifiers: NSEvent.ModifierFlags
+  }
+
+  private static func normalizedEventKeyEquivalents(for event: NSEvent) -> [KeyEquivalentSignature] {
+    let eventModifiers = event.modifierFlags.intersection(shortcutMask)
+    return [event.charactersIgnoringModifiers, event.characters]
+      .compactMap { characters in
+        characters.flatMap { normalizedKeyEquivalent(key: $0, modifiers: eventModifiers) }
+      }
+      .reduce(into: []) { result, equivalent in
+        if !result.contains(equivalent) {
+          result.append(equivalent)
+        }
+      }
+  }
+
+  private static func normalizedKeyEquivalent(
+    key: String,
+    modifiers: NSEvent.ModifierFlags
+  ) -> KeyEquivalentSignature? {
+    guard !key.isEmpty else { return nil }
+
+    var normalizedKey = key.lowercased()
+    var normalizedModifiers = modifiers.intersection(shortcutMask)
+
+    if key.count == 1, let character = key.first {
+      if let base = shiftedKeyEquivalentBases[character] {
+        normalizedKey = String(base)
+        normalizedModifiers.insert(.shift)
+      } else if normalizedKey != key {
+        normalizedModifiers.insert(.shift)
+      }
+    }
+
+    return KeyEquivalentSignature(key: normalizedKey, modifiers: normalizedModifiers)
   }
 
   private func shouldAttemptMenu(for flags: ghostty_binding_flags_e) -> Bool {
