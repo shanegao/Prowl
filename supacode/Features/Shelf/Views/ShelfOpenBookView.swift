@@ -19,15 +19,19 @@ struct ShelfOpenBookView: View {
   let forceAutoFocus: Bool
 
   @State private var windowActivity = WindowActivityState.inactive
+  @State private var configReloadCounter = 0
 
   var body: some View {
     let state = manager.state(for: worktree) { shouldRunSetupScript }
+    let _ = configReloadCounter
+    let unfocusedSplitOverlay = manager.unfocusedSplitOverlay()
     Group {
       if let selectedId = state.tabManager.selectedTabId {
         TerminalTabContentStack(tabs: state.tabManager.tabs, selectedTabId: selectedId) { tabId in
           TerminalSplitTreeAXContainer(
             tree: state.splitTree(for: tabId),
-            focusedSurfaceID: state.focusedSurfaceId(in: tabId),
+            activeSurfaceID: state.activeSurfaceID(for: tabId),
+            unfocusedSplitOverlay: unfocusedSplitOverlay,
             hasNotification: { surfaceID in
               state.hasUnseenNotification(forSurfaceID: surfaceID)
             },
@@ -90,6 +94,9 @@ struct ShelfOpenBookView: View {
         let activity = resolvedWindowActivity
         state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
       }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
+      configReloadCounter &+= 1
     }
   }
 

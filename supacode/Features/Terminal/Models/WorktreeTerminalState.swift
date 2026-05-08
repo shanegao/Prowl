@@ -589,6 +589,10 @@ final class WorktreeTerminalState {
     focusedSurfaceIdByTab[tabId]
   }
 
+  func activeSurfaceID(for tabId: TerminalTabID) -> UUID? {
+    focusedSurfaceIdByTab[tabId]
+  }
+
   /// Marks a surface so that its next successful `command_finished` event (exit 0)
   /// will trigger a one-shot close of that surface.
   func markSurfaceForAutoClose(_ surfaceId: UUID) {
@@ -1112,10 +1116,7 @@ final class WorktreeTerminalState {
   private func configureSurfaceCallbacks(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     view.onFocusChange = { [weak self, weak view] focused in
       guard let self, let view, focused else { return }
-      self.focusedSurfaceIdByTab[tabId] = view.id
-      self.markNotificationsRead(forSurfaceID: view.id)
-      self.updateTabTitle(for: tabId)
-      self.emitFocusChangedIfNeeded(view.id)
+      self.recordActiveSurface(view, in: tabId)
       self.emitTaskStatusIfChanged()
     }
     view.onKeyInput = { [weak self, weak view] in
@@ -1301,12 +1302,16 @@ final class WorktreeTerminalState {
 
   private func focusSurface(_ surface: GhosttySurfaceView, in tabId: TerminalTabID) {
     let previousSurface = focusedSurfaceIdByTab[tabId].flatMap { surfaces[$0] }
-    focusedSurfaceIdByTab[tabId] = surface.id
-    markNotificationsRead(forSurfaceID: surface.id)
-    updateTabTitle(for: tabId)
+    recordActiveSurface(surface, in: tabId)
     guard tabId == tabManager.selectedTabId else { return }
     let fromSurface = (previousSurface === surface) ? nil : previousSurface
     GhosttySurfaceView.moveFocus(to: surface, from: fromSurface)
+  }
+
+  private func recordActiveSurface(_ surface: GhosttySurfaceView, in tabId: TerminalTabID) {
+    focusedSurfaceIdByTab[tabId] = surface.id
+    markNotificationsRead(forSurfaceID: surface.id)
+    updateTabTitle(for: tabId)
     emitFocusChangedIfNeeded(surface.id)
   }
 

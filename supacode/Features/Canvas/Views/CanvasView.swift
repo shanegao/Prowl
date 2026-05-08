@@ -26,6 +26,7 @@ struct CanvasView: View {
   @State private var hasPerformedInitialFit = false
   @State private var viewportSize: CGSize = .zero
   @State private var showsCanvasHelp = false
+  @State private var configReloadCounter = 0
 
   private let minCardWidth: CGFloat = 300
   private let minCardHeight: CGFloat = 200
@@ -43,6 +44,7 @@ struct CanvasView: View {
       for: AppShortcuts.CommandID.selectAllCanvasCards,
       in: resolvedKeybindings
     )
+    let _ = configReloadCounter
     CanvasScrollContainer(
       offset: $canvasOffset,
       lastOffset: $lastCanvasOffset,
@@ -88,6 +90,7 @@ struct CanvasView: View {
               let resized = resizedFrame(for: tab.id, baseLayout: baseLayout)
               let screenCenter = screenPosition(for: resized.center)
               let cardTotalHeight = resized.size.height + titleBarHeight
+              let unfocusedSplitOverlay = terminalManager.unfocusedSplitOverlay()
 
               let repositoryAppearance = appearance(for: state.repositoryRootURL)
               let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
@@ -98,7 +101,8 @@ struct CanvasView: View {
                 repositoryColor: repositoryAppearance.color?.color,
                 repositoryRootURL: state.repositoryRootURL,
                 tree: tree,
-                focusedSurfaceID: state.focusedSurfaceId(in: tab.id),
+                activeSurfaceID: state.activeSurfaceID(for: tab.id),
+                unfocusedSplitOverlay: unfocusedSplitOverlay,
                 isFocused: selectionState.primaryTabID == tab.id,
                 isSelected: selectionState.selectedTabIDs.contains(tab.id),
                 hasUnseenNotification: state.hasUnseenNotification(for: tab.id),
@@ -201,6 +205,9 @@ struct CanvasView: View {
       return .handled
     }
     .task { activateCanvas() }
+    .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
+      configReloadCounter &+= 1
+    }
     .onDisappear { deactivateCanvas() }
   }
 

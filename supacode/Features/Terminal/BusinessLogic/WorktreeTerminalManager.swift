@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Sharing
+import SwiftUI
 
 private let terminalLogger = SupaLogger("Terminal")
 private let layoutRestoreFailureMessage = "Saved terminal layout was invalid and has been reset"
@@ -472,6 +473,11 @@ final class WorktreeTerminalManager {
 
   func surfaceBackgroundOpacity() -> Double {
     runtime?.backgroundOpacity() ?? 1.0
+  }
+
+  func unfocusedSplitOverlay() -> (fill: Color?, opacity: Double) {
+    guard let runtime else { return (nil, 0) }
+    return (runtime.unfocusedSplitFill(), runtime.unfocusedSplitOverlayOpacity())
   }
 
   func syncPreferredFontSize(from worktreeID: Worktree.ID) {
