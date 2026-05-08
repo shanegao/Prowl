@@ -707,6 +707,7 @@ struct RepositoriesFeature {
 
         case .selectArchivedWorktrees:
           state.isShelfActive = false
+          recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
           state.selection = .archivedWorktrees
           state.sidebarSelectedWorktreeIDs = []
           return .send(.delegate(.selectedWorktreeChanged(nil)))
@@ -862,6 +863,7 @@ struct RepositoriesFeature {
           let selectRepoToken = repositoriesLogger.beginInterval("reducer.selectRepository")
           defer { repositoriesLogger.endInterval(selectRepoToken) }
           guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
+          recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
           state.selection = .repository(repositoryID)
           state.sidebarSelectedWorktreeIDs = []
           if state.repositories[id: repositoryID]?.kind == .plain {
@@ -1636,7 +1638,11 @@ extension RepositoriesFeature.State {
   }
 
   private var canUseWorktreeHistory: Bool {
-    !isShowingShelf && !isShowingCanvas
+    // History navigation only makes sense when a worktree is the current
+    // anchor. With selection on `.repository`, `.archivedWorktrees`, or `nil`,
+    // there is no "current" position to step away from, so the menu items
+    // (and their shortcuts) must be disabled.
+    !isShowingShelf && !isShowingCanvas && selectedWorktreeID != nil
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {
@@ -2523,11 +2529,21 @@ private func recordWorktreeHistoryTransition(
   to nextID: Worktree.ID?,
   state: inout RepositoriesFeature.State
 ) {
+  // Shelf / Canvas are mode switches, not worktree navigation — leave
+  // history frozen so users can resume Back/Forward where they left off.
   guard !state.isShowingShelf, !state.isShowingCanvas else { return }
-  guard let previousID, let nextID, previousID != nextID else { return }
-  guard isSelectionValid(previousID, state: state), isSelectionValid(nextID, state: state) else { return }
-  pushWorktreeHistoryID(previousID, onto: &state.worktreeHistoryBackStack)
+  // No-op transitions (same worktree, or both endpoints nil) leave history alone.
+  if previousID == nextID { return }
+  // Any user-initiated selection change invalidates the redo path. Crucially
+  // this also fires when the user navigates to/from .repository or
+  // .archivedWorktrees (one or both IDs nil), so a stale forward stack
+  // can't carry over into an unrelated path.
   state.worktreeHistoryForwardStack = []
+  // Only push onto the back stack when leaving a still-valid worktree; we
+  // don't want non-worktree selections (repository / archived) showing up
+  // as Back targets.
+  guard let previousID, isSelectionValid(previousID, state: state) else { return }
+  pushWorktreeHistoryID(previousID, onto: &state.worktreeHistoryBackStack)
 }
 
 private func popValidWorktreeHistoryDestination(

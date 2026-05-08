@@ -801,6 +801,7 @@ struct ShelfFeatureTests {
 
     await store.send(.selectArchivedWorktrees) {
       $0.isShelfActive = false
+      $0.worktreeHistoryBackStack = [worktree.id]
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
     }
