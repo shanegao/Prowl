@@ -8,6 +8,7 @@ struct TerminalTabsView: View {
   let closeOthers: (TerminalTabID) -> Void
   let closeToRight: (TerminalTabID) -> Void
   let closeAll: () -> Void
+  let hasNotification: (TerminalTabID) -> Bool
 
   @State private var draggingTabId: TerminalTabID?
   @State private var draggingStartLocation: CGFloat?
@@ -30,6 +31,7 @@ struct TerminalTabsView: View {
             draggingStartLocation: $draggingStartLocation,
             closeButtonGestureActive: $closeButtonGestureActive,
             fixedTabWidth: effectiveTabWidth,
+            hasNotification: hasNotification,
             renameTab: renameTab,
             changeIcon: changeIcon,
             closeTab: closeTab,

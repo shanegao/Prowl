@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Sharing
+import SwiftUI
 
 private let terminalLogger = SupaLogger("Terminal")
 private let layoutRestoreFailureMessage = "Saved terminal layout was invalid and has been reset"
@@ -226,8 +227,8 @@ final class WorktreeTerminalManager {
     state.isSelected = { [weak self] in
       self?.selectedWorktreeID == worktree.id
     }
-    state.onNotificationReceived = { [weak self] title, body in
-      self?.emit(.notificationReceived(worktreeID: worktree.id, title: title, body: body))
+    state.onNotificationReceived = { [weak self] surfaceID, title, body in
+      self?.emit(.notificationReceived(worktreeID: worktree.id, surfaceID: surfaceID, title: title, body: body))
     }
     state.onNotificationIndicatorChanged = { [weak self] in
       self?.emitNotificationIndicatorCountIfNeeded()
@@ -433,8 +434,50 @@ final class WorktreeTerminalManager {
     states[worktreeID]?.hasUnseenNotification == true
   }
 
+  func latestUnreadNotificationLocation() -> NotificationLocation? {
+    var bestLocation: NotificationLocation?
+    var bestCreatedAt: Date?
+    for (worktreeID, state) in states {
+      for notification in state.unreadNotifications() {
+        if let bestCreatedAt, bestCreatedAt >= notification.createdAt {
+          break
+        }
+        guard let tabID = state.tabID(containing: notification.surfaceId) else {
+          continue
+        }
+        bestLocation = NotificationLocation(
+          worktreeID: worktreeID,
+          tabID: tabID,
+          surfaceID: notification.surfaceId,
+          notificationID: notification.id
+        )
+        bestCreatedAt = notification.createdAt
+        break
+      }
+    }
+    return bestLocation
+  }
+
+  @discardableResult
+  func focusSurface(worktreeID: Worktree.ID, surfaceID: UUID) -> Bool {
+    states[worktreeID]?.focusSurface(id: surfaceID) == true
+  }
+
+  func markNotificationRead(worktreeID: Worktree.ID, notificationID: UUID) {
+    states[worktreeID]?.markNotificationRead(id: notificationID)
+  }
+
+  func markNotificationsRead(worktreeID: Worktree.ID, surfaceID: UUID) {
+    states[worktreeID]?.markNotificationsRead(forSurfaceID: surfaceID)
+  }
+
   func surfaceBackgroundOpacity() -> Double {
     runtime?.backgroundOpacity() ?? 1.0
+  }
+
+  func unfocusedSplitOverlay() -> (fill: Color?, opacity: Double) {
+    guard let runtime else { return (nil, 0) }
+    return (runtime.unfocusedSplitFill(), runtime.unfocusedSplitOverlayOpacity())
   }
 
   func syncPreferredFontSize(from worktreeID: Worktree.ID) {

@@ -2,6 +2,22 @@ import AppKit
 import ComposableArchitecture
 import Foundation
 
+private let unresolvedGithubRepositoryMessage =
+  "Prowl could not determine which GitHub repository owns this pull request. Check the repository remote and try again."
+
+extension RepositoriesFeature {
+  static func resolveGithubRemoteInfo(
+    repositoryRootURL: URL,
+    githubCLI: GithubCLIClient,
+    gitClient: GitClientDependency
+  ) async -> GithubRemoteInfo? {
+    if let remoteInfo = await githubCLI.resolveRemoteInfo(repositoryRootURL) {
+      return remoteInfo
+    }
+    return await gitClient.remoteInfo(repositoryRootURL)
+  }
+}
+
 extension RepositoriesFeature {
   // swiftlint:disable:next cyclomatic_complexity function_body_length
   func reduceGithubIntegration(
@@ -312,6 +328,7 @@ extension RepositoriesFeature {
       case .markReadyForReview:
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
+        let gitClient = gitClient
         return .run { send in
           guard await githubIntegration.isAvailable() else {
             await send(
@@ -324,7 +341,19 @@ extension RepositoriesFeature {
           }
           await send(.showToast(.inProgress("Marking PR ready…")))
           do {
-            try await githubCLI.markPullRequestReady(worktreeRoot, pullRequest.number)
+            guard
+              let remoteInfo = await Self.resolveGithubRemoteInfo(
+                repositoryRootURL: repoRoot,
+                githubCLI: githubCLI,
+                gitClient: gitClient
+              )
+            else {
+              await send(.dismissToast)
+              await send(
+                .presentAlert(title: "GitHub repository not resolved", message: unresolvedGithubRepositoryMessage))
+              return
+            }
+            try await githubCLI.markPullRequestReady(worktreeRoot, remoteInfo, pullRequest.number)
             await send(.showToast(.success("Pull request marked ready")))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
           } catch {
@@ -341,6 +370,7 @@ extension RepositoriesFeature {
       case .merge:
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
+        let gitClient = gitClient
         return .run { send in
           guard await githubIntegration.isAvailable() else {
             await send(
@@ -356,7 +386,19 @@ extension RepositoriesFeature {
           let strategy = repositorySettings.pullRequestMergeStrategy ?? settingsFile.global.pullRequestMergeStrategy
           await send(.showToast(.inProgress("Merging pull request…")))
           do {
-            try await githubCLI.mergePullRequest(worktreeRoot, pullRequest.number, strategy)
+            guard
+              let remoteInfo = await Self.resolveGithubRemoteInfo(
+                repositoryRootURL: repoRoot,
+                githubCLI: githubCLI,
+                gitClient: gitClient
+              )
+            else {
+              await send(.dismissToast)
+              await send(
+                .presentAlert(title: "GitHub repository not resolved", message: unresolvedGithubRepositoryMessage))
+              return
+            }
+            try await githubCLI.mergePullRequest(worktreeRoot, remoteInfo, pullRequest.number, strategy)
             await send(.showToast(.success("Pull request merged")))
             await send(.worktreeInfoEvent(pullRequestRefresh))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
@@ -374,6 +416,7 @@ extension RepositoriesFeature {
       case .close:
         let githubCLI = githubCLI
         let githubIntegration = githubIntegration
+        let gitClient = gitClient
         return .run { send in
           guard await githubIntegration.isAvailable() else {
             await send(
@@ -386,7 +429,19 @@ extension RepositoriesFeature {
           }
           await send(.showToast(.inProgress("Closing pull request…")))
           do {
-            try await githubCLI.closePullRequest(worktreeRoot, pullRequest.number)
+            guard
+              let remoteInfo = await Self.resolveGithubRemoteInfo(
+                repositoryRootURL: repoRoot,
+                githubCLI: githubCLI,
+                gitClient: gitClient
+              )
+            else {
+              await send(.dismissToast)
+              await send(
+                .presentAlert(title: "GitHub repository not resolved", message: unresolvedGithubRepositoryMessage))
+              return
+            }
+            try await githubCLI.closePullRequest(worktreeRoot, remoteInfo, pullRequest.number)
             await send(.showToast(.success("Pull request closed")))
             await send(.worktreeInfoEvent(pullRequestRefresh))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))

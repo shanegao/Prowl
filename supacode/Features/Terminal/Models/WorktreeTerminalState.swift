@@ -65,9 +65,22 @@ final class WorktreeTerminalState {
     notifications.contains { !$0.isRead }
   }
 
+  func hasUnseenNotification(forSurfaceID surfaceID: UUID) -> Bool {
+    notifications.contains { !$0.isRead && $0.surfaceId == surfaceID }
+  }
+
   func hasUnseenNotification(for tabId: TerminalTabID) -> Bool {
     let surfaceIds = trees[tabId]?.leaves().map(\.id) ?? []
     return notifications.contains { !$0.isRead && surfaceIds.contains($0.surfaceId) }
+  }
+
+  func unreadNotifications() -> [WorktreeTerminalNotification] {
+    notifications.filter { !$0.isRead }.sorted { left, right in
+      if left.createdAt != right.createdAt {
+        return left.createdAt > right.createdAt
+      }
+      return left.id.uuidString > right.id.uuidString
+    }
   }
 
   var canCloseFocusedTab: Bool {
@@ -84,7 +97,7 @@ final class WorktreeTerminalState {
   }
 
   var isSelected: () -> Bool = { false }
-  var onNotificationReceived: ((String, String) -> Void)?
+  var onNotificationReceived: ((UUID, String, String) -> Void)?
   var onNotificationIndicatorChanged: (() -> Void)?
   var onTabCreated: (() -> Void)?
   var onTabClosed: (() -> Void)?
@@ -576,6 +589,10 @@ final class WorktreeTerminalState {
     focusedSurfaceIdByTab[tabId]
   }
 
+  func activeSurfaceID(for tabId: TerminalTabID) -> UUID? {
+    focusedSurfaceIdByTab[tabId]
+  }
+
   /// Marks a surface so that its next successful `command_finished` event (exit 0)
   /// will trigger a one-shot close of that surface.
   func markSurfaceForAutoClose(_ surfaceId: UUID) {
@@ -945,6 +962,15 @@ final class WorktreeTerminalState {
     emitNotificationIndicatorIfNeeded(previousHasUnseen: previousHasUnseen)
   }
 
+  func markNotificationRead(id notificationID: WorktreeTerminalNotification.ID) {
+    let previousHasUnseen = hasUnseenNotification
+    guard let index = notifications.firstIndex(where: { $0.id == notificationID }) else {
+      return
+    }
+    notifications[index].isRead = true
+    emitNotificationIndicatorIfNeeded(previousHasUnseen: previousHasUnseen)
+  }
+
   func dismissNotification(_ notificationID: WorktreeTerminalNotification.ID) {
     let previousHasUnseen = hasUnseenNotification
     notifications.removeAll { $0.id == notificationID }
@@ -1092,10 +1118,7 @@ final class WorktreeTerminalState {
   private func configureSurfaceCallbacks(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     view.onFocusChange = { [weak self, weak view] focused in
       guard let self, let view, focused else { return }
-      self.focusedSurfaceIdByTab[tabId] = view.id
-      self.markNotificationsRead(forSurfaceID: view.id)
-      self.updateTabTitle(for: tabId)
-      self.emitFocusChangedIfNeeded(view.id)
+      self.recordActiveSurface(view, in: tabId)
       self.emitTaskStatusIfChanged()
     }
     view.onKeyInput = { [weak self, weak view] in
@@ -1276,12 +1299,16 @@ final class WorktreeTerminalState {
 
   private func focusSurface(_ surface: GhosttySurfaceView, in tabId: TerminalTabID) {
     let previousSurface = focusedSurfaceIdByTab[tabId].flatMap { surfaces[$0] }
-    focusedSurfaceIdByTab[tabId] = surface.id
-    markNotificationsRead(forSurfaceID: surface.id)
-    updateTabTitle(for: tabId)
+    recordActiveSurface(surface, in: tabId)
     guard tabId == tabManager.selectedTabId else { return }
     let fromSurface = (previousSurface === surface) ? nil : previousSurface
     GhosttySurfaceView.moveFocus(to: surface, from: fromSurface)
+  }
+
+  private func recordActiveSurface(_ surface: GhosttySurfaceView, in tabId: TerminalTabID) {
+    focusedSurfaceIdByTab[tabId] = surface.id
+    markNotificationsRead(forSurfaceID: surface.id)
+    updateTabTitle(for: tabId)
     emitFocusChangedIfNeeded(surface.id)
   }
 
@@ -1297,13 +1324,14 @@ final class WorktreeTerminalState {
           surfaceId: surfaceId,
           title: trimmedTitle,
           body: trimmedBody,
+          createdAt: Date(),
           isRead: isRead
         ),
         at: 0
       )
       emitNotificationIndicatorIfNeeded(previousHasUnseen: previousHasUnseen)
     }
-    onNotificationReceived?(trimmedTitle, trimmedBody)
+    onNotificationReceived?(surfaceId, trimmedTitle, trimmedBody)
   }
 
   /// How recently the user must have typed for us to consider the exit user-initiated.
@@ -1582,11 +1610,15 @@ final class WorktreeTerminalState {
     tabIsRunningById.removeValue(forKey: tabId)
   }
 
-  private func tabId(containing surfaceId: UUID) -> TerminalTabID? {
+  func tabID(containing surfaceId: UUID) -> TerminalTabID? {
     for (tabId, tree) in trees where tree.find(id: surfaceId) != nil {
       return tabId
     }
     return nil
+  }
+
+  private func tabId(containing surfaceId: UUID) -> TerminalTabID? {
+    tabID(containing: surfaceId)
   }
 
   private func isFocusedSurface(_ surfaceId: UUID) -> Bool {

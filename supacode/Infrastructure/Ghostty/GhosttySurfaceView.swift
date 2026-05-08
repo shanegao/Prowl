@@ -1196,10 +1196,16 @@ final class GhosttySurfaceView: NSView, Identifiable {
     guard event.type == .keyDown else { return false }
     let isFontSizeShortcut = matchesFontSizeShortcut(event: event)
     guard let surface else { return false }
-    guard focused else { return false }
+    guard
+      Self.hasKeyEquivalentFocusOwnership(
+        cachedFocused: focused,
+        isActualFirstResponder: window?.firstResponder === self
+      )
+    else { return false }
 
     if UserCustomShortcutRegistry.shared.matches(event: event),
       let menu = NSApp.mainMenu,
+      Self.mainMenuHasMatchingItem(for: event, in: menu),
       menu.performKeyEquivalent(with: event)
     {
       return true
@@ -1208,6 +1214,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     if let bindingFlags = bindingFlags(for: event, surface: surface) {
       if shouldAttemptMenu(for: bindingFlags),
         let menu = NSApp.mainMenu,
+        Self.mainMenuHasMatchingItem(for: event, in: menu),
         menu.performKeyEquivalent(with: event)
       {
         return true
@@ -1437,6 +1444,84 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   @IBAction func changeTitle(_ sender: Any?) {
     performBindingAction("prompt_surface_title")
+  }
+
+  static func hasKeyEquivalentFocusOwnership(
+    cachedFocused: Bool,
+    isActualFirstResponder: Bool
+  ) -> Bool {
+    cachedFocused && isActualFirstResponder
+  }
+
+  static func mainMenuHasMatchingItem(for event: NSEvent, in menu: NSMenu) -> Bool {
+    let eventEquivalents = normalizedEventKeyEquivalents(for: event)
+    guard !eventEquivalents.isEmpty else { return false }
+
+    for item in menu.items {
+      if let submenu = item.submenu, mainMenuHasMatchingItem(for: event, in: submenu) {
+        return true
+      }
+
+      guard !item.keyEquivalent.isEmpty else { continue }
+      guard
+        let itemEquivalent = normalizedKeyEquivalent(
+          key: item.keyEquivalent,
+          modifiers: item.keyEquivalentModifierMask
+        )
+      else { continue }
+      if eventEquivalents.contains(where: { $0 == itemEquivalent }) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private static let shortcutMask: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+
+  private static let shiftedKeyEquivalentBases: [Character: Character] = [
+    "~": "`", "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7",
+    "*": "8", "(": "9", ")": "0", "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\",
+    ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/",
+  ]
+
+  private struct KeyEquivalentSignature: Equatable {
+    var key: String
+    var modifiers: NSEvent.ModifierFlags
+  }
+
+  private static func normalizedEventKeyEquivalents(for event: NSEvent) -> [KeyEquivalentSignature] {
+    let eventModifiers = event.modifierFlags.intersection(shortcutMask)
+    return [event.charactersIgnoringModifiers, event.characters]
+      .compactMap { characters in
+        characters.flatMap { normalizedKeyEquivalent(key: $0, modifiers: eventModifiers) }
+      }
+      .reduce(into: []) { result, equivalent in
+        if !result.contains(equivalent) {
+          result.append(equivalent)
+        }
+      }
+  }
+
+  private static func normalizedKeyEquivalent(
+    key: String,
+    modifiers: NSEvent.ModifierFlags
+  ) -> KeyEquivalentSignature? {
+    guard !key.isEmpty else { return nil }
+
+    var normalizedKey = key.lowercased()
+    var normalizedModifiers = modifiers.intersection(shortcutMask)
+
+    if key.count == 1, let character = key.first {
+      if let base = shiftedKeyEquivalentBases[character] {
+        normalizedKey = String(base)
+        normalizedModifiers.insert(.shift)
+      } else if normalizedKey != key {
+        normalizedModifiers.insert(.shift)
+      }
+    }
+
+    return KeyEquivalentSignature(key: normalizedKey, modifiers: normalizedModifiers)
   }
 
   private func shouldAttemptMenu(for flags: ghostty_binding_flags_e) -> Bool {

@@ -5,6 +5,7 @@ import PostHog
 import SwiftUI
 
 private let appLogger = SupaLogger("App")
+private let notificationJumpLogger = SupaLogger("NotificationJump")
 
 private enum CancelID {
   static let periodicRefresh = "app.periodicRefresh"
@@ -81,6 +82,7 @@ struct AppFeature {
     case openWorktreeFailed(OpenActionError)
     case requestQuit
     case newTerminal
+    case jumpToLatestUnread
     case runScript
     case runCustomCommand(Int)
     case runScriptDraftChanged(String)
@@ -95,6 +97,7 @@ struct AppFeature {
     case navigateSearchPrevious
     case endSearch
     case systemNotificationsPermissionFailed(errorMessage: String?)
+    case systemNotificationTapped(worktreeID: Worktree.ID, surfaceID: UUID)
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
   }
@@ -614,6 +617,24 @@ struct AppFeature {
           await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
         }
 
+      case .jumpToLatestUnread:
+        guard let location = terminalClient.latestUnreadNotification() else {
+          notificationJumpLogger.debug("jumpToLatestUnread invoked with no unread notification.")
+          return .none
+        }
+        guard state.repositories.worktree(for: location.worktreeID) != nil else {
+          notificationJumpLogger.warning("Unread notification worktree vanished: \(location.worktreeID)")
+          return .none
+        }
+        analyticsClient.capture("notifications_jump_to_latest_unread", nil)
+        return .merge(
+          .send(.repositories(.selectWorktree(location.worktreeID, focusTerminal: true))),
+          .run { _ in
+            _ = await terminalClient.focusSurface(location.worktreeID, location.surfaceID)
+            await terminalClient.markNotificationRead(location.worktreeID, location.notificationID)
+          }
+        )
+
       case .runScript:
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
@@ -855,6 +876,19 @@ struct AppFeature {
           .send(.settings(.showNotificationPermissionAlert(errorMessage: errorMessage)))
         )
 
+      case .systemNotificationTapped(let worktreeID, let surfaceID):
+        guard state.repositories.worktree(for: worktreeID) != nil else {
+          notificationJumpLogger.warning("Tapped notification worktree vanished: \(worktreeID)")
+          return .none
+        }
+        return .merge(
+          .send(.repositories(.selectWorktree(worktreeID, focusTerminal: true))),
+          .run { _ in
+            _ = await terminalClient.focusSurface(worktreeID, surfaceID)
+            await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
+          }
+        )
+
       case .alert(.dismiss):
         state.alert = nil
         return .none
@@ -909,6 +943,9 @@ struct AppFeature {
 
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .send(.repositories(.refreshWorktrees))
+
+      case .commandPalette(.delegate(.jumpToLatestUnread)):
+        return .send(.jumpToLatestUnread)
 
       case .commandPalette(.delegate(.installCLI)):
         return .send(.settings(.installCLIButtonTapped(showAlert: false)))
@@ -970,14 +1007,14 @@ struct AppFeature {
         let message = "\(name) succeeded in \(formatCustomCommandDuration(durationMs))"
         return .send(.repositories(.showToast(.success(message))))
 
-      case .terminalEvent(.notificationReceived(let worktreeID, let title, let body)):
+      case .terminalEvent(.notificationReceived(let worktreeID, let surfaceID, let title, let body)):
         var effects: [Effect<Action>] = [
           .send(.repositories(.worktreeOrdering(.worktreeNotificationReceived(worktreeID))))
         ]
         if state.settings.systemNotificationsEnabled {
           effects.append(
             .run { _ in
-              await systemNotificationClient.send(title, body)
+              await systemNotificationClient.send(title, body, worktreeID, surfaceID)
             }
           )
         }

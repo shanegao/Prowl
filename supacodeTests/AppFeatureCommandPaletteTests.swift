@@ -79,6 +79,15 @@ struct AppFeatureCommandPaletteTests {
     await store.receive(\.updates.checkForUpdates)
   }
 
+  @Test(.dependencies) func jumpToLatestUnreadDispatchesAppAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+
+    await store.send(.commandPalette(.delegate(.jumpToLatestUnread)))
+    await store.receive(\.jumpToLatestUnread)
+  }
+
   @Test(.dependencies) func ghosttyCommandDispatchesBindingActionToTerminalClient() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-ghostty/wt-1",

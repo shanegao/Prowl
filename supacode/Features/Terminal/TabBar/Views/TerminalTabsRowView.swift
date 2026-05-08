@@ -8,6 +8,7 @@ struct TerminalTabsRowView: View {
   @Binding var draggingStartLocation: CGFloat?
   @Binding var closeButtonGestureActive: Bool
   let fixedTabWidth: CGFloat?
+  let hasNotification: (TerminalTabID) -> Bool
   let renameTab: (TerminalTabID) -> Void
   let changeIcon: (TerminalTabID) -> Void
   let closeTab: (TerminalTabID) -> Void
@@ -30,6 +31,7 @@ struct TerminalTabsRowView: View {
               isDragging: draggingTabId == id,
               tabIndex: index,
               fixedWidth: fixedTabWidth,
+              hasNotification: hasNotification(id),
               onSelect: {
                 manager.selectTab(id)
               },

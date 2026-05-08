@@ -6,7 +6,9 @@ import UniformTypeIdentifiers
 struct TerminalSplitTreeView: View {
   let tree: SplitTree<GhosttySurfaceView>
   var pinnedSize: CGSize?
-  var focusedSurfaceID: UUID?
+  var activeSurfaceID: UUID?
+  var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  let hasNotification: (UUID) -> Bool
   let action: (Operation) -> Void
 
   private static let dragType = UTType(exportedAs: "com.onevcat.prowl.ghosttySurfaceId")
@@ -29,7 +31,9 @@ struct TerminalSplitTreeView: View {
         node: node,
         isRoot: node == tree.root,
         pinnedSize: pinnedSize,
-        focusedSurfaceID: focusedSurfaceID,
+        activeSurfaceID: activeSurfaceID,
+        unfocusedSplitOverlay: unfocusedSplitOverlay,
+        hasNotification: hasNotification,
         action: action
       )
       .id(node.structuralIdentity)
@@ -46,7 +50,9 @@ struct TerminalSplitTreeView: View {
     let node: SplitTree<GhosttySurfaceView>.Node
     var isRoot: Bool = false
     var pinnedSize: CGSize?
-    var focusedSurfaceID: UUID?
+    var activeSurfaceID: UUID?
+    var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+    let hasNotification: (UUID) -> Bool
     let action: (Operation) -> Void
 
     var body: some View {
@@ -55,7 +61,9 @@ struct TerminalSplitTreeView: View {
         LeafView(
           surfaceView: leafView,
           isSplit: !isRoot,
-          isFocused: leafView.id == focusedSurfaceID,
+          isFocused: leafView.id == activeSurfaceID,
+          unfocusedSplitOverlay: unfocusedSplitOverlay,
+          hasNotification: hasNotification(leafView.id),
           pinnedSize: pinnedSize,
           action: action
         )
@@ -84,7 +92,9 @@ struct TerminalSplitTreeView: View {
             SubtreeView(
               node: split.left,
               pinnedSize: leftPinned,
-              focusedSurfaceID: focusedSurfaceID,
+              activeSurfaceID: activeSurfaceID,
+              unfocusedSplitOverlay: unfocusedSplitOverlay,
+              hasNotification: hasNotification,
               action: action
             )
           },
@@ -92,7 +102,9 @@ struct TerminalSplitTreeView: View {
             SubtreeView(
               node: split.right,
               pinnedSize: rightPinned,
-              focusedSurfaceID: focusedSurfaceID,
+              activeSurfaceID: activeSurfaceID,
+              unfocusedSplitOverlay: unfocusedSplitOverlay,
+              hasNotification: hasNotification,
               action: action
             )
           },
@@ -119,22 +131,20 @@ struct TerminalSplitTreeView: View {
     let surfaceView: GhosttySurfaceView
     let isSplit: Bool
     var isFocused: Bool = true
+    var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+    let hasNotification: Bool
     var pinnedSize: CGSize?
     let action: (Operation) -> Void
 
     @State private var dropState: DropState = .idle
     @Shared(.settingsFile) private var settingsFile: SettingsFile
-    @Environment(\.colorScheme) private var colorScheme
 
     private var shouldDim: Bool {
-      isSplit && !isFocused && settingsFile.global.dimUnfocusedSplits
-    }
-
-    /// Lighter tint in light mode so the inactive pane reads as faded
-    /// rather than washed in grey; dark mode's deeper tint matches the
-    /// effect users see in Ghostty.app.
-    private var dimOpacity: Double {
-      colorScheme == .dark ? 0.3 : 0.12
+      isSplit
+        && !isFocused
+        && settingsFile.global.dimUnfocusedSplits
+        && unfocusedSplitOverlay.fill != nil
+        && unfocusedSplitOverlay.opacity > 0
     }
 
     var body: some View {
@@ -142,10 +152,8 @@ struct TerminalSplitTreeView: View {
         GhosttyTerminalView(surfaceView: surfaceView, pinnedSize: pinnedSize)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay {
-            // Mirrors Ghostty's `unfocused-split-fill`/`unfocused-split-opacity`:
-            // a translucent black tint fades the inactive pane.
-            Color.black
-              .opacity(shouldDim ? dimOpacity : 0)
+            unfocusedSplitOverlay.fill
+              .opacity(shouldDim ? unfocusedSplitOverlay.opacity : 0)
               .allowsHitTesting(false)
               .animation(.easeOut(duration: 0.12), value: shouldDim)
           }
@@ -156,6 +164,13 @@ struct TerminalSplitTreeView: View {
             if surfaceView.bridge.state.searchNeedle != nil {
               GhosttySurfaceSearchOverlay(surfaceView: surfaceView)
             }
+          }
+          .overlay(alignment: .topTrailing) {
+            SurfaceNotificationDot()
+              .padding(6)
+              .opacity(hasNotification ? 1 : 0)
+              .allowsHitTesting(false)
+              .animation(.easeInOut(duration: 0.2), value: hasNotification)
           }
           .overlay(alignment: .top) {
             if isSplit {
@@ -340,13 +355,27 @@ struct TerminalSplitTreeView: View {
   }
 }
 
+private struct SurfaceNotificationDot: View {
+  var body: some View {
+    Circle()
+      .fill(.orange)
+      .frame(width: 8, height: 8)
+      .overlay {
+        Circle().stroke(.background, lineWidth: 1)
+      }
+      .accessibilityLabel("Unread notifications")
+  }
+}
+
 // MARK: - Accessibility Container
 
 /// Wraps the SwiftUI split tree in an AppKit view so we can expose an ordered
 /// list of terminal panes to assistive technologies.
 struct TerminalSplitTreeAXContainer: NSViewRepresentable {
   let tree: SplitTree<GhosttySurfaceView>
-  var focusedSurfaceID: UUID?
+  var activeSurfaceID: UUID?
+  var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  let hasNotification: (UUID) -> Bool
   let action: (TerminalSplitTreeView.Operation) -> Void
 
   func makeNSView(context: Context) -> TerminalSplitAXContainerView {
@@ -358,7 +387,9 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
       rootView: AnyView(
         TerminalSplitTreeView(
           tree: tree,
-          focusedSurfaceID: focusedSurfaceID,
+          activeSurfaceID: activeSurfaceID,
+          unfocusedSplitOverlay: unfocusedSplitOverlay,
+          hasNotification: hasNotification,
           action: action
         )
       ),

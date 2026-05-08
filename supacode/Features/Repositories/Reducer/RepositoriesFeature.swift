@@ -1152,7 +1152,13 @@ struct RepositoriesFeature {
     let gitClient = gitClient
     let githubCLI = githubCLI
     return .run { send in
-      guard let remoteInfo = await gitClient.remoteInfo(repositoryRootURL) else {
+      guard
+        let remoteInfo = await Self.resolveGithubRemoteInfo(
+          repositoryRootURL: repositoryRootURL,
+          githubCLI: githubCLI,
+          gitClient: gitClient
+        )
+      else {
         await send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
         return
       }
