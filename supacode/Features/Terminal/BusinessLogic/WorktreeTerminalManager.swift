@@ -466,6 +466,10 @@ final class WorktreeTerminalManager {
     states[worktreeID]?.markNotificationRead(id: notificationID)
   }
 
+  func markNotificationsRead(worktreeID: Worktree.ID, surfaceID: UUID) {
+    states[worktreeID]?.markNotificationsRead(forSurfaceID: surfaceID)
+  }
+
   func surfaceBackgroundOpacity() -> Double {
     runtime?.backgroundOpacity() ?? 1.0
   }

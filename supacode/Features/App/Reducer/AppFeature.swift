@@ -885,6 +885,7 @@ struct AppFeature {
           .send(.repositories(.selectWorktree(worktreeID, focusTerminal: true))),
           .run { _ in
             _ = await terminalClient.focusSurface(worktreeID, surfaceID)
+            await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
           }
         )
 
@@ -942,6 +943,9 @@ struct AppFeature {
 
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .send(.repositories(.refreshWorktrees))
+
+      case .commandPalette(.delegate(.jumpToLatestUnread)):
+        return .send(.jumpToLatestUnread)
 
       case .commandPalette(.delegate(.installCLI)):
         return .send(.settings(.installCLIButtonTapped(showAlert: false)))

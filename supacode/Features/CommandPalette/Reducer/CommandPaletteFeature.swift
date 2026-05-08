@@ -40,6 +40,7 @@ struct CommandPaletteFeature {
     case archiveWorktree(Worktree.ID, Repository.ID)
     case viewArchivedWorktrees
     case refreshWorktrees
+    case jumpToLatestUnread
     case ghosttyCommand(String)
     case openPullRequest(Worktree.ID)
     case markPullRequestReady(Worktree.ID)
@@ -207,6 +208,14 @@ struct CommandPaletteFeature {
         title: "Refresh Worktrees",
         subtitle: nil,
         kind: .refreshWorktrees
+      )
+    )
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.globalJumpToLatestUnread,
+        title: "Jump to Latest Unread",
+        subtitle: nil,
+        kind: .jumpToLatestUnread
       )
     )
     items.append(
@@ -493,6 +502,7 @@ private enum CommandPaletteItemID {
   static let globalOpenRepository = "global.open-repository"
   static let globalNewWorktree = "global.new-worktree"
   static let globalRefreshWorktrees = "global.refresh-worktrees"
+  static let globalJumpToLatestUnread = "global.jump-to-latest-unread"
   static let globalViewArchivedWorktrees = "global.view-archived-worktrees"
   static let globalInstallCLI = "global.install-cli"
 
@@ -503,6 +513,7 @@ private enum CommandPaletteItemID {
       globalOpenRepository,
       globalNewWorktree,
       globalRefreshWorktrees,
+      globalJumpToLatestUnread,
       globalViewArchivedWorktrees,
       globalInstallCLI,
     ]
@@ -599,27 +610,16 @@ private func commandPaletteRecencyScore(
 }
 
 private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate {
+  if let appAction = appDelegateAction(for: kind) {
+    return appAction
+  }
   switch kind {
   case .worktreeSelect(let id):
     return .selectWorktree(id)
-  case .checkForUpdates:
-    return .checkForUpdates
-  case .openSettings:
-    return .openSettings
-  case .newWorktree:
-    return .newWorktree
-  case .openRepository:
-    return .openRepository
   case .removeWorktree(let worktreeID, let repositoryID):
     return .removeWorktree(worktreeID, repositoryID)
   case .archiveWorktree(let worktreeID, let repositoryID):
     return .archiveWorktree(worktreeID, repositoryID)
-  case .viewArchivedWorktrees:
-    return .viewArchivedWorktrees
-  case .refreshWorktrees:
-    return .refreshWorktrees
-  case .installCLI:
-    return .installCLI
   case .ghosttyCommand(let action):
     return .ghosttyCommand(action)
   case .changeFocusedTabIcon(let worktreeID):
@@ -640,6 +640,38 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     case .debugSimulateUpdateFound:
       return .debugSimulateUpdateFound
   #endif
+  case .checkForUpdates,
+    .openSettings,
+    .newWorktree,
+    .openRepository,
+    .viewArchivedWorktrees,
+    .refreshWorktrees,
+    .jumpToLatestUnread,
+    .installCLI:
+    fatalError("appDelegateAction should handle app-level command palette actions")
+  }
+}
+
+private func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate? {
+  switch kind {
+  case .checkForUpdates:
+    return .checkForUpdates
+  case .openSettings:
+    return .openSettings
+  case .newWorktree:
+    return .newWorktree
+  case .openRepository:
+    return .openRepository
+  case .viewArchivedWorktrees:
+    return .viewArchivedWorktrees
+  case .refreshWorktrees:
+    return .refreshWorktrees
+  case .jumpToLatestUnread:
+    return .jumpToLatestUnread
+  case .installCLI:
+    return .installCLI
+  default:
+    return nil
   }
 }
 
@@ -673,6 +705,7 @@ private func pullRequestDelegateAction(
     .archiveWorktree,
     .viewArchivedWorktrees,
     .refreshWorktrees,
+    .jumpToLatestUnread,
     .installCLI,
     .ghosttyCommand,
     .changeFocusedTabIcon:

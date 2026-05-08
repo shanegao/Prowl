@@ -58,6 +58,7 @@ struct AppFeatureJumpToLatestUnreadTests {
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.snapshotPersistencePhase = .active
     let focusedSurfaces = LockIsolated<[(Worktree.ID, UUID)]>([])
+    let readSurfaces = LockIsolated<[(Worktree.ID, UUID)]>([])
     let store = TestStore(
       initialState: AppFeature.State(repositories: repositoriesState)
     ) {
@@ -66,6 +67,9 @@ struct AppFeatureJumpToLatestUnreadTests {
       $0.terminalClient.focusSurface = { worktreeID, targetSurfaceID in
         focusedSurfaces.withValue { $0.append((worktreeID, targetSurfaceID)) }
         return true
+      }
+      $0.terminalClient.markNotificationsReadForSurface = { worktreeID, targetSurfaceID in
+        readSurfaces.withValue { $0.append((worktreeID, targetSurfaceID)) }
       }
     }
     store.exhaustivity = .off
@@ -77,6 +81,7 @@ struct AppFeatureJumpToLatestUnreadTests {
     await store.finish()
 
     #expect(focusedSurfaces.value.map { "\($0.0)|\($0.1.uuidString)" } == ["\(worktree.id)|\(surfaceID.uuidString)"])
+    #expect(readSurfaces.value.map { "\($0.0)|\($0.1.uuidString)" } == ["\(worktree.id)|\(surfaceID.uuidString)"])
   }
 
   private func makeWorktree() -> Worktree {

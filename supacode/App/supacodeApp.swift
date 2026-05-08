@@ -264,6 +264,9 @@ struct SupacodeApp: App {
       },
       markNotificationRead: { worktreeID, notificationID in
         terminalManager.markNotificationRead(worktreeID: worktreeID, notificationID: notificationID)
+      },
+      markNotificationsReadForSurface: { worktreeID, surfaceID in
+        terminalManager.markNotificationsRead(worktreeID: worktreeID, surfaceID: surfaceID)
       }
     )
   }

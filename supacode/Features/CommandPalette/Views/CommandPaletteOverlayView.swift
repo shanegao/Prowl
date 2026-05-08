@@ -348,7 +348,7 @@ private struct CommandPaletteRowView: View {
   private var badge: String? {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .ghosttyCommand,
+      .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
@@ -379,6 +379,8 @@ private struct CommandPaletteRowView: View {
       return "archivebox"
     case .refreshWorktrees:
       return "arrow.clockwise"
+    case .jumpToLatestUnread:
+      return "bell.badge"
     case .ghosttyCommand:
       return "terminal"
     case .openPullRequest, .openRepositoryOnCodeHost:
@@ -419,7 +421,7 @@ private struct CommandPaletteRowView: View {
   private var emphasis: Bool {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .ghosttyCommand,
+      .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
@@ -515,6 +517,8 @@ private struct CommandPaletteRowView: View {
       base = "View Archived Worktrees"
     case .refreshWorktrees:
       base = "Refresh Worktrees"
+    case .jumpToLatestUnread:
+      base = "Jump to Latest Unread"
     case .ghosttyCommand:
       base = row.title
     case .removeWorktree:
