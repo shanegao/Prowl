@@ -5,6 +5,10 @@ struct TerminalClient {
   var send: @MainActor @Sendable (Command) -> Void
   var events: @MainActor @Sendable () -> AsyncStream<Event>
   var canvasFocusedWorktreeID: @MainActor @Sendable () -> Worktree.ID?
+  var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
+  var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
+  var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
+  var markNotificationsReadForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Void
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
@@ -49,7 +53,7 @@ struct TerminalClient {
 
   enum Event: Equatable {
     case customCommandSucceeded(worktreeID: Worktree.ID, name: String, durationMs: Int)
-    case notificationReceived(worktreeID: Worktree.ID, title: String, body: String)
+    case notificationReceived(worktreeID: Worktree.ID, surfaceID: UUID, title: String, body: String)
     case notificationIndicatorChanged(count: Int)
     case tabCreated(worktreeID: Worktree.ID)
     case tabClosed(worktreeID: Worktree.ID, remainingTabs: Int)
@@ -68,13 +72,21 @@ extension TerminalClient: DependencyKey {
   static let liveValue = TerminalClient(
     send: { _ in fatalError("TerminalClient.send not configured") },
     events: { fatalError("TerminalClient.events not configured") },
-    canvasFocusedWorktreeID: { nil }
+    canvasFocusedWorktreeID: { nil },
+    latestUnreadNotification: { nil },
+    focusSurface: { _, _ in false },
+    markNotificationRead: { _, _ in },
+    markNotificationsReadForSurface: { _, _ in }
   )
 
   static let testValue = TerminalClient(
     send: { _ in },
     events: { AsyncStream { $0.finish() } },
-    canvasFocusedWorktreeID: { nil }
+    canvasFocusedWorktreeID: { nil },
+    latestUnreadNotification: { nil },
+    focusSurface: { _, _ in false },
+    markNotificationRead: { _, _ in },
+    markNotificationsReadForSurface: { _, _ in }
   )
 }
 

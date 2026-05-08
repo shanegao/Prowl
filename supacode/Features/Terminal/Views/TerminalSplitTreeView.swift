@@ -8,6 +8,7 @@ struct TerminalSplitTreeView: View {
   var pinnedSize: CGSize?
   var activeSurfaceID: UUID?
   var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  let hasNotification: (UUID) -> Bool
   let action: (Operation) -> Void
 
   private static let dragType = UTType(exportedAs: "com.onevcat.prowl.ghosttySurfaceId")
@@ -32,6 +33,7 @@ struct TerminalSplitTreeView: View {
         pinnedSize: pinnedSize,
         activeSurfaceID: activeSurfaceID,
         unfocusedSplitOverlay: unfocusedSplitOverlay,
+        hasNotification: hasNotification,
         action: action
       )
       .id(node.structuralIdentity)
@@ -50,6 +52,7 @@ struct TerminalSplitTreeView: View {
     var pinnedSize: CGSize?
     var activeSurfaceID: UUID?
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+    let hasNotification: (UUID) -> Bool
     let action: (Operation) -> Void
 
     var body: some View {
@@ -60,6 +63,7 @@ struct TerminalSplitTreeView: View {
           isSplit: !isRoot,
           isFocused: leafView.id == activeSurfaceID,
           unfocusedSplitOverlay: unfocusedSplitOverlay,
+          hasNotification: hasNotification(leafView.id),
           pinnedSize: pinnedSize,
           action: action
         )
@@ -90,6 +94,7 @@ struct TerminalSplitTreeView: View {
               pinnedSize: leftPinned,
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
+              hasNotification: hasNotification,
               action: action
             )
           },
@@ -99,6 +104,7 @@ struct TerminalSplitTreeView: View {
               pinnedSize: rightPinned,
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
+              hasNotification: hasNotification,
               action: action
             )
           },
@@ -126,6 +132,7 @@ struct TerminalSplitTreeView: View {
     let isSplit: Bool
     var isFocused: Bool = true
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+    let hasNotification: Bool
     var pinnedSize: CGSize?
     let action: (Operation) -> Void
 
@@ -157,6 +164,13 @@ struct TerminalSplitTreeView: View {
             if surfaceView.bridge.state.searchNeedle != nil {
               GhosttySurfaceSearchOverlay(surfaceView: surfaceView)
             }
+          }
+          .overlay(alignment: .topTrailing) {
+            SurfaceNotificationDot()
+              .padding(6)
+              .opacity(hasNotification ? 1 : 0)
+              .allowsHitTesting(false)
+              .animation(.easeInOut(duration: 0.2), value: hasNotification)
           }
           .overlay(alignment: .top) {
             if isSplit {
@@ -341,6 +355,18 @@ struct TerminalSplitTreeView: View {
   }
 }
 
+private struct SurfaceNotificationDot: View {
+  var body: some View {
+    Circle()
+      .fill(.orange)
+      .frame(width: 8, height: 8)
+      .overlay {
+        Circle().stroke(.background, lineWidth: 1)
+      }
+      .accessibilityLabel("Unread notifications")
+  }
+}
+
 // MARK: - Accessibility Container
 
 /// Wraps the SwiftUI split tree in an AppKit view so we can expose an ordered
@@ -349,6 +375,7 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
   let tree: SplitTree<GhosttySurfaceView>
   var activeSurfaceID: UUID?
   var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  let hasNotification: (UUID) -> Bool
   let action: (TerminalSplitTreeView.Operation) -> Void
 
   func makeNSView(context: Context) -> TerminalSplitAXContainerView {
@@ -362,6 +389,7 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
           tree: tree,
           activeSurfaceID: activeSurfaceID,
           unfocusedSplitOverlay: unfocusedSplitOverlay,
+          hasNotification: hasNotification,
           action: action
         )
       ),

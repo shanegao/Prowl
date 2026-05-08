@@ -42,6 +42,9 @@ struct WorktreeTerminalTabsView: View {
         },
         closeAll: {
           state.closeAllTabs()
+        },
+        hasNotification: { tabId in
+          state.hasUnseenNotification(for: tabId)
         }
       )
       if let selectedId = state.tabManager.selectedTabId {
@@ -50,6 +53,9 @@ struct WorktreeTerminalTabsView: View {
             tree: state.splitTree(for: tabId),
             activeSurfaceID: state.activeSurfaceID(for: tabId),
             unfocusedSplitOverlay: unfocusedSplitOverlay,
+            hasNotification: { surfaceID in
+              state.hasUnseenNotification(forSurfaceID: surfaceID)
+            },
             action: { operation in
               state.performSplitOperation(operation, in: tabId)
             }

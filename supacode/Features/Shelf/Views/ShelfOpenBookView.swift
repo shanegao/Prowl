@@ -32,6 +32,9 @@ struct ShelfOpenBookView: View {
             tree: state.splitTree(for: tabId),
             activeSurfaceID: state.activeSurfaceID(for: tabId),
             unfocusedSplitOverlay: unfocusedSplitOverlay,
+            hasNotification: { surfaceID in
+              state.hasUnseenNotification(forSurfaceID: surfaceID)
+            },
             action: { operation in
               state.performSplitOperation(operation, in: tabId)
             }

@@ -5,6 +5,13 @@ import Testing
 
 @testable import supacode
 
+private struct SystemNotificationSend: Equatable {
+  let title: String
+  let body: String
+  let worktreeID: Worktree.ID?
+  let surfaceID: UUID?
+}
+
 @MainActor
 struct AppFeatureSystemNotificationTests {
   @Test(.dependencies) func firstTimeDeniedTurnsSystemNotificationsBackOffWithAlert() async {
@@ -118,7 +125,8 @@ struct AppFeatureSystemNotificationTests {
   @Test(.dependencies) func notificationReceivedSendsSystemNotificationWhenEnabled() async {
     var globalSettings = GlobalSettings.default
     globalSettings.systemNotificationsEnabled = true
-    let sends = LockIsolated<[(String, String)]>([])
+    let surfaceID = UUID()
+    let sends = LockIsolated<[SystemNotificationSend]>([])
     let store = TestStore(
       initialState: AppFeature.State(
         settings: SettingsFeature.State(settings: globalSettings)
@@ -126,8 +134,17 @@ struct AppFeatureSystemNotificationTests {
     ) {
       AppFeature()
     } withDependencies: {
-      $0.systemNotificationClient.send = { title, body in
-        sends.withValue { $0.append((title, body)) }
+      $0.systemNotificationClient.send = { title, body, worktreeID, targetSurfaceID in
+        sends.withValue {
+          $0.append(
+            SystemNotificationSend(
+              title: title,
+              body: body,
+              worktreeID: worktreeID,
+              surfaceID: targetSurfaceID
+            )
+          )
+        }
       }
     }
     store.exhaustivity = .off
@@ -136,6 +153,7 @@ struct AppFeatureSystemNotificationTests {
       .terminalEvent(
         .notificationReceived(
           worktreeID: "/tmp/repo/wt-1",
+          surfaceID: surfaceID,
           title: "Done",
           body: "Build succeeded"
         )
@@ -144,8 +162,10 @@ struct AppFeatureSystemNotificationTests {
     await store.finish()
 
     #expect(sends.value.count == 1)
-    #expect(sends.value.first?.0 == "Done")
-    #expect(sends.value.first?.1 == "Build succeeded")
+    #expect(sends.value.first?.title == "Done")
+    #expect(sends.value.first?.body == "Build succeeded")
+    #expect(sends.value.first?.worktreeID == "/tmp/repo/wt-1")
+    #expect(sends.value.first?.surfaceID == surfaceID)
   }
 
   @Test(.dependencies) func notificationReceivedSkipsLocalSoundWhenSystemNotificationsEnabled() async {
@@ -170,6 +190,7 @@ struct AppFeatureSystemNotificationTests {
       .terminalEvent(
         .notificationReceived(
           worktreeID: "/tmp/repo/wt-1",
+          surfaceID: UUID(),
           title: "Done",
           body: "Build succeeded"
         )
@@ -196,7 +217,7 @@ struct AppFeatureSystemNotificationTests {
       $0.notificationSoundClient.play = {
         plays.withValue { $0 += 1 }
       }
-      $0.systemNotificationClient.send = { _, _ in
+      $0.systemNotificationClient.send = { _, _, _, _ in
         sends.withValue { $0 += 1 }
       }
     }
@@ -206,6 +227,7 @@ struct AppFeatureSystemNotificationTests {
       .terminalEvent(
         .notificationReceived(
           worktreeID: "/tmp/repo/wt-1",
+          surfaceID: UUID(),
           title: "Done",
           body: "Build succeeded"
         )

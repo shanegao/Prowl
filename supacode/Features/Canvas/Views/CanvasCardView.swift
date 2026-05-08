@@ -232,6 +232,7 @@ struct CanvasCardView: View {
       pinnedSize: cardSize,
       activeSurfaceID: activeSurfaceID,
       unfocusedSplitOverlay: unfocusedSplitOverlay,
+      hasNotification: { _ in false },
       action: onSplitOperation
     )
     .frame(width: cardSize.width, height: cardSize.height)

@@ -48,7 +48,96 @@ actor GithubBatchShellProbe {
   }
 }
 
+actor GithubCommandProbe {
+  struct Call: Equatable {
+    let arguments: [String]
+    let currentDirectoryURL: URL?
+  }
+
+  private var calls: [Call] = []
+
+  func record(arguments: [String], currentDirectoryURL: URL?) {
+    calls.append(Call(arguments: arguments, currentDirectoryURL: currentDirectoryURL))
+  }
+
+  func snapshot() -> [Call] {
+    calls
+  }
+}
+
 struct GithubCLIClientTests {
+  @Test func resolveRemoteInfoUsesGhRepoView() async throws {
+    let repoRoot = URL(fileURLWithPath: "/tmp/fork")
+    let probe = GithubCommandProbe()
+    let shell = ShellClient(
+      run: { executableURL, _, _ in
+        if executableURL.lastPathComponent == "which" {
+          return ShellOutput(stdout: "/usr/bin/gh", stderr: "", exitCode: 0)
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
+        guard executableURL.lastPathComponent == "gh" else {
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+        await probe.record(arguments: arguments, currentDirectoryURL: currentDirectoryURL)
+        return ShellOutput(
+          stdout: #"{"owner":{"login":"supabitapp"},"name":"supacode","url":"https://github.com/supabitapp/supacode"}"#,
+          stderr: "",
+          exitCode: 0
+        )
+      }
+    )
+    let client = GithubCLIClient.live(shell: shell)
+
+    let remoteInfo = try await client.resolveRemoteInfo(repoRoot)
+
+    #expect(remoteInfo == GithubRemoteInfo(host: "github.com", owner: "supabitapp", repo: "supacode"))
+    let calls = await probe.snapshot()
+    #expect(
+      calls == [
+        GithubCommandProbe.Call(
+          arguments: ["repo", "view", "--json", "owner,name,url"],
+          currentDirectoryURL: repoRoot
+        )
+      ])
+  }
+
+  @Test func pullRequestMutationsUseResolvedRemoteInfo() async throws {
+    let repoRoot = URL(fileURLWithPath: "/tmp/fork")
+    let remoteInfo = GithubRemoteInfo(host: "github.enterprise.test", owner: "octo", repo: "repo")
+    let probe = GithubCommandProbe()
+    let shell = ShellClient(
+      run: { executableURL, _, _ in
+        if executableURL.lastPathComponent == "which" {
+          return ShellOutput(stdout: "/usr/bin/gh", stderr: "", exitCode: 0)
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
+        guard executableURL.lastPathComponent == "gh" else {
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+        await probe.record(arguments: arguments, currentDirectoryURL: currentDirectoryURL)
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let client = GithubCLIClient.live(shell: shell)
+
+    try await client.mergePullRequest(repoRoot, remoteInfo, 12, .squash)
+    try await client.closePullRequest(repoRoot, remoteInfo, 13)
+    try await client.markPullRequestReady(repoRoot, remoteInfo, 14)
+
+    let calls = await probe.snapshot()
+    #expect(
+      calls.map(\.arguments) == [
+        ["pr", "merge", "12", "--squash", "--repo", "github.enterprise.test/octo/repo"],
+        ["pr", "close", "13", "--repo", "github.enterprise.test/octo/repo"],
+        ["pr", "ready", "14", "--repo", "github.enterprise.test/octo/repo"],
+      ])
+    #expect(calls.allSatisfy { $0.currentDirectoryURL == repoRoot })
+  }
+
   @Test func batchPullRequestsCapsConcurrencyAtThree() async throws {
     let probe = GithubBatchShellProbe()
     let shell = ShellClient(

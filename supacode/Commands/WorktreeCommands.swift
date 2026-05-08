@@ -110,6 +110,12 @@ struct WorktreeCommands: Commands {
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.refreshWorktrees)))
       .help(helpText(title: "Refresh Worktrees", commandID: AppShortcuts.CommandID.refreshWorktrees))
+      Button("Jump to Latest Unread") {
+        store.send(.jumpToLatestUnread)
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.jumpToLatestUnread)))
+      .help(helpText(title: "Jump to Latest Unread", commandID: AppShortcuts.CommandID.jumpToLatestUnread))
+      .disabled(store.notificationIndicatorCount == 0)
       Divider()
       Button("Run Script") {
         runScriptAction?()
