@@ -9,7 +9,7 @@ struct TerminalTabsRowView: View {
   @Binding var closeButtonGestureActive: Bool
   let fixedTabWidth: CGFloat?
   let hasNotification: (TerminalTabID) -> Bool
-  let changeTitle: (TerminalTabID) -> Void
+  let renameTab: (TerminalTabID) -> Void
   let changeIcon: (TerminalTabID) -> Void
   let closeTab: (TerminalTabID) -> Void
   let closeOthers: (TerminalTabID) -> Void
@@ -38,7 +38,21 @@ struct TerminalTabsRowView: View {
               onClose: {
                 closeTab(id)
               },
-              closeButtonGestureActive: $closeButtonGestureActive
+              onRename: { newTitle in
+                manager.setCustomTitle(id, title: newTitle)
+              },
+              onChangeIcon: {
+                changeIcon(id)
+              },
+              closeButtonGestureActive: $closeButtonGestureActive,
+              isEditing: manager.editingTabID == id,
+              onBeginRename: {
+                manager.beginTabRename(id)
+              },
+              onEndRename: {
+                guard manager.editingTabID == id else { return }
+                manager.endTabRename()
+              }
             )
             .background(
               TerminalTabMeasurementView(
@@ -53,7 +67,7 @@ struct TerminalTabsRowView: View {
               tabId: id,
               tabs: manager.tabs,
               actions: TerminalTabContextMenuActions(
-                changeTitle: changeTitle,
+                renameTab: renameTab,
                 changeIcon: changeIcon,
                 closeTab: closeTab,
                 closeOthers: closeOthers,

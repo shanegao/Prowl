@@ -339,6 +339,49 @@ struct WorktreeTerminalManagerTests {
     #expect(manager.hasUnseenNotifications(for: worktree.id) == false)
   }
 
+  @Test func makeLayoutSnapshotPersistsCustomTabTitle() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let tabID = try #require(state.createTab())
+
+    state.tabManager.updateTitle(tabID, title: "npm test")
+    state.tabManager.setCustomTitle(tabID, title: "Build")
+
+    let snapshot = try #require(state.makeLayoutSnapshotWorktree())
+
+    #expect(snapshot.tabs.first?.title == "npm test")
+    #expect(snapshot.tabs.first?.customTitle == "Build")
+  }
+
+  @Test func applyLayoutSnapshotRestoresCustomTabTitle() throws {
+    let tabID = UUID()
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let snapshot = TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: worktree.id,
+      selectedTabID: tabID.uuidString,
+      tabs: [
+        TerminalLayoutSnapshotPayload.SnapshotTab(
+          tabID: tabID.uuidString,
+          title: "npm test",
+          customTitle: "Build",
+          icon: nil,
+          splitRoot: .leaf(surfaceID: UUID().uuidString)
+        )
+      ]
+    )
+
+    #expect(state.applyLayoutSnapshot(snapshot))
+    let restored = try #require(state.tabManager.tabs.first)
+
+    #expect(restored.title == "npm test")
+    #expect(restored.customTitle == "Build")
+    #expect(restored.displayTitle == "Build")
+    #expect(restored.isTitleLocked == false)
+  }
+
   @Test func restoreLayoutSnapshotFailClosedClearsSnapshotWhenWorktreeMissing() async {
     let clearCount = LockIsolated(0)
     let snapshot = TerminalLayoutSnapshotPayload(

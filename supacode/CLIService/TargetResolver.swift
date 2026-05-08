@@ -260,7 +260,7 @@ enum TargetResolutionSnapshotBuilder {
         guard let snapshot else { return nil }
         return TargetResolutionSnapshot.Tab(
           id: tab.id.rawValue,
-          title: tab.title,
+          title: tab.displayTitle,
           selected: tab.id == selectedTabID,
           panes: snapshot.panes,
           focusedPaneID: snapshot.focusedPaneID

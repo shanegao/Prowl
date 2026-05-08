@@ -800,6 +800,7 @@ final class WorktreeTerminalState {
         TerminalLayoutSnapshotPayload.SnapshotTab(
           tabID: tab.id.rawValue.uuidString,
           title: isBlockingScriptTab ? nil : tab.title,
+          customTitle: isBlockingScriptTab ? nil : tab.customTitle,
           icon: snapshotIcon,
           splitRoot: splitRoot
         )
@@ -887,8 +888,9 @@ final class WorktreeTerminalState {
         TerminalTabItem(
           id: entry.tabID,
           title: entry.snapshotTab.title ?? "\(worktree.name) \(index + 1)",
+          customTitle: entry.snapshotTab.customTitle,
           icon: entry.snapshotTab.icon ?? "terminal",
-          isTitleLocked: entry.snapshotTab.title != nil,
+          isTitleLocked: false,
           iconLock: entry.snapshotTab.icon != nil ? .user : .auto
         )
       )
@@ -1259,7 +1261,7 @@ final class WorktreeTerminalState {
     alert.alertStyle = .informational
 
     let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-    textField.stringValue = tabManager.tabs[tabIndex].title
+    textField.stringValue = tabManager.tabs[tabIndex].displayTitle
     alert.accessoryView = textField
 
     alert.addButton(withTitle: "OK")
@@ -1271,12 +1273,7 @@ final class WorktreeTerminalState {
         guard response == .alertFirstButtonReturn else { return }
         guard let self else { return }
         let newTitle = textField.stringValue
-        if newTitle.isEmpty {
-          self.tabManager.clearTitleOverride(tabId)
-          self.updateTabTitle(for: tabId)
-        } else {
-          self.tabManager.overrideTitle(tabId, title: newTitle)
-        }
+        self.tabManager.setCustomTitle(tabId, title: newTitle)
       }
     }
   }
@@ -1889,13 +1886,13 @@ extension WorktreeTerminalState {
           context: GHOSTTY_SURFACE_CONTEXT_TAB
         ).workingDirectory?.path(percentEncoded: false)
 
-        let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.title)
+        let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.displayTitle)
         return CLITerminalPaneSnapshot(id: paneID, title: title, cwd: cwd)
       }
 
       return CLITerminalTabSnapshot(
         id: tab.id.rawValue,
-        title: tab.title,
+        title: tab.displayTitle,
         selected: tab.id == selectedTabID,
         focusedPaneID: focusedSurfaceIdByTab[tab.id],
         panes: panes

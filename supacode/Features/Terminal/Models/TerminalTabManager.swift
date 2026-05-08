@@ -1,10 +1,17 @@
+import Foundation
 import Observation
 
 @MainActor
 @Observable
 final class TerminalTabManager {
-  var tabs: [TerminalTabItem] = []
+  var tabs: [TerminalTabItem] = [] {
+    didSet {
+      guard let editingTabID, !tabs.contains(where: { $0.id == editingTabID }) else { return }
+      self.editingTabID = nil
+    }
+  }
   var selectedTabId: TerminalTabID?
+  private(set) var editingTabID: TerminalTabID?
 
   func createTab(title: String, icon: String?, isTitleLocked: Bool = false) -> TerminalTabID {
     let tab = TerminalTabItem(title: title, icon: icon, isTitleLocked: isTitleLocked)
@@ -30,15 +37,20 @@ final class TerminalTabManager {
     tabs[index].title = title
   }
 
-  func overrideTitle(_ id: TerminalTabID, title: String) {
+  func setCustomTitle(_ id: TerminalTabID, title: String) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-    tabs[index].title = title
-    tabs[index].isTitleLocked = true
+    guard !tabs[index].isTitleLocked else { return }
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    tabs[index].customTitle = trimmed.isEmpty ? nil : trimmed
   }
 
-  func clearTitleOverride(_ id: TerminalTabID) {
-    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-    tabs[index].isTitleLocked = false
+  func beginTabRename(_ id: TerminalTabID) {
+    guard tabs.contains(where: { $0.id == id && !$0.isTitleLocked }) else { return }
+    editingTabID = id
+  }
+
+  func endTabRename() {
+    editingTabID = nil
   }
 
   /// Auto-detection write path (e.g. `CommandIconMap`). Only applies
