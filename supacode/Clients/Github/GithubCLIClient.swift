@@ -42,11 +42,12 @@ extension GithubAuthStatusResponse.GithubAuthAccount: Decodable {
 
 struct GithubCLIClient: Sendable {
   var defaultBranch: @Sendable (URL) async throws -> String
+  var resolveRemoteInfo: @Sendable (URL) async -> GithubRemoteInfo?
   var latestRun: @Sendable (URL, String) async throws -> GithubWorkflowRun?
   var batchPullRequests: @Sendable (String, String, String, [String]) async throws -> [String: GithubPullRequest]
-  var mergePullRequest: @Sendable (URL, Int, PullRequestMergeStrategy) async throws -> Void
-  var closePullRequest: @Sendable (URL, Int) async throws -> Void
-  var markPullRequestReady: @Sendable (URL, Int) async throws -> Void
+  var mergePullRequest: @Sendable (URL, GithubRemoteInfo, Int, PullRequestMergeStrategy) async throws -> Void
+  var closePullRequest: @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void
+  var markPullRequestReady: @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void
   var rerunFailedJobs: @Sendable (URL, Int) async throws -> Void
   var failedRunLogs: @Sendable (URL, Int) async throws -> String
   var runLogs: @Sendable (URL, Int) async throws -> String
@@ -61,6 +62,7 @@ extension GithubCLIClient: DependencyKey {
     let resolver = GithubCLIExecutableResolver()
     return GithubCLIClient(
       defaultBranch: defaultBranchFetcher(shell: shell, resolver: resolver),
+      resolveRemoteInfo: resolveRemoteInfoFetcher(shell: shell, resolver: resolver),
       latestRun: latestRunFetcher(shell: shell, resolver: resolver),
       batchPullRequests: batchPullRequestsFetcher(shell: shell, resolver: resolver),
       mergePullRequest: mergePullRequestFetcher(shell: shell, resolver: resolver),
@@ -76,11 +78,12 @@ extension GithubCLIClient: DependencyKey {
 
   static let testValue = GithubCLIClient(
     defaultBranch: { _ in "main" },
+    resolveRemoteInfo: { _ in nil },
     latestRun: { _, _ in nil },
     batchPullRequests: { _, _, _, _ in [:] },
-    mergePullRequest: { _, _, _ in },
-    closePullRequest: { _, _ in },
-    markPullRequestReady: { _, _ in },
+    mergePullRequest: { _, _, _, _ in },
+    closePullRequest: { _, _, _ in },
+    markPullRequestReady: { _, _, _ in },
     rerunFailedJobs: { _, _ in },
     failedRunLogs: { _, _ in "" },
     runLogs: { _, _ in "" },
@@ -100,6 +103,23 @@ private struct GithubPullRequestsRequest: Sendable {
   let host: String
   let owner: String
   let repo: String
+}
+
+nonisolated private struct GithubRepoViewRemoteInfoResponse: Decodable, Sendable {
+  let owner: Owner
+  let name: String
+  let url: String
+
+  nonisolated var remoteInfo: GithubRemoteInfo? {
+    guard let host = URL(string: url)?.host else {
+      return nil
+    }
+    return GithubRemoteInfo(host: host, owner: owner.login, repo: name)
+  }
+
+  nonisolated struct Owner: Decodable, Sendable {
+    let login: String
+  }
 }
 
 private actor GithubCLIExecutableResolver {
@@ -197,6 +217,27 @@ nonisolated private func defaultBranchFetcher(
   }
 }
 
+nonisolated private func resolveRemoteInfoFetcher(
+  shell: ShellClient,
+  resolver: GithubCLIExecutableResolver
+) -> @Sendable (URL) async -> GithubRemoteInfo? {
+  { repoRoot in
+    do {
+      let output = try await runGh(
+        shell: shell,
+        resolver: resolver,
+        arguments: ["repo", "view", "--json", "owner,name,url"],
+        repoRoot: repoRoot
+      )
+      let data = Data(output.utf8)
+      let response = try JSONDecoder().decode(GithubRepoViewRemoteInfoResponse.self, from: data)
+      return response.remoteInfo
+    } catch {
+      return nil
+    }
+  }
+}
+
 nonisolated private func latestRunFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
@@ -258,8 +299,8 @@ nonisolated private func batchPullRequestsFetcher(
 nonisolated private func mergePullRequestFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (URL, Int, PullRequestMergeStrategy) async throws -> Void {
-  { repoRoot, pullRequestNumber, strategy in
+) -> @Sendable (URL, GithubRemoteInfo, Int, PullRequestMergeStrategy) async throws -> Void {
+  { repoRoot, remoteInfo, pullRequestNumber, strategy in
     _ = try await runGh(
       shell: shell,
       resolver: resolver,
@@ -268,7 +309,7 @@ nonisolated private func mergePullRequestFetcher(
         "merge",
         "\(pullRequestNumber)",
         "--\(strategy.ghArgument)",
-      ],
+      ] + repoArgument(remoteInfo),
       repoRoot: repoRoot
     )
   }
@@ -277,8 +318,8 @@ nonisolated private func mergePullRequestFetcher(
 nonisolated private func closePullRequestFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (URL, Int) async throws -> Void {
-  { repoRoot, pullRequestNumber in
+) -> @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void {
+  { repoRoot, remoteInfo, pullRequestNumber in
     _ = try await runGh(
       shell: shell,
       resolver: resolver,
@@ -286,7 +327,7 @@ nonisolated private func closePullRequestFetcher(
         "pr",
         "close",
         "\(pullRequestNumber)",
-      ],
+      ] + repoArgument(remoteInfo),
       repoRoot: repoRoot
     )
   }
@@ -295,8 +336,8 @@ nonisolated private func closePullRequestFetcher(
 nonisolated private func markPullRequestReadyFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (URL, Int) async throws -> Void {
-  { repoRoot, pullRequestNumber in
+) -> @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void {
+  { repoRoot, remoteInfo, pullRequestNumber in
     _ = try await runGh(
       shell: shell,
       resolver: resolver,
@@ -304,10 +345,14 @@ nonisolated private func markPullRequestReadyFetcher(
         "pr",
         "ready",
         "\(pullRequestNumber)",
-      ],
+      ] + repoArgument(remoteInfo),
       repoRoot: repoRoot
     )
   }
+}
+
+nonisolated private func repoArgument(_ remoteInfo: GithubRemoteInfo) -> [String] {
+  ["--repo", "\(remoteInfo.host)/\(remoteInfo.owner)/\(remoteInfo.repo)"]
 }
 
 nonisolated private func rerunFailedJobsFetcher(
