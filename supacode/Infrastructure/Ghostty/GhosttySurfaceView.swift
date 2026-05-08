@@ -1463,10 +1463,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
 
       guard !item.keyEquivalent.isEmpty else { continue }
-      guard let itemEquivalent = normalizedKeyEquivalent(
-        key: item.keyEquivalent,
-        modifiers: item.keyEquivalentModifierMask
-      ) else { continue }
+      guard
+        let itemEquivalent = normalizedKeyEquivalent(
+          key: item.keyEquivalent,
+          modifiers: item.keyEquivalentModifierMask
+        )
+      else { continue }
       if eventEquivalents.contains(where: { $0 == itemEquivalent }) {
         return true
       }
