@@ -3301,11 +3301,13 @@ struct RepositoriesFeatureTests {
       removedLines: nil,
       pullRequest: openPullRequest
     )
+    let upstreamRemoteInfo = GithubRemoteInfo(host: "github.com", owner: "supabitapp", repo: "supacode")
     let mergedNumbers = LockIsolated<[Int]>([])
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.resolveRemoteInfo = { _ in upstreamRemoteInfo }
       $0.githubCLI.mergePullRequest = { _, _, number, _ in
         mergedNumbers.withValue { $0.append(number) }
       }
@@ -3343,6 +3345,7 @@ struct RepositoriesFeatureTests {
       removedLines: nil,
       pullRequest: openPullRequest
     )
+    let upstreamRemoteInfo = GithubRemoteInfo(host: "github.com", owner: "supabitapp", repo: "supacode")
     let mergedStrategies = LockIsolated<[PullRequestMergeStrategy]>([])
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock {
@@ -3356,6 +3359,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.resolveRemoteInfo = { _ in upstreamRemoteInfo }
       $0.githubCLI.mergePullRequest = { _, _, _, strategy in
         mergedStrategies.withValue { $0.append(strategy) }
       }
@@ -3425,6 +3429,61 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func pullRequestActionMergeRequiresResolvedRemoteInfo() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openPullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name, number: 12)
+    var state = makeState(repositories: [repository])
+    state.githubIntegrationAvailability = .disabled
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: openPullRequest
+    )
+    let mergeAttempts = LockIsolated(0)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.resolveRemoteInfo = { _ in nil }
+      $0.gitClient.remoteInfo = { _ in nil }
+      $0.githubCLI.mergePullRequest = { _, _, _, _ in
+        mergeAttempts.withValue { $0 += 1 }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .merge)))
+    await store.receive(\.showToast) {
+      $0.statusToast = .inProgress("Merging pull request…")
+    }
+    await store.receive(\.dismissToast) {
+      $0.statusToast = nil
+    }
+    await store.receive(\.presentAlert) {
+      $0.alert = AlertState<RepositoriesFeature.Alert> {
+        TextState("GitHub repository not resolved")
+      } actions: {
+        ButtonState(role: .cancel) {
+          TextState("OK")
+        }
+      } message: {
+        TextState(
+          "Prowl could not determine which GitHub repository owns this pull request. "
+            + "Check the repository remote and try again."
+        )
+      }
+    }
+    #expect(mergeAttempts.value == 0)
+    await store.finish()
+  }
+
   @Test func pullRequestActionCloseRefreshesImmediately() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -3442,11 +3501,13 @@ struct RepositoriesFeatureTests {
       removedLines: nil,
       pullRequest: openPullRequest
     )
+    let upstreamRemoteInfo = GithubRemoteInfo(host: "github.com", owner: "supabitapp", repo: "supacode")
     let closedNumbers = LockIsolated<[Int]>([])
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
       $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.resolveRemoteInfo = { _ in upstreamRemoteInfo }
       $0.githubCLI.closePullRequest = { _, _, number in
         closedNumbers.withValue { $0.append(number) }
       }

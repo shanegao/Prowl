@@ -1153,7 +1153,7 @@ struct RepositoriesFeature {
     let githubCLI = githubCLI
     return .run { send in
       guard
-        let remoteInfo = await resolveGithubRemoteInfo(
+        let remoteInfo = await Self.resolveGithubRemoteInfo(
           repositoryRootURL: repositoryRootURL,
           githubCLI: githubCLI,
           gitClient: gitClient

@@ -45,9 +45,9 @@ struct GithubCLIClient: Sendable {
   var resolveRemoteInfo: @Sendable (URL) async -> GithubRemoteInfo?
   var latestRun: @Sendable (URL, String) async throws -> GithubWorkflowRun?
   var batchPullRequests: @Sendable (String, String, String, [String]) async throws -> [String: GithubPullRequest]
-  var mergePullRequest: @Sendable (URL, GithubRemoteInfo?, Int, PullRequestMergeStrategy) async throws -> Void
-  var closePullRequest: @Sendable (URL, GithubRemoteInfo?, Int) async throws -> Void
-  var markPullRequestReady: @Sendable (URL, GithubRemoteInfo?, Int) async throws -> Void
+  var mergePullRequest: @Sendable (URL, GithubRemoteInfo, Int, PullRequestMergeStrategy) async throws -> Void
+  var closePullRequest: @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void
+  var markPullRequestReady: @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void
   var rerunFailedJobs: @Sendable (URL, Int) async throws -> Void
   var failedRunLogs: @Sendable (URL, Int) async throws -> String
   var runLogs: @Sendable (URL, Int) async throws -> String
@@ -299,7 +299,7 @@ nonisolated private func batchPullRequestsFetcher(
 nonisolated private func mergePullRequestFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (URL, GithubRemoteInfo?, Int, PullRequestMergeStrategy) async throws -> Void {
+) -> @Sendable (URL, GithubRemoteInfo, Int, PullRequestMergeStrategy) async throws -> Void {
   { repoRoot, remoteInfo, pullRequestNumber, strategy in
     _ = try await runGh(
       shell: shell,
@@ -318,7 +318,7 @@ nonisolated private func mergePullRequestFetcher(
 nonisolated private func closePullRequestFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (URL, GithubRemoteInfo?, Int) async throws -> Void {
+) -> @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void {
   { repoRoot, remoteInfo, pullRequestNumber in
     _ = try await runGh(
       shell: shell,
@@ -336,7 +336,7 @@ nonisolated private func closePullRequestFetcher(
 nonisolated private func markPullRequestReadyFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (URL, GithubRemoteInfo?, Int) async throws -> Void {
+) -> @Sendable (URL, GithubRemoteInfo, Int) async throws -> Void {
   { repoRoot, remoteInfo, pullRequestNumber in
     _ = try await runGh(
       shell: shell,
@@ -351,11 +351,8 @@ nonisolated private func markPullRequestReadyFetcher(
   }
 }
 
-nonisolated private func repoArgument(_ remoteInfo: GithubRemoteInfo?) -> [String] {
-  guard let remoteInfo else {
-    return []
-  }
-  return ["--repo", "\(remoteInfo.host)/\(remoteInfo.owner)/\(remoteInfo.repo)"]
+nonisolated private func repoArgument(_ remoteInfo: GithubRemoteInfo) -> [String] {
+  ["--repo", "\(remoteInfo.host)/\(remoteInfo.owner)/\(remoteInfo.repo)"]
 }
 
 nonisolated private func rerunFailedJobsFetcher(
