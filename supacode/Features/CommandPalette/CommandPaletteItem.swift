@@ -31,6 +31,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case archiveWorktree(Worktree.ID, Repository.ID)
     case viewArchivedWorktrees
     case refreshWorktrees
+    case jumpToLatestUnread
     case ghosttyCommand(String)
     case openPullRequest(Worktree.ID)
     case openRepositoryOnCodeHost(Worktree.ID)
@@ -52,7 +53,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
   var isGlobal: Bool {
     switch kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI:
+      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
       return true
     case .ghosttyCommand:
       return false
@@ -81,7 +82,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
   var isRootAction: Bool {
     switch kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI:
+      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
       return true
     case .ghosttyCommand:
       return false
@@ -120,6 +121,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.CommandID.archivedWorktrees
     case .refreshWorktrees:
       return AppShortcuts.CommandID.refreshWorktrees
+    case .jumpToLatestUnread:
+      return AppShortcuts.CommandID.jumpToLatestUnread
     case .openPullRequest,
       .openRepositoryOnCodeHost:
       return AppShortcuts.CommandID.openPullRequest

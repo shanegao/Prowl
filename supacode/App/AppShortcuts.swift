@@ -94,6 +94,7 @@ enum AppShortcuts {
     static let openPullRequest = "open_pull_request"
     static let toggleLeftSidebar = "toggle_left_sidebar"
     static let refreshWorktrees = "refresh_worktrees"
+    static let jumpToLatestUnread = "jump_to_latest_unread"
     static let runScript = "run_script"
     static let stopScript = "stop_script"
     static let checkForUpdates = "check_for_updates"
@@ -180,6 +181,7 @@ enum AppShortcuts {
   static let openPullRequest = AppShortcut(key: "g", modifiers: [.command, .control])
   static let toggleLeftSidebar = AppShortcut(key: "s", modifiers: [.command, .control])
   static let refreshWorktrees = AppShortcut(key: "r", modifiers: [.command, .shift])
+  static let jumpToLatestUnread = AppShortcut(key: "u", modifiers: [.command, .option])
   static let runScript = AppShortcut(key: "r", modifiers: .command)
   static let stopRunScript = AppShortcut(key: ".", modifiers: .command)
   static let checkForUpdates = AppShortcut(key: "u", modifiers: [.command, .shift])
@@ -323,6 +325,7 @@ enum AppShortcuts {
   private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
     .init(actionTitle: "Open Settings", shortcut: openSettings),
     .init(actionTitle: "Toggle Left Sidebar", shortcut: toggleLeftSidebar),
+    .init(actionTitle: "Jump to Latest Unread", shortcut: jumpToLatestUnread),
     .init(actionTitle: "Run Script", shortcut: runScript),
     .init(actionTitle: "Stop Script", shortcut: stopRunScript),
     .init(actionTitle: "Check for Updates", shortcut: checkForUpdates),
@@ -396,6 +399,12 @@ enum AppShortcuts {
       title: "Refresh Worktrees",
       scope: .configurableAppAction,
       shortcut: refreshWorktrees
+    ),
+    .init(
+      id: CommandID.jumpToLatestUnread,
+      title: "Jump to Latest Unread",
+      scope: .configurableAppAction,
+      shortcut: jumpToLatestUnread
     ),
     .init(
       id: CommandID.runScript,
@@ -840,6 +849,7 @@ enum AppShortcuts {
     toggleLeftSidebar,
     revealInSidebar,
     refreshWorktrees,
+    jumpToLatestUnread,
     runScript,
     stopRunScript,
     checkForUpdates,

@@ -39,16 +39,23 @@ struct WorktreeTerminalTabsView: View {
         },
         closeAll: {
           state.closeAllTabs()
+        },
+        hasNotification: { tabId in
+          state.hasUnseenNotification(for: tabId)
         }
       )
       if let selectedId = state.tabManager.selectedTabId {
         TerminalTabContentStack(tabs: state.tabManager.tabs, selectedTabId: selectedId) { tabId in
           TerminalSplitTreeAXContainer(
             tree: state.splitTree(for: tabId),
-            focusedSurfaceID: state.focusedSurfaceId(in: tabId)
-          ) { operation in
-            state.performSplitOperation(operation, in: tabId)
-          }
+            focusedSurfaceID: state.focusedSurfaceId(in: tabId),
+            hasNotification: { surfaceID in
+              state.hasUnseenNotification(forSurfaceID: surfaceID)
+            },
+            action: { operation in
+              state.performSplitOperation(operation, in: tabId)
+            }
+          )
         }
       } else {
         EmptyTerminalPaneView(message: "No terminals open")

@@ -16,6 +16,7 @@ struct CommandPaletteFeatureTests {
       "global.open-repository",
       "global.new-worktree",
       "global.refresh-worktrees",
+      "global.jump-to-latest-unread",
       "global.view-archived-worktrees",
       "global.install-cli",
     ]
@@ -27,6 +28,18 @@ struct CommandPaletteFeatureTests {
       ])
     #endif
     expectNoDifference(items.map(\.id), expectedIDs)
+  }
+
+  @Test func commandPaletteItems_includeJumpToLatestUnreadAction() {
+    let items = CommandPaletteFeature.commandPaletteItems(from: RepositoriesFeature.State())
+    let item = items.first { $0.id == "global.jump-to-latest-unread" }
+
+    #expect(item?.title == "Jump to Latest Unread")
+    #expect(item?.kind == .jumpToLatestUnread)
+    #expect(item?.appShortcutCommandID == AppShortcuts.CommandID.jumpToLatestUnread)
+
+    let filtered = CommandPaletteFeature.filterItems(items: items, query: "jump unread")
+    #expect(filtered.first?.id == "global.jump-to-latest-unread")
   }
 
   @Test func commandPaletteItems_skipsPendingAndDeletingWorktrees() {
