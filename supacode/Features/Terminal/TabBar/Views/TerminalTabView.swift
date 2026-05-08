@@ -22,7 +22,6 @@ struct TerminalTabView: View {
   @State private var editingTitle = ""
   @State private var initialEditingTitle = ""
   @State private var cancelOnExit = false
-  @FocusState private var isFieldFocused: Bool
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
@@ -73,40 +72,34 @@ struct TerminalTabView: View {
     }
     .overlay {
       if isEditing {
-        TextField("", text: $editingTitle)
-          .textFieldStyle(.plain)
-          .font(.caption)
-          .focused($isFieldFocused)
-          .foregroundStyle(TerminalTabBarColors.activeText)
-          .accessibilityLabel("Rename tab")
-          .padding(.horizontal, TerminalTabBarMetrics.contentSpacing)
-          .background(
+        RenameTextField(
+          text: $editingTitle,
+          onCommit: { onEndRename() },
+          onCancel: {
+            cancelOnExit = true
+            onEndRename()
+          }
+        )
+        .padding(.horizontal, TerminalTabBarMetrics.contentSpacing)
+        .background(
+          RoundedRectangle(
+            cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
+            style: .continuous
+          )
+          .fill(Color(nsColor: .textBackgroundColor))
+          .overlay(
             RoundedRectangle(
               cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
               style: .continuous
             )
-            .fill(Color(nsColor: .textBackgroundColor))
-            .overlay(
-              RoundedRectangle(
-                cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
-                style: .continuous
-              )
-              .strokeBorder(Color.accentColor, lineWidth: 1.5)
-            )
+            .strokeBorder(Color.accentColor, lineWidth: 1.5)
           )
-          .padding(.leading, TerminalTabBarMetrics.tabHorizontalPadding - TerminalTabBarMetrics.contentSpacing)
-          .padding(.trailing, TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing)
-          .padding(.vertical, TerminalTabBarMetrics.renameFieldInset)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-          .onSubmit { onEndRename() }
-          .onExitCommand {
-            cancelOnExit = true
-            onEndRename()
-          }
-          .onChange(of: isFieldFocused) { _, focused in
-            guard !focused, isEditing else { return }
-            onEndRename()
-          }
+        )
+        .padding(.leading, TerminalTabBarMetrics.tabHorizontalPadding - TerminalTabBarMetrics.contentSpacing)
+        .padding(.trailing, TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing)
+        .padding(.vertical, TerminalTabBarMetrics.renameFieldInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .accessibilityLabel("Rename tab")
       }
     }
     .background {
@@ -136,12 +129,6 @@ struct TerminalTabView: View {
         editingTitle = tab.displayTitle
         initialEditingTitle = tab.displayTitle
         cancelOnExit = false
-        isFieldFocused = true
-        // The field editor only attaches after SwiftUI promotes the TextField
-        // to first responder, so defer selectAll one hop to land on it.
-        DispatchQueue.main.async {
-          NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
-        }
       } else if cancelOnExit {
         cancelOnExit = false
       } else if editingTitle != initialEditingTitle {
@@ -216,4 +203,97 @@ private final class MiddleClickNSView: NSView {
   }
 
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// Inline rename field for tabs.
+///
+/// SwiftUI's `TextField` + `@FocusState` plus `NSApp.sendAction(selectAll:)`
+/// is unreliable here: the focus promotion spans multiple runloop ticks, and
+/// `sendAction` along the responder chain reaches whatever owns the chain
+/// first — typically the active GhosttySurface, which happily selects every
+/// glyph in the terminal instead of the tab title. Owning the `NSTextField`
+/// directly lets us drive `selectAll` on its own field editor without
+/// fighting SwiftUI's focus timing.
+private struct RenameTextField: NSViewRepresentable {
+  @Binding var text: String
+  let onCommit: () -> Void
+  let onCancel: () -> Void
+
+  func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+  func makeNSView(context: Context) -> RenameNSTextField {
+    let field = RenameNSTextField()
+    field.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    field.textColor = .labelColor
+    field.isBordered = false
+    field.drawsBackground = false
+    field.focusRingType = .none
+    field.cell?.usesSingleLineMode = true
+    field.cell?.wraps = false
+    field.cell?.isScrollable = true
+    field.lineBreakMode = .byClipping
+    field.stringValue = text
+    field.delegate = context.coordinator
+    field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    return field
+  }
+
+  func updateNSView(_ nsView: RenameNSTextField, context: Context) {
+    context.coordinator.parent = self
+    if nsView.stringValue != text {
+      nsView.stringValue = text
+    }
+  }
+
+  final class Coordinator: NSObject, NSTextFieldDelegate {
+    var parent: RenameTextField
+    private var hasResolved = false
+
+    init(parent: RenameTextField) { self.parent = parent }
+
+    func controlTextDidChange(_ obj: Notification) {
+      guard let field = obj.object as? NSTextField else { return }
+      parent.text = field.stringValue
+    }
+
+    func control(
+      _ control: NSControl,
+      textView: NSTextView,
+      doCommandBy commandSelector: Selector
+    ) -> Bool {
+      switch commandSelector {
+      case #selector(NSResponder.cancelOperation(_:)):
+        hasResolved = true
+        parent.onCancel()
+        return true
+      case #selector(NSResponder.insertNewline(_:)):
+        hasResolved = true
+        parent.onCommit()
+        return true
+      default:
+        return false
+      }
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+      guard !hasResolved else { return }
+      hasResolved = true
+      parent.onCommit()
+    }
+  }
+}
+
+private final class RenameNSTextField: NSTextField {
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    guard window != nil else { return }
+    // Defer one runloop hop so AppKit finishes mounting the field before we
+    // request first-responder; otherwise `currentEditor()` returns nil.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let window = self.window else { return }
+      window.makeFirstResponder(self)
+      self.currentEditor()?.selectAll(nil)
+    }
+  }
 }
