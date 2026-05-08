@@ -37,14 +37,6 @@ final class TerminalTabManager {
     tabs[index].title = title
   }
 
-  func overrideTitle(_ id: TerminalTabID, title: String) {
-    setCustomTitle(id, title: title)
-  }
-
-  func clearTitleOverride(_ id: TerminalTabID) {
-    setCustomTitle(id, title: "")
-  }
-
   func setCustomTitle(_ id: TerminalTabID, title: String) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
     guard !tabs[index].isTitleLocked else { return }

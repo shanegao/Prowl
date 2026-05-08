@@ -25,4 +25,6 @@ enum TerminalTabBarMetrics {
   static let selectionAnimationDuration: Double = 0.15
   static let reorderAnimationDuration: Double = 0.3
   static let reorderAnimationBounce: Double = 0.15
+  static let renameFieldCornerRadius: CGFloat = 4
+  static let renameFieldInset: CGFloat = 4
 }

@@ -273,6 +273,68 @@ struct TerminalLayoutSnapshotPayloadTests {
     #expect(decodedTab?.icon == nil)
   }
 
+  @Test func decodeValidatedMigratesV1TitleIntoCustomTitle() {
+    let json = #"""
+      {
+        "version": 1,
+        "worktrees": [
+          {
+            "worktreeID": "wt-1",
+            "selectedTabID": "tab-1",
+            "tabs": [
+              {
+                "tabID": "tab-1",
+                "title": "Frozen Title",
+                "splitRoot": {
+                  "kind": "leaf",
+                  "surfaceID": "surface-1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      """#
+    let data = Data(json.utf8)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+    #expect(decoded?.version == TerminalLayoutSnapshotPayload.currentVersion)
+    let decodedTab = decoded?.worktrees.first?.tabs.first
+    #expect(decodedTab?.title == nil)
+    #expect(decodedTab?.customTitle == "Frozen Title")
+  }
+
+  @Test func decodeValidatedV1MigrationLeavesExistingCustomTitleAlone() {
+    let json = #"""
+      {
+        "version": 1,
+        "worktrees": [
+          {
+            "worktreeID": "wt-1",
+            "selectedTabID": "tab-1",
+            "tabs": [
+              {
+                "tabID": "tab-1",
+                "title": "Live",
+                "customTitle": "Pinned",
+                "splitRoot": {
+                  "kind": "leaf",
+                  "surfaceID": "surface-1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      """#
+    let data = Data(json.utf8)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+    let decodedTab = decoded?.worktrees.first?.tabs.first
+    #expect(decodedTab?.title == "Live")
+    #expect(decodedTab?.customTitle == "Pinned")
+  }
+
   @Test func decodeValidatedBackwardCompatibleWithoutTitleAndIcon() {
     let json = #"""
       {

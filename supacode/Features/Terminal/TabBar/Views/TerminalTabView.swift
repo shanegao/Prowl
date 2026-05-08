@@ -79,11 +79,24 @@ struct TerminalTabView: View {
           .focused($isFieldFocused)
           .foregroundStyle(TerminalTabBarColors.activeText)
           .accessibilityLabel("Rename tab")
-          .padding(.horizontal, TerminalTabBarMetrics.tabHorizontalPadding)
-          .padding(
-            .trailing,
-            TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing
+          .padding(.horizontal, TerminalTabBarMetrics.contentSpacing)
+          .background(
+            RoundedRectangle(
+              cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
+              style: .continuous
+            )
+            .fill(Color(nsColor: .textBackgroundColor))
+            .overlay(
+              RoundedRectangle(
+                cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
+                style: .continuous
+              )
+              .strokeBorder(Color.accentColor, lineWidth: 1.5)
+            )
           )
+          .padding(.leading, TerminalTabBarMetrics.tabHorizontalPadding - TerminalTabBarMetrics.contentSpacing)
+          .padding(.trailing, TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing)
+          .padding(.vertical, TerminalTabBarMetrics.renameFieldInset)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
           .onSubmit { onEndRename() }
           .onExitCommand {
@@ -124,17 +137,16 @@ struct TerminalTabView: View {
         initialEditingTitle = tab.displayTitle
         cancelOnExit = false
         isFieldFocused = true
+        // The field editor only attaches after SwiftUI promotes the TextField
+        // to first responder, so defer selectAll one hop to land on it.
+        DispatchQueue.main.async {
+          NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+        }
       } else if cancelOnExit {
         cancelOnExit = false
       } else if editingTitle != initialEditingTitle {
         onRename(editingTitle)
       }
-    }
-    .onDisappear {
-      guard isEditing else { return }
-      defer { onEndRename() }
-      guard !cancelOnExit, editingTitle != initialEditingTitle else { return }
-      onRename(editingTitle)
     }
     .zIndex(isActive ? 2 : (isDragging ? 3 : 0))
     .overlay {
