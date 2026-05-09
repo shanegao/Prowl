@@ -5,6 +5,8 @@ struct ActiveAgentsPanel: View {
   @Bindable var store: StoreOf<ActiveAgentsFeature>
   let repositoryNamesByWorktreeID: [Worktree.ID: String]
   let branchNamesByWorktreeID: [Worktree.ID: String]
+  let repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice]
+  let selectedWorktreeIDs: Set<Worktree.ID>
   let height: Double
   let maximumHeight: Double
   let onHeightChanged: (Double) -> Void
@@ -40,7 +42,9 @@ struct ActiveAgentsPanel: View {
                 ActiveAgentRow(
                   entry: entry,
                   repositoryName: repositoryName(for: entry),
-                  branchName: branchName(for: entry)
+                  branchName: branchName(for: entry),
+                  repositoryColor: repositoryColor(for: entry),
+                  isDimmed: isDimmed(entry)
                 )
               }
               .buttonStyle(.plain)
@@ -112,6 +116,14 @@ struct ActiveAgentsPanel: View {
 
   private func branchName(for entry: ActiveAgentEntry) -> String {
     branchNamesByWorktreeID[entry.worktreeID] ?? entry.worktreeName
+  }
+
+  private func repositoryColor(for entry: ActiveAgentEntry) -> RepositoryColorChoice? {
+    repositoryColorsByWorktreeID[entry.worktreeID]
+  }
+
+  private func isDimmed(_ entry: ActiveAgentEntry) -> Bool {
+    !selectedWorktreeIDs.isEmpty && !selectedWorktreeIDs.contains(entry.worktreeID)
   }
 
   private var panelBackgroundShape: UnevenRoundedRectangle {

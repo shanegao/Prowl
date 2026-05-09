@@ -110,11 +110,13 @@ struct RepositorySectionViewTests {
 
     let metadata = SidebarListView.activeAgentWorktreeMetadata(
       repositories: [repository],
-      customTitles: [repository.id: "Prowl"]
+      customTitles: [repository.id: "Prowl"],
+      repositoryAppearances: [repository.id: RepositoryAppearance(color: .blue)]
     )
 
     #expect(metadata.repositoryNamesByWorktreeID[worktree.id] == "Prowl")
     #expect(metadata.branchNamesByWorktreeID[worktree.id] == "feat/active-agents-panel")
+    #expect(metadata.repositoryColorsByWorktreeID[worktree.id] == .blue)
   }
 
   @Test func activeAgentWorktreeMetadataFallsBackToRepositoryNameForPlainFolders() {
@@ -133,6 +135,7 @@ struct RepositorySectionViewTests {
 
     #expect(metadata.repositoryNamesByWorktreeID[repository.id] == "plain")
     #expect(metadata.branchNamesByWorktreeID[repository.id] == "plain")
+    #expect(metadata.repositoryColorsByWorktreeID[repository.id] == nil)
   }
 
   @Test func openTabCountForGitRepositorySumsAllWorktrees() {

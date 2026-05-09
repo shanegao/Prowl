@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import Sharing
 import SwiftUI
 
 // Uses LazyVStack rather than List for repository drag precision; keyboard
@@ -41,6 +42,7 @@ struct SidebarListView: View {
   @State private var sidebarHeight = 0.0
   @State private var sidebarFooterHeight = 0.0
   @State private var resizingPanelHeight: Double?
+  @Shared(.repositoryAppearances) private var repositoryAppearances
 
   var body: some View {
     let state = store.state
@@ -67,7 +69,8 @@ struct SidebarListView: View {
       : ActiveAgentsFeature.maximumPanelHeight
     let agentWorktreeMetadata = Self.activeAgentWorktreeMetadata(
       repositories: state.repositories,
-      customTitles: state.repositoryCustomTitles
+      customTitles: state.repositoryCustomTitles,
+      repositoryAppearances: repositoryAppearances
     )
     let panelHeight = min(resizingPanelHeight ?? state.activeAgents.panelHeight, maximumPanelHeight)
     let panelOffset = state.activeAgents.isPanelHidden ? panelHeight : 0
@@ -150,6 +153,8 @@ struct SidebarListView: View {
             store: store.scope(state: \.activeAgents, action: \.activeAgents),
             repositoryNamesByWorktreeID: agentWorktreeMetadata.repositoryNamesByWorktreeID,
             branchNamesByWorktreeID: agentWorktreeMetadata.branchNamesByWorktreeID,
+            repositoryColorsByWorktreeID: agentWorktreeMetadata.repositoryColorsByWorktreeID,
+            selectedWorktreeIDs: selectedWorktreeIDs,
             height: panelHeight,
             maximumHeight: maximumPanelHeight,
             onHeightChanged: { height in
@@ -435,28 +440,44 @@ struct SidebarListView: View {
 
   static func activeAgentWorktreeMetadata(
     repositories: IdentifiedArrayOf<Repository>,
-    customTitles: [Repository.ID: String]
-  ) -> (
-    repositoryNamesByWorktreeID: [Worktree.ID: String],
-    branchNamesByWorktreeID: [Worktree.ID: String]
-  ) {
+    customTitles: [Repository.ID: String],
+    repositoryAppearances: [Repository.ID: RepositoryAppearance] = [:]
+  ) -> ActiveAgentWorktreeMetadata {
     var repositoryNamesByWorktreeID: [Worktree.ID: String] = [:]
     var branchNamesByWorktreeID: [Worktree.ID: String] = [:]
+    var repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice] = [:]
 
     for repository in repositories {
       let repositoryName = customTitles[repository.id] ?? repository.name
+      let repositoryColor = repositoryAppearances[repository.id]?.color
       if repository.capabilities.supportsRunnableFolderActions && !repository.capabilities.supportsWorktrees {
         repositoryNamesByWorktreeID[repository.id] = repositoryName
         branchNamesByWorktreeID[repository.id] = repository.name
+        if let repositoryColor {
+          repositoryColorsByWorktreeID[repository.id] = repositoryColor
+        }
       }
       for worktree in repository.worktrees {
         repositoryNamesByWorktreeID[worktree.id] = repositoryName
         branchNamesByWorktreeID[worktree.id] = worktree.name
+        if let repositoryColor {
+          repositoryColorsByWorktreeID[worktree.id] = repositoryColor
+        }
       }
     }
 
-    return (repositoryNamesByWorktreeID, branchNamesByWorktreeID)
+    return ActiveAgentWorktreeMetadata(
+      repositoryNamesByWorktreeID: repositoryNamesByWorktreeID,
+      branchNamesByWorktreeID: branchNamesByWorktreeID,
+      repositoryColorsByWorktreeID: repositoryColorsByWorktreeID
+    )
   }
+}
+
+struct ActiveAgentWorktreeMetadata: Equatable {
+  let repositoryNamesByWorktreeID: [Worktree.ID: String]
+  let branchNamesByWorktreeID: [Worktree.ID: String]
+  let repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice]
 }
 
 extension SidebarItem {

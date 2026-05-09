@@ -6,7 +6,7 @@ import Testing
 
 @MainActor
 struct ActiveAgentsFeatureTests {
-  @Test func entriesAreSortedByStateThenRecency() async {
+  @Test func entriesKeepInsertionOrder() async {
     let store = TestStore(initialState: ActiveAgentsFeature.State()) {
       ActiveAgentsFeature()
     }
@@ -17,18 +17,22 @@ struct ActiveAgentsFeatureTests {
     let blocked = entry(id: UUID(1), state: .blocked, changedAt: old)
     let working = entry(id: UUID(2), state: .working, changedAt: new)
     let done = entry(id: UUID(3), state: .done, changedAt: new)
+    let updatedIdle = entry(id: UUID(0), state: .blocked, changedAt: Date(timeIntervalSince1970: 30))
 
     await store.send(.agentEntryChanged(idle)) {
       $0.entries = [idle]
     }
     await store.send(.agentEntryChanged(blocked)) {
-      $0.entries = [blocked, idle]
+      $0.entries = [idle, blocked]
     }
     await store.send(.agentEntryChanged(working)) {
-      $0.entries = [blocked, working, idle]
+      $0.entries = [idle, blocked, working]
     }
     await store.send(.agentEntryChanged(done)) {
-      $0.entries = [blocked, working, done, idle]
+      $0.entries = [idle, blocked, working, done]
+    }
+    await store.send(.agentEntryChanged(updatedIdle)) {
+      $0.entries = [updatedIdle, blocked, working, done]
     }
   }
 

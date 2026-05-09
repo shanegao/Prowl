@@ -29,7 +29,6 @@ struct ActiveAgentsFeature {
       switch action {
       case .agentEntryChanged(let entry):
         state.entries[id: entry.id] = entry
-        state.entries = IdentifiedArray(uniqueElements: ActiveAgentEntry.sorted(Array(state.entries)))
         return .none
 
       case .agentEntryRemoved(let id):

@@ -5,14 +5,14 @@ struct ActiveAgentRow: View {
   let entry: ActiveAgentEntry
   let repositoryName: String
   let branchName: String
+  let repositoryColor: RepositoryColorChoice?
+  let isDimmed: Bool
 
   var body: some View {
     HStack(spacing: 8) {
       agentIcon
       VStack(alignment: .leading, spacing: 2) {
-        Text("\(entry.agent.displayName) · \(repositoryName)")
-          .font(.body.monospaced())
-          .lineLimit(1)
+        title
         Text(branchName)
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -24,6 +24,22 @@ struct ActiveAgentRow: View {
     .padding(.horizontal, 10)
     .padding(.vertical, 7)
     .contentShape(.rect)
+    .opacity(isDimmed ? 0.7 : 1)
+  }
+
+  private var title: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 3) {
+      Text(entry.agent.displayName)
+        .font(.body.weight(.medium))
+        .foregroundStyle(.primary)
+      Text("·")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.tertiary)
+      Text(repositoryName)
+        .font(.callout.weight(.medium))
+        .foregroundStyle(repositoryColor?.color ?? .secondary)
+    }
+    .lineLimit(1)
   }
 
   private var agentIcon: some View {
