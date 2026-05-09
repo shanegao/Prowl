@@ -45,17 +45,28 @@ struct ActiveAgentsPanel: View {
         .scrollIndicators(.never)
       }
     }
-    .background(.bar)
-    .overlay(alignment: .top) {
-      Divider()
+    .background {
+      panelBackgroundShape
+        .fill(.thinMaterial)
+    }
+    .clipShape(panelBackgroundShape)
+    .overlay {
+      panelBackgroundShape
+        .stroke(.separator.opacity(0.7), lineWidth: 1)
     }
   }
 
   private var resizeHandle: some View {
     Rectangle()
-      .fill(.separator)
+      .fill(.clear)
       .frame(height: 1)
       .frame(maxWidth: .infinity)
+      .overlay(alignment: .top) {
+        Rectangle()
+          .fill(.separator.opacity(0.7))
+          .frame(height: 1)
+          .padding(.horizontal, 8)
+      }
       .overlay {
         Rectangle()
           .fill(.clear)
@@ -87,5 +98,17 @@ struct ActiveAgentsPanel: View {
 
   private func clampedHeight(_ height: Double) -> Double {
     min(maximumHeight, max(ActiveAgentsFeature.minimumPanelHeight, height))
+  }
+
+  private var panelBackgroundShape: UnevenRoundedRectangle {
+    UnevenRoundedRectangle(
+      cornerRadii: .init(
+        topLeading: 8,
+        bottomLeading: 0,
+        bottomTrailing: 0,
+        topTrailing: 8
+      ),
+      style: .continuous
+    )
   }
 }
