@@ -1,7 +1,10 @@
 import Foundation
 
+private let agentDetectionRecentLineLimit = 24
+
 extension DetectedAgent {
   func detectState(in screen: String) -> AgentRawState {
+    let screen = recentLines(screen, limit: agentDetectionRecentLineLimit)
     switch self {
     case .pi:
       return detectPi(screen)
@@ -29,6 +32,12 @@ extension DetectedAgent {
   }
 }
 
+private func recentLines(_ content: String, limit: Int) -> String {
+  let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+  guard lines.count > limit else { return content }
+  return lines.suffix(limit).joined(separator: "\n")
+}
+
 private func detectPi(_ content: String) -> AgentRawState {
   content.contains("Working...") ? .working : .idle
 }
@@ -39,7 +48,8 @@ private func detectClaude(_ content: String) -> AgentRawState {
   if content.contains("⌕ Search…") || lower.contains("ctrl+r to toggle") {
     return .idle
   }
-  if hasClaudeBlockedPrompt(content: content, lower: lower) {
+  let currentInteraction = claudeCurrentInteractionRegion(content)
+  if hasClaudeBlockedPrompt(content: currentInteraction, lower: currentInteraction.lowercased()) {
     return .blocked
   }
 
@@ -205,6 +215,17 @@ private func isBoxBorderLine(_ line: String) -> Bool {
   let trimmed = line.trimmingCharacters(in: .whitespaces)
   guard trimmed.count >= 3 else { return false }
   return trimmed.allSatisfy { $0 == "─" || $0 == "-" }
+}
+
+private func claudeCurrentInteractionRegion(_ content: String) -> String {
+  let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+  guard let promptIndex = lines.lastIndex(where: { $0.contains("❯") }) else {
+    return lines.suffix(18).joined(separator: "\n")
+  }
+
+  let lowerBound = max(lines.startIndex, promptIndex - 10)
+  let upperBound = min(lines.endIndex, promptIndex + 11)
+  return lines[lowerBound..<upperBound].joined(separator: "\n")
 }
 
 private func hasClaudeBlockedPrompt(content: String, lower: String) -> Bool {

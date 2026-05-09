@@ -48,6 +48,76 @@ struct ScreenHeuristicsTests {
     )
   }
 
+  @Test func claudeIgnoresStalePermissionPromptNearCurrentIdlePrompt() {
+    #expect(
+      DetectedAgent.claude.detectState(
+        in: """
+          Do you want to proceed?
+          ❯ 1. Yes
+            2. No
+
+          Completed line 1
+          Completed line 2
+          Completed line 3
+          Completed line 4
+          Completed line 5
+          Completed line 6
+          Completed line 7
+          Completed line 8
+          Completed line 9
+          Completed line 10
+          Completed line 11
+          Completed line 12
+          Task complete.
+          ─────────
+          ❯
+          ─────────
+          """
+      ) == .idle
+    )
+  }
+
+  @Test func claudeIgnoresStalePermissionPromptOutsideRecentTail() {
+    #expect(
+      DetectedAgent.claude.detectState(
+        in: """
+          Do you want to proceed?
+          ❯ 1. Yes
+            2. No
+
+          Completed line 1
+          Completed line 2
+          Completed line 3
+          Completed line 4
+          Completed line 5
+          Completed line 6
+          Completed line 7
+          Completed line 8
+          Completed line 9
+          Completed line 10
+          Completed line 11
+          Completed line 12
+          Completed line 13
+          Completed line 14
+          Completed line 15
+          Completed line 16
+          Completed line 17
+          Completed line 18
+          Completed line 19
+          Completed line 20
+          Completed line 21
+          Completed line 22
+          Completed line 23
+          Completed line 24
+          Task complete.
+          ─────────
+          ❯
+          ─────────
+          """
+      ) == .idle
+    )
+  }
+
   @Test func codexDetection() {
     #expect(DetectedAgent.codex.detectState(in: "press enter to confirm or esc to cancel") == .blocked)
     #expect(DetectedAgent.codex.detectState(in: "• Working (12s)\nesc to interrupt") == .working)
