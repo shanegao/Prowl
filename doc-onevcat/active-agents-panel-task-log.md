@@ -23,6 +23,7 @@
 - The Active Agents panel height is persisted globally but visually capped by the sidebar container height, reserving at least 200 pt for the repository list.
 - Agent display names intentionally use short command-style lowercase tokens (`pi`, `claude`, `codex`, `kimi`, etc.) because the panel is a compact terminal-status surface, not product branding.
 - Screen heuristics are exposed as `DetectedAgent.detectState(in:)` so detection behavior stays attached to the identified agent while the per-agent detectors remain private pure functions.
+- The Active Agents footer toggle uses stable `eye` / `eye.slash` SF Symbols after the previous bottom-panel symbol rendered empty in the hidden state on the tested system.
 
 ### Verification
 

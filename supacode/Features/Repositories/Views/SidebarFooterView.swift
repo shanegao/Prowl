@@ -39,12 +39,8 @@ struct SidebarFooterView: View {
       Button {
         store.send(.activeAgents(.togglePanelVisibility))
       } label: {
-        Image(
-          systemName: store.state.activeAgents.isPanelHidden
-            ? "rectangle.bottomthird.inset"
-            : "rectangle.bottomthird.inset.filled"
-        )
-        .accessibilityLabel(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
+        Image(systemName: Self.activeAgentsPanelIconName(isPanelHidden: store.state.activeAgents.isPanelHidden))
+          .accessibilityLabel(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
       }
       .help(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
       Button {
@@ -100,5 +96,9 @@ struct SidebarFooterView: View {
     .overlay(alignment: .top) {
       Divider()
     }
+  }
+
+  static func activeAgentsPanelIconName(isPanelHidden: Bool) -> String {
+    isPanelHidden ? "eye" : "eye.slash"
   }
 }
