@@ -1,0 +1,52 @@
+import ComposableArchitecture
+import Foundation
+import IdentifiedCollections
+import Sharing
+
+@Reducer
+struct ActiveAgentsFeature {
+  @ObservableState
+  struct State: Equatable {
+    var entries: IdentifiedArrayOf<ActiveAgentEntry> = []
+    @Shared(.appStorage("activeAgentsPanelHidden")) var isPanelHidden: Bool = false
+    @Shared(.appStorage("activeAgentsPanelHeight")) var panelHeight: Double = 200
+  }
+
+  enum Action: Equatable {
+    case agentEntryChanged(ActiveAgentEntry)
+    case agentEntryRemoved(ActiveAgentEntry.ID)
+    case entryTapped(ActiveAgentEntry.ID)
+    case togglePanelVisibility
+    case panelHeightChanged(Double)
+  }
+
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .agentEntryChanged(let entry):
+        state.entries[id: entry.id] = entry
+        state.entries = IdentifiedArray(uniqueElements: ActiveAgentEntry.sorted(Array(state.entries)))
+        return .none
+
+      case .agentEntryRemoved(let id):
+        state.entries.remove(id: id)
+        return .none
+
+      case .entryTapped:
+        return .none
+
+      case .togglePanelVisibility:
+        state.$isPanelHidden.withLock { $0.toggle() }
+        return .none
+
+      case .panelHeightChanged(let height):
+        state.$panelHeight.withLock { $0 = Self.clampedPanelHeight(height) }
+        return .none
+      }
+    }
+  }
+
+  static func clampedPanelHeight(_ height: Double) -> Double {
+    min(420, max(120, height))
+  }
+}

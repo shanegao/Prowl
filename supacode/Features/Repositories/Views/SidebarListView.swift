@@ -59,34 +59,47 @@ struct SidebarListView: View {
     let pendingSidebarReveal = state.pendingSidebarReveal
 
     ScrollViewReader { scrollProxy in
-      ScrollView {
-        LazyVStack(spacing: 0) {
-          if showsRepositoryListHeader {
-            repositoryListHeader(
-              action: repositoryListHeaderAction,
-              expandableRepositoryIDs: expandableRepositoryIDs
-            )
-          }
+      VStack(spacing: 0) {
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            if showsRepositoryListHeader {
+              repositoryListHeader(
+                action: repositoryListHeaderAction,
+                expandableRepositoryIDs: expandableRepositoryIDs
+              )
+            }
 
-          if repositoryItems.isEmpty {
-            emptyRepositoryHint()
-          }
+            if repositoryItems.isEmpty {
+              emptyRepositoryHint()
+            }
 
-          ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
-            repositoryItemView(
-              item,
-              index: index,
-              repositoryOrderIDs: presentation.repositoryOrderIDs,
-              hotkeyRows: hotkeyRows,
-              selectedWorktreeIDs: selectedWorktreeIDs
-            )
+            ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
+              repositoryItemView(
+                item,
+                index: index,
+                repositoryOrderIDs: presentation.repositoryOrderIDs,
+                hotkeyRows: hotkeyRows,
+                selectedWorktreeIDs: selectedWorktreeIDs
+              )
+            }
           }
+          .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
+        .scrollIndicators(.never)
+        .frame(maxHeight: .infinity)
+
+        if !state.activeAgents.isPanelHidden {
+          ActiveAgentsPanel(
+            store: store.scope(state: \.activeAgents, action: \.activeAgents)
+          )
+          .frame(height: state.activeAgents.panelHeight)
+          .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
       }
-      .scrollIndicators(.never)
       .frame(minWidth: 220)
       .background(.bar)
+      .clipped()
+      .animation(.spring(response: 0.4, dampingFraction: 0.85), value: state.activeAgents.isPanelHidden)
       .onDragSessionUpdated { session in
         if case .ended = session.phase {
           endSidebarDrag()

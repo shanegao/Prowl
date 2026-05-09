@@ -1039,6 +1039,12 @@ struct AppFeature {
         }
         return .none
 
+      case .terminalEvent(.agentEntryChanged(let entry)):
+        return .send(.repositories(.activeAgents(.agentEntryChanged(entry))))
+
+      case .terminalEvent(.agentEntryRemoved(let id)):
+        return .send(.repositories(.activeAgents(.agentEntryRemoved(id))))
+
       case .terminalEvent(.commandPaletteToggleRequested(let worktreeID)):
         if state.commandPalette.isPresented {
           return .send(.commandPalette(.setPresented(false)))

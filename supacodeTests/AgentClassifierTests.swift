@@ -37,7 +37,7 @@ struct AgentClassifierTests {
           name: "node",
           argv0: "node",
           cmdline: "node /opt/homebrew/bin/codex --model gpt-5"
-        ),
+        )
       ]
     )
 

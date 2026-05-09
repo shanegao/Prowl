@@ -59,6 +59,8 @@ struct TerminalClient {
     case tabClosed(worktreeID: Worktree.ID, remainingTabs: Int)
     case focusChanged(worktreeID: Worktree.ID, surfaceID: UUID)
     case taskStatusChanged(worktreeID: Worktree.ID, status: WorktreeTaskStatus)
+    case agentEntryChanged(ActiveAgentEntry)
+    case agentEntryRemoved(ActiveAgentEntry.ID)
     case runScriptStatusChanged(worktreeID: Worktree.ID, isRunning: Bool)
     case commandPaletteToggleRequested(worktreeID: Worktree.ID)
     case setupScriptConsumed(worktreeID: Worktree.ID)

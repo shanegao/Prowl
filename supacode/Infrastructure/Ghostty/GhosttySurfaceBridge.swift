@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 import GhosttyKit
 
+private typealias GhosttySurfacePIDFunction = @convention(c) (ghostty_surface_t) -> Int32
+
 @MainActor
 final class GhosttySurfaceBridge {
   let state = GhosttySurfaceState()
@@ -49,6 +51,21 @@ final class GhosttySurfaceBridge {
   func sendCommand(_ command: String) {
     let finalCommand = command.hasSuffix("\n") ? command : "\(command)\n"
     sendText(finalCommand)
+  }
+
+  func readViewportText() -> String? {
+    surfaceView?.readViewportContentsForCLI()
+  }
+
+  func childPID() -> pid_t? {
+    guard let surface,
+      let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "ghostty_surface_pid")
+    else {
+      return nil
+    }
+    let function = unsafeBitCast(symbol, to: GhosttySurfacePIDFunction.self)
+    let pid = function(surface)
+    return pid > 0 ? pid_t(pid) : nil
   }
 
   func closeSurface(processAlive: Bool) {

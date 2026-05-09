@@ -244,7 +244,9 @@ private func hasCodexWorkingHeader(_ content: String) -> Bool {
 }
 
 private func hasSpinnerActivity(_ content: String) -> Bool {
-  let spinnerScalars: Set<UnicodeScalar> = ["✱", "✲", "✳", "✴", "✵", "✶", "✷", "✸", "✹", "✺", "✻", "✼", "✽", "✾", "✿", "·"]
+  let spinnerScalars: Set<UnicodeScalar> = [
+    "✱", "✲", "✳", "✴", "✵", "✶", "✷", "✸", "✹", "✺", "✻", "✼", "✽", "✾", "✿", "·",
+  ]
   return content.split(separator: "\n").contains { line in
     let trimmed = line.trimmingCharacters(in: .whitespaces)
     guard let first = trimmed.unicodeScalars.first else { return false }

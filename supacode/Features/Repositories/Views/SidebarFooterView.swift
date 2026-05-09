@@ -37,6 +37,17 @@ struct SidebarFooterView: View {
       .help("Help")
       Spacer()
       Button {
+        store.send(.activeAgents(.togglePanelVisibility))
+      } label: {
+        Image(
+          systemName: store.state.activeAgents.isPanelHidden
+            ? "rectangle.bottomthird.inset"
+            : "rectangle.bottomthird.inset.filled"
+        )
+        .accessibilityLabel(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
+      }
+      .help(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
+      Button {
         store.send(.refreshWorktrees)
       } label: {
         Image(systemName: "arrow.clockwise")

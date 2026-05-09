@@ -247,6 +247,12 @@ final class WorktreeTerminalManager {
     state.onTaskStatusChanged = { [weak self] status in
       self?.emit(.taskStatusChanged(worktreeID: worktree.id, status: status))
     }
+    state.onAgentEntryChanged = { [weak self] entry in
+      self?.emit(.agentEntryChanged(entry))
+    }
+    state.onAgentEntryRemoved = { [weak self] id in
+      self?.emit(.agentEntryRemoved(id))
+    }
     state.onRunScriptStatusChanged = { [weak self] isRunning in
       self?.emit(.runScriptStatusChanged(worktreeID: worktree.id, isRunning: isRunning))
     }
