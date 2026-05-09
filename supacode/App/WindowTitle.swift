@@ -59,9 +59,13 @@ enum WindowTitle {
     else {
       return appName
     }
+    // No active tab → drop worktree context so the title doesn't outlive the last tab.
+    guard let tab = selectedTabTitle(in: terminalState(worktreeID)) else {
+      return appName
+    }
     return format(
       repository: repositoryDisplayTitle(repositoryID: repositoryID, repositories: repositories),
-      tab: selectedTabTitle(in: terminalState(worktreeID))
+      tab: tab
     )
   }
 

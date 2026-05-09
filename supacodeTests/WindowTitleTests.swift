@@ -37,6 +37,37 @@ struct WindowTitleTests {
     #expect(WindowTitle.compute(repositories: state, terminalManager: manager) == "Archived Worktrees")
   }
 
+  @Test func computeFallsBackToAppNameWhenWorktreeHasNoActiveTab() {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktree = makeWorktree(rootURL: rootURL)
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let terminalState = WorktreeTerminalState(runtime: GhosttyRuntime(), worktree: worktree)
+    let tabId = terminalState.tabManager.createTab(title: "codex", icon: nil)
+    terminalState.tabManager.closeTab(tabId)
+
+    #expect(
+      WindowTitle.compute(
+        repositories: state,
+        terminalState: { id in id == worktree.id ? terminalState : nil }
+      ) == "Prowl"
+    )
+
+    #expect(
+      WindowTitle.compute(
+        repositories: state,
+        terminalState: { _ in nil }
+      ) == "Prowl"
+    )
+  }
+
   @Test func computeUsesCustomRepositoryTitleAndSelectedTabTitle() {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let worktree = makeWorktree(rootURL: rootURL)

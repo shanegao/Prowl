@@ -598,8 +598,11 @@ struct SupacodeApp: App {
         SidebarCommands(store: store)
         TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)
         WindowCommands(
+          store: store,
+          terminalManager: terminalManager,
           ghosttyShortcuts: ghosttyShortcuts,
-          resolvedKeybindings: store.resolvedKeybindings
+          resolvedKeybindings: store.resolvedKeybindings,
+          settingsWindowManager: SettingsWindowManager.shared
         )
       }
       CommandGroup(after: .textEditing) {
