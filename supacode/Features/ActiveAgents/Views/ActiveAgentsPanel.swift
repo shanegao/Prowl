@@ -28,8 +28,8 @@ struct ActiveAgentsPanel: View {
 
       if store.entries.isEmpty {
         Spacer(minLength: 0)
-        Text("No active agents")
-          .font(.caption)
+        Text("New agents will appear here")
+          .font(.callout)
           .foregroundStyle(.secondary)
         Spacer(minLength: 0)
       } else {
