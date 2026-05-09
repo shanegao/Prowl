@@ -21,6 +21,8 @@
 - `make sync-ghostty` fails under Xcode 26.4.1 before compiling Ghostty sources because Zig 0.15.2 cannot link the native build runner. Re-running with `DEVELOPER_DIR=/Applications/Xcode-26.3.0.app/Contents/Developer` succeeds.
 - Added Active Agents reducer/UI wiring and terminal detection loop. `GhosttySurfaceBridge.childPID()` uses `dlsym` so the app still compiles before the patched GhosttyKit binary is rebuilt; after rebuild, the exported `ghostty_surface_pid` symbol is used automatically.
 - The Active Agents panel height is persisted globally but visually capped by the sidebar container height, reserving at least 200 pt for the repository list.
+- Agent display names intentionally use short command-style lowercase tokens (`pi`, `claude`, `codex`, `kimi`, etc.) because the panel is a compact terminal-status surface, not product branding.
+- Screen heuristics are exposed as `DetectedAgent.detectState(in:)` so detection behavior stays attached to the identified agent while the per-agent detectors remain private pure functions.
 
 ### Verification
 

@@ -1,30 +1,31 @@
 import Foundation
 
-func detectState(agent: DetectedAgent?, screen: String) -> AgentRawState {
-  guard let agent else { return .unknown }
-  switch agent {
-  case .pi:
-    return detectPi(screen)
-  case .claude:
-    return detectClaude(screen)
-  case .codex:
-    return detectCodex(screen)
-  case .gemini:
-    return detectGemini(screen)
-  case .cursor:
-    return detectCursor(screen)
-  case .cline:
-    return detectCline(screen)
-  case .opencode:
-    return detectOpenCode(screen)
-  case .copilot:
-    return detectCopilot(screen)
-  case .kimi:
-    return detectKimi(screen)
-  case .droid:
-    return detectDroid(screen)
-  case .amp:
-    return detectAmp(screen)
+extension DetectedAgent {
+  func detectState(in screen: String) -> AgentRawState {
+    switch self {
+    case .pi:
+      return detectPi(screen)
+    case .claude:
+      return detectClaude(screen)
+    case .codex:
+      return detectCodex(screen)
+    case .gemini:
+      return detectGemini(screen)
+    case .cursor:
+      return detectCursor(screen)
+    case .cline:
+      return detectCline(screen)
+    case .opencode:
+      return detectOpenCode(screen)
+    case .copilot:
+      return detectCopilot(screen)
+    case .kimi:
+      return detectKimi(screen)
+    case .droid:
+      return detectDroid(screen)
+    case .amp:
+      return detectAmp(screen)
+    }
   }
 }
 

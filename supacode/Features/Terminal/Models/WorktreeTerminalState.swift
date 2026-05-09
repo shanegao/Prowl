@@ -1585,7 +1585,7 @@ final class WorktreeTerminalState {
     }
 
     let previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
-    let raw = detectState(agent: agent, screen: view.bridge.readViewportText() ?? "")
+    let raw = agent.detectState(in: view.bridge.readViewportText() ?? "")
     var lastClaudeWorkingAt = lastClaudeWorkingAtBySurface[surfaceID]
     let stabilized = stabilizeAgentState(
       agent: agent,

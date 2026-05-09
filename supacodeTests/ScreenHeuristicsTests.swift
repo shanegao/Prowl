@@ -4,19 +4,19 @@ import Testing
 
 struct ScreenHeuristicsTests {
   @Test func unknownAgentIsUnknown() {
-    #expect(detectState(agent: nil, screen: "Working...") == .unknown)
+    let agent: DetectedAgent? = nil
+    #expect(agent?.detectState(in: "Working...") ?? .unknown == .unknown)
   }
 
   @Test func piDetection() {
-    #expect(detectState(agent: .pi, screen: "Working...") == .working)
-    #expect(detectState(agent: .pi, screen: "Done") == .idle)
+    #expect(DetectedAgent.pi.detectState(in: "Working...") == .working)
+    #expect(DetectedAgent.pi.detectState(in: "Done") == .idle)
   }
 
   @Test func claudeDetection() {
     #expect(
-      detectState(
-        agent: .claude,
-        screen: """
+      DetectedAgent.claude.detectState(
+        in: """
           Reading file
           ✽ Tempering…
           ─────────
@@ -26,9 +26,8 @@ struct ScreenHeuristicsTests {
       ) == .working
     )
     #expect(
-      detectState(
-        agent: .claude,
-        screen: """
+      DetectedAgent.claude.detectState(
+        in: """
           Do you want to proceed?
           ❯ 1. Yes
             2. No
@@ -38,9 +37,8 @@ struct ScreenHeuristicsTests {
       ) == .blocked
     )
     #expect(
-      detectState(
-        agent: .claude,
-        screen: """
+      DetectedAgent.claude.detectState(
+        in: """
           Task complete.
           ─────────
           ❯
@@ -51,42 +49,42 @@ struct ScreenHeuristicsTests {
   }
 
   @Test func codexDetection() {
-    #expect(detectState(agent: .codex, screen: "press enter to confirm or esc to cancel") == .blocked)
-    #expect(detectState(agent: .codex, screen: "• Working (12s)\nesc to interrupt") == .working)
-    #expect(detectState(agent: .codex, screen: "Ready for input") == .idle)
+    #expect(DetectedAgent.codex.detectState(in: "press enter to confirm or esc to cancel") == .blocked)
+    #expect(DetectedAgent.codex.detectState(in: "• Working (12s)\nesc to interrupt") == .working)
+    #expect(DetectedAgent.codex.detectState(in: "Ready for input") == .idle)
   }
 
   @Test func otherAgentDetectorsCoverStateTriplets() {
-    #expect(detectState(agent: .gemini, screen: "│ Apply this change") == .blocked)
-    #expect(detectState(agent: .gemini, screen: "esc to cancel") == .working)
-    #expect(detectState(agent: .gemini, screen: "done") == .idle)
+    #expect(DetectedAgent.gemini.detectState(in: "│ Apply this change") == .blocked)
+    #expect(DetectedAgent.gemini.detectState(in: "esc to cancel") == .working)
+    #expect(DetectedAgent.gemini.detectState(in: "done") == .idle)
 
-    #expect(detectState(agent: .cursor, screen: "Run command? (y) (enter)") == .blocked)
-    #expect(detectState(agent: .cursor, screen: "⬡ indexing") == .working)
-    #expect(detectState(agent: .cursor, screen: "done") == .idle)
+    #expect(DetectedAgent.cursor.detectState(in: "Run command? (y) (enter)") == .blocked)
+    #expect(DetectedAgent.cursor.detectState(in: "⬡ indexing") == .working)
+    #expect(DetectedAgent.cursor.detectState(in: "done") == .idle)
 
-    #expect(detectState(agent: .cline, screen: "Let Cline use this tool? yes") == .blocked)
-    #expect(detectState(agent: .cline, screen: "Cline is ready for your message") == .idle)
-    #expect(detectState(agent: .cline, screen: "still processing") == .working)
+    #expect(DetectedAgent.cline.detectState(in: "Let Cline use this tool? yes") == .blocked)
+    #expect(DetectedAgent.cline.detectState(in: "Cline is ready for your message") == .idle)
+    #expect(DetectedAgent.cline.detectState(in: "still processing") == .working)
 
-    #expect(detectState(agent: .opencode, screen: "△ Permission required") == .blocked)
-    #expect(detectState(agent: .opencode, screen: "esc to interrupt") == .working)
-    #expect(detectState(agent: .opencode, screen: "done") == .idle)
+    #expect(DetectedAgent.opencode.detectState(in: "△ Permission required") == .blocked)
+    #expect(DetectedAgent.opencode.detectState(in: "esc to interrupt") == .working)
+    #expect(DetectedAgent.opencode.detectState(in: "done") == .idle)
 
-    #expect(detectState(agent: .copilot, screen: "│ do you want to run this?") == .blocked)
-    #expect(detectState(agent: .copilot, screen: "esc to cancel") == .working)
-    #expect(detectState(agent: .copilot, screen: "done") == .idle)
+    #expect(DetectedAgent.copilot.detectState(in: "│ do you want to run this?") == .blocked)
+    #expect(DetectedAgent.copilot.detectState(in: "esc to cancel") == .working)
+    #expect(DetectedAgent.copilot.detectState(in: "done") == .idle)
 
-    #expect(detectState(agent: .kimi, screen: "approve? [y/n]") == .blocked)
-    #expect(detectState(agent: .kimi, screen: "thinking") == .working)
-    #expect(detectState(agent: .kimi, screen: "done") == .idle)
+    #expect(DetectedAgent.kimi.detectState(in: "approve? [y/n]") == .blocked)
+    #expect(DetectedAgent.kimi.detectState(in: "thinking") == .working)
+    #expect(DetectedAgent.kimi.detectState(in: "done") == .idle)
 
-    #expect(detectState(agent: .droid, screen: "EXECUTE\nenter to select") == .blocked)
-    #expect(detectState(agent: .droid, screen: "⠋ esc to stop") == .working)
-    #expect(detectState(agent: .droid, screen: "done") == .idle)
+    #expect(DetectedAgent.droid.detectState(in: "EXECUTE\nenter to select") == .blocked)
+    #expect(DetectedAgent.droid.detectState(in: "⠋ esc to stop") == .working)
+    #expect(DetectedAgent.droid.detectState(in: "done") == .idle)
 
-    #expect(detectState(agent: .amp, screen: "waiting for approval\nallow all for this session") == .blocked)
-    #expect(detectState(agent: .amp, screen: "esc to cancel") == .working)
-    #expect(detectState(agent: .amp, screen: "done") == .idle)
+    #expect(DetectedAgent.amp.detectState(in: "waiting for approval\nallow all for this session") == .blocked)
+    #expect(DetectedAgent.amp.detectState(in: "esc to cancel") == .working)
+    #expect(DetectedAgent.amp.detectState(in: "done") == .idle)
   }
 }
