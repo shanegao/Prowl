@@ -33,12 +33,22 @@ extension DetectedAgent {
 }
 
 private func recentLines(_ content: String, limit: Int) -> String {
-  var lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-  while lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true {
-    lines.removeLast()
+  let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+  var remainingNonBlankLines = limit
+  var startIndex = lines.startIndex
+
+  for index in lines.indices.reversed() {
+    guard !lines[index].trimmingCharacters(in: .whitespaces).isEmpty else {
+      continue
+    }
+    remainingNonBlankLines -= 1
+    if remainingNonBlankLines == 0 {
+      startIndex = index
+      break
+    }
   }
-  guard lines.count > limit else { return lines.joined(separator: "\n") }
-  return lines.suffix(limit).joined(separator: "\n")
+
+  return lines[startIndex...].joined(separator: "\n")
 }
 
 private func detectPi(_ content: String) -> AgentRawState {

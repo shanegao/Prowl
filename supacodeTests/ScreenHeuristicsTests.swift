@@ -154,8 +154,22 @@ struct ScreenHeuristicsTests {
         in: """
           ⠋ Using Shell (git remote -v)
           \(String(repeating: "\n", count: 40))
+          ─────────────────────────────────────────────────────────────────────
+          agent (kimi-k2.5 ●)  ~/Sync/github/Prowl  feat/active-agents-pa…  ctrl-o: editor
+                                                    context: 6.5% (17k/262.1k)
           """
       ) == .working
+    )
+    #expect(
+      DetectedAgent.kimi.detectState(
+        in: """
+          ── input ────────────────────────────────────────────────────────────
+          \(String(repeating: "\n", count: 40))
+          ─────────────────────────────────────────────────────────────────────
+          agent (kimi-k2.5 ●)  ~/Sync/github/Prowl  feat/active-agents-pa…  ctrl-o: editor
+                                                    context: 6.5% (17k/262.1k)
+          """
+      ) == .idle
     )
     #expect(
       DetectedAgent.kimi.detectState(
@@ -172,6 +186,9 @@ struct ScreenHeuristicsTests {
           │   ▲/▼ select  1/2/3/4 choose  ↵ confirm                            │
           ╰────────────────────────────────────────────────────────────────────╯
           \(String(repeating: "\n", count: 40))
+          ─────────────────────────────────────────────────────────────────────
+          agent (kimi-k2.5 ●)  ~/Sync/github/Prowl  feat/active-agents-pa…  ctrl-o: editor
+                                                    context: 6.5% (17k/262.1k)
           """
       ) == .blocked
     )
