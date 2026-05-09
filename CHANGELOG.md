@@ -1,5 +1,32 @@
 # Changelog
 
+## [2026.5.9](https://github.com/onevcat/Prowl/releases/tag/v2026.5.9)
+
+This release adds browser-style worktree navigation, inline tab title editing, dynamic window titles, and smarter notification handling, alongside loading-state polish and several notable bug fixes.
+
+### New
+
+- Worktree history navigation: use ⌘⌥[ and ⌘⌥] to move back and forward through recent worktree selections. History is paused while Shelf or Canvas is active; both shortcuts are also accessible from the Worktrees menu.
+- Terminal tabs now support inline tab titles editing. Double-click a tab in the tab bar to rename it; custom names survive restarts and appear in Canvas, Shelf, and CLI snapshots.
+- Unread notification indicators now appear on individual terminal tabs and split surfaces. Press ⌘⌥U or use "Jump to Latest Unread" in the Command Palette to jump to the surface with the newest unread notification. Tapping a system notification also focuses the originating surface.
+- Android Studio is now available as a worktree editor action alongside Xcode, VS Code, and other supported editors.
+
+### Improved
+
+- The main window title now reflects the current repository, worktree, canvas, archive view, or selected terminal tab. Reopening from the Dock, the CLI, the Window menu, or the quit confirmation flow now consistently targets the real main window instead of accidentally landing on Settings or other panels.
+- The Add Repository button has moved from the sidebar footer to a `+` icon next to the Repositories header. The "Repositories" header is now always visible (previously hidden until you had more than 10 repos), and new users with no repositories see a pulsing arrow hint pointing to the new button.
+- The worktree loading overlay now surfaces the latest five lines of streaming output inline, replacing the previous nested scroll region. Plain-folder removals now read as folder removals in the loading copy.
+- Inactive split pane dimming now reads fill color and opacity from Ghostty's runtime configuration rather than a hardcoded tint, so your Ghostty theme is honored consistently.
+- The Ghostty indeterminate progress bar now uses SwiftUI's phase animator, producing a smoother sweep with less state churn.
+- The Help (?) menu has moved to the leading edge of the sidebar footer, separating it from the Refresh / Archived / Settings action cluster on the trailing side. Repository, Shelf, Archived, and Diff empty states now share a single `ContentUnavailableView` layout for consistent typography and Dynamic Type behavior.
+
+### Fixed
+
+- Holding Cmd+W to close tabs across Shelf book boundaries no longer accidentally closes the window during the brief transition between books.
+- Ghostty key equivalents now require the terminal surface to be the active first responder, preventing unintended key capture when another part of the app has focus.
+- Shifted menu shortcuts (e.g. Cmd+Shift+?) now match correctly when routing keys to Ghostty, fixing cases where the shifted variant was silently dropped.
+- GitHub PR operations (merge, close, ready) now correctly resolve the repository for fork clones, fixing failures caused by same-branch false positives and deleted fork heads.
+
 ## [2026.5.4](https://github.com/onevcat/Prowl/releases/tag/v2026.5.4)
 
 This release brings visual polish to split panes and the sidebar, along with a fix for keyboard-driven tab closing.
