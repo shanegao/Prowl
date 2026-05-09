@@ -39,6 +39,8 @@ struct SidebarListView: View {
   @State private var draggingRepositoryID: Repository.ID?
   @State private var targetedRepositoryDropDestination: Int?
   @State private var sidebarHeight = 0.0
+  @State private var sidebarFooterHeight = 0.0
+  @State private var resizingPanelHeight: Double?
 
   var body: some View {
     let state = store.state
@@ -59,47 +61,42 @@ struct SidebarListView: View {
     let selectedWorktreeIDs = Self.selectedWorktreeIDs(in: state)
     let pendingSidebarReveal = state.pendingSidebarReveal
 
-    let maximumPanelHeight = ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: sidebarHeight)
+    let maximumPanelHeight =
+      sidebarHeight > 0
+      ? ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: sidebarHeight)
+      : ActiveAgentsFeature.maximumPanelHeight
+    let panelHeight = min(resizingPanelHeight ?? state.activeAgents.panelHeight, maximumPanelHeight)
+    let panelOffset = state.activeAgents.isPanelHidden ? panelHeight : 0
+    let listBottomPadding = state.activeAgents.isPanelHidden ? 0 : panelHeight
 
     ScrollViewReader { scrollProxy in
-      VStack(spacing: 0) {
-        ScrollView {
-          LazyVStack(spacing: 0) {
-            if showsRepositoryListHeader {
-              repositoryListHeader(
-                action: repositoryListHeaderAction,
-                expandableRepositoryIDs: expandableRepositoryIDs
-              )
-            }
-
-            if repositoryItems.isEmpty {
-              emptyRepositoryHint()
-            }
-
-            ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
-              repositoryItemView(
-                item,
-                index: index,
-                repositoryOrderIDs: presentation.repositoryOrderIDs,
-                hotkeyRows: hotkeyRows,
-                selectedWorktreeIDs: selectedWorktreeIDs
-              )
-            }
+      ScrollView {
+        LazyVStack(spacing: 0) {
+          if showsRepositoryListHeader {
+            repositoryListHeader(
+              action: repositoryListHeaderAction,
+              expandableRepositoryIDs: expandableRepositoryIDs
+            )
           }
-          .padding(.vertical, 2)
-        }
-        .scrollIndicators(.never)
-        .frame(maxHeight: .infinity)
 
-        if !state.activeAgents.isPanelHidden {
-          ActiveAgentsPanel(
-            store: store.scope(state: \.activeAgents, action: \.activeAgents),
-            maximumHeight: maximumPanelHeight
-          )
-          .frame(height: min(state.activeAgents.panelHeight, maximumPanelHeight))
-          .transition(.move(edge: .bottom).combined(with: .opacity))
+          if repositoryItems.isEmpty {
+            emptyRepositoryHint()
+          }
+
+          ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
+            repositoryItemView(
+              item,
+              index: index,
+              repositoryOrderIDs: presentation.repositoryOrderIDs,
+              hotkeyRows: hotkeyRows,
+              selectedWorktreeIDs: selectedWorktreeIDs
+            )
+          }
         }
+        .padding(.vertical, 2)
+        .padding(.bottom, listBottomPadding)
       }
+      .scrollIndicators(.never)
       .frame(minWidth: 220)
       .background(.bar)
       .clipped()
@@ -108,7 +105,6 @@ struct SidebarListView: View {
       } action: { newHeight in
         sidebarHeight = newHeight
       }
-      .animation(.spring(response: 0.4, dampingFraction: 0.85), value: state.activeAgents.isPanelHidden)
       .onDragSessionUpdated { session in
         if case .ended = session.phase {
           endSidebarDrag()
@@ -118,7 +114,7 @@ struct SidebarListView: View {
           endSidebarDrag()
         }
       }
-      .safeAreaInset(edge: .top) {
+      .safeAreaInset(edge: .top, spacing: 0) {
         HStack(spacing: 4) {
           CanvasSidebarButton(
             store: store,
@@ -136,8 +132,36 @@ struct SidebarListView: View {
           Divider()
         }
       }
-      .safeAreaInset(edge: .bottom) {
+      .safeAreaInset(edge: .bottom, spacing: 0) {
         SidebarFooterView(store: store)
+          .onGeometryChange(for: Double.self) { proxy in
+            Double(proxy.size.height)
+          } action: { newHeight in
+            sidebarFooterHeight = newHeight
+          }
+      }
+      .overlay(alignment: .bottom) {
+        ZStack(alignment: .bottom) {
+          ActiveAgentsPanel(
+            store: store.scope(state: \.activeAgents, action: \.activeAgents),
+            height: panelHeight,
+            maximumHeight: maximumPanelHeight,
+            onHeightChanged: { height in
+              resizingPanelHeight = height
+            },
+            onHeightChangeEnded: { height in
+              resizingPanelHeight = nil
+              store.send(.activeAgents(.panelHeightChanged(height)))
+            }
+          )
+          .frame(height: panelHeight)
+          .offset(y: panelOffset)
+        }
+        .frame(height: panelHeight)
+        .clipped()
+        .padding(.bottom, sidebarFooterHeight)
+        .allowsHitTesting(!state.activeAgents.isPanelHidden)
+        .animation(.easeOut(duration: 0.18), value: state.activeAgents.isPanelHidden)
       }
       .dropDestination(for: URL.self) { urls, _ in
         let fileURLs = urls.filter(\.isFileURL)

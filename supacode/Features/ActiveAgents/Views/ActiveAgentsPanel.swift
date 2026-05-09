@@ -3,7 +3,10 @@ import SwiftUI
 
 struct ActiveAgentsPanel: View {
   @Bindable var store: StoreOf<ActiveAgentsFeature>
+  let height: Double
   let maximumHeight: Double
+  let onHeightChanged: (Double) -> Void
+  let onHeightChangeEnded: (Double) -> Void
   @State private var dragStartHeight: Double?
 
   var body: some View {
@@ -60,15 +63,17 @@ struct ActiveAgentsPanel: View {
           .contentShape(.rect)
       }
       .gesture(
-        DragGesture()
+        DragGesture(coordinateSpace: .global)
           .onChanged { value in
-            let start = dragStartHeight ?? store.panelHeight
+            let start = dragStartHeight ?? height
             dragStartHeight = start
-            let height = ActiveAgentsFeature.clampedPanelHeight(start - value.translation.height)
-            store.send(.panelHeightChanged(min(maximumHeight, height)))
+            onHeightChanged(clampedHeight(start - value.translation.height))
           }
-          .onEnded { _ in
+          .onEnded { value in
+            let start = dragStartHeight ?? height
+            let height = clampedHeight(start - value.translation.height)
             dragStartHeight = nil
+            onHeightChangeEnded(height)
           }
       )
       .onHover { hovering in
@@ -78,5 +83,9 @@ struct ActiveAgentsPanel: View {
           NSCursor.arrow.set()
         }
       }
+  }
+
+  private func clampedHeight(_ height: Double) -> Double {
+    min(maximumHeight, max(ActiveAgentsFeature.minimumPanelHeight, height))
   }
 }
