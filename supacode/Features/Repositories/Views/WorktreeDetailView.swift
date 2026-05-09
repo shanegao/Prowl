@@ -668,11 +668,13 @@ struct WorktreeDetailView: View {
   ) -> WorktreeLoadingInfo? {
     guard let selectedRow else { return nil }
     let repositoryName = repositories.repositoryName(for: selectedRow.repositoryID)
+    let isFolder = repositories.repositories[id: selectedRow.repositoryID]?.kind == .plain
     if selectedRow.isDeleting {
       return WorktreeLoadingInfo(
         name: selectedRow.name,
         repositoryName: repositoryName,
         state: .removing,
+        isFolder: isFolder,
         statusTitle: nil,
         statusDetail: nil,
         statusCommand: nil,
