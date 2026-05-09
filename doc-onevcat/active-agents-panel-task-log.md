@@ -17,3 +17,5 @@
 ### Decisions And Notes
 
 - Pure detection logic is implemented first with tests before wiring, because it is the most important stable contract for later UI iteration.
+- Created `onevcat/ghostty` and pushed `release/v1.3.1-patched` with `ghostty_surface_pid`.
+- `make sync-ghostty` currently fails before compiling Ghostty sources because Zig 0.15.2 cannot link even a trivial native macOS executable on this host without an explicit lower target/sysroot. Direct `zig build-exe -target aarch64-macos.15.0 --sysroot "$(xcrun --sdk macosx --show-sdk-path)"` succeeds, so this is tracked as a local Zig host toolchain issue.
