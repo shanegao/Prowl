@@ -160,14 +160,20 @@ private func detectKimi(_ content: String) -> AgentRawState {
   let blockedPatterns = [
     "allow?", "confirm?", "approve?", "proceed?", "[y/n]", "(y/n)",
   ]
-  if blockedPatterns.contains(where: lower.contains) || hasConfirmationPrompt(lower) {
+  if blockedPatterns.contains(where: lower.contains)
+    || hasConfirmationPrompt(lower)
+    || hasKimiApprovalPanel(content: content, lower: lower)
+  {
     return .blocked
   }
 
   let workingPatterns = [
     "thinking", "processing", "generating", "waiting for response", "ctrl+c to cancel",
   ]
-  if workingPatterns.contains(where: lower.contains) {
+  if workingPatterns.contains(where: lower.contains)
+    || hasKimiMoonSpinner(content)
+    || hasKimiToolSpinner(content: content, lower: lower)
+  {
     return .working
   }
   return .idle
@@ -248,6 +254,26 @@ private func hasSelectionPrompt(_ content: String) -> Bool {
     || content.split(separator: "\n").contains { line in
       line.trimmingCharacters(in: .whitespaces).hasPrefix("1.")
     }
+}
+
+private func hasKimiApprovalPanel(content: String, lower: String) -> Bool {
+  lower.contains("requesting approval")
+    || (lower.contains("approve once") && lower.contains("approve for this session") && lower.contains("reject"))
+    || (content.contains("─ approval") && content.contains("↵ confirm"))
+}
+
+private func hasKimiMoonSpinner(_ content: String) -> Bool {
+  let moonSpinners: Set<Character> = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
+  return content.contains { moonSpinners.contains($0) }
+}
+
+private func hasKimiToolSpinner(content: String, lower: String) -> Bool {
+  guard lower.contains("using ") else { return false }
+  return content.split(separator: "\n").contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    guard let first = trimmed.unicodeScalars.first else { return false }
+    return (0x2800...0x28FF).contains(Int(first.value))
+  }
 }
 
 private func hasConfirmationPrompt(_ lower: String) -> Bool {

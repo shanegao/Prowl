@@ -147,6 +147,25 @@ struct ScreenHeuristicsTests {
 
     #expect(DetectedAgent.kimi.detectState(in: "approve? [y/n]") == .blocked)
     #expect(DetectedAgent.kimi.detectState(in: "thinking") == .working)
+    #expect(DetectedAgent.kimi.detectState(in: "🌘") == .working)
+    #expect(DetectedAgent.kimi.detectState(in: "⠸ Using Shell (git status)") == .working)
+    #expect(
+      DetectedAgent.kimi.detectState(
+        in: """
+          ⠸ Using Shell (git remote -v && echo "--..." && git log --oneline -3)
+          ╭─ approval ─────────────────────────────────────────────────────────╮
+          │  Shell is requesting approval to run command:                      │
+          │                                                                    │
+          │ → [1] Approve once                                                 │
+          │   [2] Approve for this session                                     │
+          │   [3] Reject                                                       │
+          │   [4] Reject, tell the model what to do instead                    │
+          │                                                                    │
+          │   ▲/▼ select  1/2/3/4 choose  ↵ confirm                            │
+          ╰────────────────────────────────────────────────────────────────────╯
+          """
+      ) == .blocked
+    )
     #expect(DetectedAgent.kimi.detectState(in: "done") == .idle)
 
     #expect(DetectedAgent.droid.detectState(in: "EXECUTE\nenter to select") == .blocked)
