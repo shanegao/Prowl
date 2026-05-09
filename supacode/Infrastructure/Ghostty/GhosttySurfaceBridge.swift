@@ -2,8 +2,6 @@ import AppKit
 import Foundation
 import GhosttyKit
 
-private typealias GhosttySurfacePIDFunction = @convention(c) (ghostty_surface_t) -> Int32
-
 @MainActor
 final class GhosttySurfaceBridge {
   let state = GhosttySurfaceState()
@@ -58,13 +56,8 @@ final class GhosttySurfaceBridge {
   }
 
   func childPID() -> pid_t? {
-    guard let surface,
-      let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "ghostty_surface_pid")
-    else {
-      return nil
-    }
-    let function = unsafeBitCast(symbol, to: GhosttySurfacePIDFunction.self)
-    let pid = function(surface)
+    guard let surface else { return nil }
+    let pid = ghostty_surface_pid(surface)
     return pid > 0 ? pid_t(pid) : nil
   }
 
