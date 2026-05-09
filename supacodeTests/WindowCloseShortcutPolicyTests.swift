@@ -45,4 +45,44 @@ struct WindowCloseShortcutPolicyTests {
     #expect(shortcut?.key == "w")
     #expect(shortcut?.modifiers == .command)
   }
+
+  // Closing the last tab of a Shelf book momentarily clears every focused
+  // close target while the Shelf advances to the next book. If Close Window
+  // is allowed to claim Cmd+W in that window, the next auto-repeated press
+  // shuts the whole window. While Shelf still has at least one open book,
+  // Cmd+W must stay with the terminal layer.
+  @Test func closeWindowYieldsCommandWDuringShelfBookSwitchEvenWithoutFocusedTarget() {
+    let shortcut = WindowCloseShortcutPolicy.closeWindowShortcut(
+      closeSurfaceShortcut: KeyboardShortcut("w"),
+      closeTabShortcut: nil,
+      hasTerminalCloseTarget: false,
+      shelfHasOpenBooks: true
+    )
+
+    #expect(shortcut == nil)
+  }
+
+  @Test func closeWindowKeepsCommandWWhenShelfIsEmptyEvenWithoutFocusedTarget() {
+    let shortcut = WindowCloseShortcutPolicy.closeWindowShortcut(
+      closeSurfaceShortcut: KeyboardShortcut("w"),
+      closeTabShortcut: nil,
+      hasTerminalCloseTarget: false,
+      shelfHasOpenBooks: false
+    )
+
+    #expect(shortcut?.key == "w")
+    #expect(shortcut?.modifiers == .command)
+  }
+
+  @Test func closeWindowKeepsCommandWWhenShelfHasBooksButTerminalUsesDifferentShortcut() {
+    let shortcut = WindowCloseShortcutPolicy.closeWindowShortcut(
+      closeSurfaceShortcut: KeyboardShortcut("w", modifiers: [.option, .command]),
+      closeTabShortcut: nil,
+      hasTerminalCloseTarget: false,
+      shelfHasOpenBooks: true
+    )
+
+    #expect(shortcut?.key == "w")
+    #expect(shortcut?.modifiers == .command)
+  }
 }
