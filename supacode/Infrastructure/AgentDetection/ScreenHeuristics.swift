@@ -249,24 +249,45 @@ private func claudeCurrentInteractionRegion(_ content: String) -> String {
 
 private func hasClaudeBlockedPrompt(content: String, lower: String) -> Bool {
   if lower.contains("do you want to proceed?")
+    || lower.contains("would you like to proceed?")
     || lower.contains("waiting for permission")
     || lower.contains("do you want to allow this connection?")
+    || lower.contains("tab to amend")
+    || lower.contains("ctrl+e to explain")
+    || lower.contains("chat about this")
+    || lower.contains("review your answers")
+    || lower.contains("skip interview and plan immediately")
   {
     return true
   }
-  if (lower.contains("do you want") || lower.contains("would you like"))
-    && (lower.contains("yes") || content.contains("❯"))
-  {
-    return true
-  }
-  return hasSelectionPrompt(content) && (lower.contains("yes") || lower.contains("no"))
+  return hasConfirmationPrompt(lower)
+    || (hasClaudeSelectionPrompt(content) && hasClaudeYesNoChoice(content))
 }
 
-private func hasSelectionPrompt(_ content: String) -> Bool {
-  content.contains("❯")
-    || content.split(separator: "\n").contains { line in
-      line.trimmingCharacters(in: .whitespaces).hasPrefix("1.")
-    }
+private func hasClaudeSelectionPrompt(_ content: String) -> Bool {
+  content.split(separator: "\n").contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return trimmed.hasPrefix("❯")
+      && trimmed.contains(".")
+      && trimmed.contains(where: \.isNumber)
+  }
+}
+
+private func hasClaudeYesNoChoice(_ content: String) -> Bool {
+  content.split(separator: "\n").contains { line in
+    let line = line.trimmingCharacters(in: .whitespaces)
+    let option =
+      line.hasPrefix("❯")
+      ? String(line.dropFirst()).trimmingCharacters(in: .whitespaces)
+      : line
+    let trimmed = option.lowercased()
+    return trimmed == "yes"
+      || trimmed == "no"
+      || trimmed.hasPrefix("1. yes")
+      || trimmed.hasPrefix("2. no")
+      || trimmed.hasPrefix("yes, and ")
+      || trimmed.hasPrefix("no, and tell claude")
+  }
 }
 
 private func hasKimiApprovalPanel(content: String, lower: String) -> Bool {

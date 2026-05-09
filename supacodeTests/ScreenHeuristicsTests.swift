@@ -118,6 +118,37 @@ struct ScreenHeuristicsTests {
     )
   }
 
+  @Test func claudeDoesNotTreatHistoryInputAndBranchNameAsPermissionPrompt() {
+    #expect(
+      DetectedAgent.claude.detectState(
+        in: """
+          ✻ Crunched for 10s
+
+          ❯ 切一下fix/nocilla-thread-safe-stubs
+
+          ⏺ Bash(git checkout fix/nocilla-thread-safe-stubs)
+            ⎿  切换到分支 'fix/nocilla-thread-safe-stubs'
+               您的分支基于 'origin/fix/nocilla-thread-safe-stubs'，但此上游分支已经不存在。
+                 （使用 "git branch --unset-upstream" 来修复）
+
+          ⏺ 喵～切过来了！不过有个小提醒喵：
+
+            - 当前分支：fix/nocilla-thread-safe-stubs ✅
+            - ⚠️ 上游 origin/fix/nocilla-thread-safe-stubs 已经不存在了喵
+
+            要不要喵帮忙处理一下？可选：
+            1. git branch --unset-upstream —— 解除失效的上游绑定喵
+            2. 看一下这个分支跟 master 的差异，确认是否还需要保留
+            3. 如果确认没用了，可以切回 master 后删除喵
+
+            主子想怎么处理喵？
+
+          ✻ Churned for 8s
+          """
+      ) == .idle
+    )
+  }
+
   @Test func codexDetection() {
     #expect(DetectedAgent.codex.detectState(in: "press enter to confirm or esc to cancel") == .blocked)
     #expect(DetectedAgent.codex.detectState(in: "• Working (12s)\nesc to interrupt") == .working)
