@@ -10,6 +10,7 @@ private let terminalStateLogger = SupaLogger("TerminalState")
 private struct AgentDetectionDiagnostic {
   let tabId: TerminalTabID
   let childPID: pid_t?
+  let processGroupID: pid_t?
   let job: ForegroundJob?
   let identified: (agent: DetectedAgent, name: String)?
   let retainedAgent: DetectedAgent?
@@ -1581,7 +1582,10 @@ final class WorktreeTerminalState {
     let surfaceID = view.id
     let now = Date()
     let childPID = view.bridge.childPID()
-    let job = childPID.flatMap { ProcessDetection.foregroundJob(childPID: $0) }
+    let processGroupID = view.bridge.foregroundProcessGroupID()
+    let job =
+      processGroupID.flatMap { ProcessDetection.foregroundJob(processGroupID: $0) }
+      ?? childPID.flatMap { ProcessDetection.foregroundJob(childPID: $0) }
     let identified = job.flatMap { identifyAgentInJob($0) }
     let probedAgent = identified?.agent
 
@@ -1595,6 +1599,7 @@ final class WorktreeTerminalState {
         diagnostic: AgentDetectionDiagnostic(
           tabId: tabId,
           childPID: childPID,
+          processGroupID: processGroupID,
           job: job,
           identified: identified,
           retainedAgent: nil,
@@ -1643,6 +1648,7 @@ final class WorktreeTerminalState {
       diagnostic: AgentDetectionDiagnostic(
         tabId: tabId,
         childPID: childPID,
+        processGroupID: processGroupID,
         job: job,
         identified: identified,
         retainedAgent: agent,
@@ -1732,6 +1738,7 @@ final class WorktreeTerminalState {
     return [
       "tab=\(diagnostic.tabId.rawValue.uuidString.prefix(8))",
       "childPID=\(diagnostic.childPID.map(String.init) ?? "nil")",
+      "ptyPGID=\(diagnostic.processGroupID.map(String.init) ?? "nil")",
       "fgPGID=\(diagnostic.job.map { String($0.processGroupID) } ?? "nil")",
       "processes=\(processSummary)",
       "identified=\(diagnostic.identified.map { "\($0.agent.rawValue)(\($0.name))" } ?? "nil")",

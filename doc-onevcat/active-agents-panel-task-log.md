@@ -25,6 +25,7 @@
 - Screen heuristics are exposed as `DetectedAgent.detectState(in:)` so detection behavior stays attached to the identified agent while the per-agent detectors remain private pure functions.
 - The Active Agents footer toggle uses stable `eye` / `eye.slash` SF Symbols after the previous bottom-panel symbol rendered empty in the hidden state on the tested system.
 - Added DEBUG-only agent detection diagnostics for child PID lookup, foreground process group, candidate processes, identified/retained agent, raw screen state, and stabilized state after manual testing showed no agents appearing in the panel.
+- Added `ghostty_surface_foreground_process_group` to the Ghostty fork and switched Swift detection to prefer Ghostty's pty foreground process group over `proc_bsdinfo.e_tpgid`, which was nil for the shell PID during manual testing.
 
 ### Verification
 

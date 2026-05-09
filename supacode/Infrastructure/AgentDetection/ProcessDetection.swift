@@ -18,7 +18,11 @@ enum ProcessDetection {
     guard childPID > 0, let processGroupID = foregroundProcessGroupID(pid: childPID) else {
       return nil
     }
+    return foregroundJob(processGroupID: processGroupID)
+  }
 
+  static func foregroundJob(processGroupID: pid_t) -> ForegroundJob? {
+    guard processGroupID > 0 else { return nil }
     var pids = [pid_t](repeating: 0, count: 4096)
     let bytes = pids.withUnsafeMutableBufferPointer { buffer in
       proc_listallpids(buffer.baseAddress, Int32(buffer.count * MemoryLayout<pid_t>.size))

@@ -61,6 +61,12 @@ final class GhosttySurfaceBridge {
     return pid > 0 ? pid_t(pid) : nil
   }
 
+  func foregroundProcessGroupID() -> pid_t? {
+    guard let surface else { return nil }
+    let processGroupID = ghostty_surface_foreground_process_group(surface)
+    return processGroupID > 0 ? pid_t(processGroupID) : nil
+  }
+
   func closeSurface(processAlive: Bool) {
     onCloseRequest?(processAlive)
   }
