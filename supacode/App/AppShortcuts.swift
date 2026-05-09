@@ -93,6 +93,7 @@ enum AppShortcuts {
     static let openRepository = "open_repository"
     static let openPullRequest = "open_pull_request"
     static let toggleLeftSidebar = "toggle_left_sidebar"
+    static let toggleActiveAgentsPanel = "toggle_active_agents_panel"
     static let refreshWorktrees = "refresh_worktrees"
     static let jumpToLatestUnread = "jump_to_latest_unread"
     static let runScript = "run_script"
@@ -182,6 +183,7 @@ enum AppShortcuts {
   static let openRepository = AppShortcut(key: "o", modifiers: [.command, .shift])
   static let openPullRequest = AppShortcut(key: "g", modifiers: [.command, .control])
   static let toggleLeftSidebar = AppShortcut(key: "s", modifiers: [.command, .control])
+  static let toggleActiveAgentsPanel = AppShortcut(key: "p", modifiers: [.command, .option])
   static let refreshWorktrees = AppShortcut(key: "r", modifiers: [.command, .shift])
   static let jumpToLatestUnread = AppShortcut(key: "u", modifiers: [.command, .option])
   static let runScript = AppShortcut(key: "r", modifiers: .command)
@@ -329,6 +331,7 @@ enum AppShortcuts {
   private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
     .init(actionTitle: "Open Settings", shortcut: openSettings),
     .init(actionTitle: "Toggle Left Sidebar", shortcut: toggleLeftSidebar),
+    .init(actionTitle: "Toggle Active Agents Panel", shortcut: toggleActiveAgentsPanel),
     .init(actionTitle: "Jump to Latest Unread", shortcut: jumpToLatestUnread),
     .init(actionTitle: "Run Script", shortcut: runScript),
     .init(actionTitle: "Stop Script", shortcut: stopRunScript),
@@ -397,6 +400,12 @@ enum AppShortcuts {
       title: "Toggle Left Sidebar",
       scope: .configurableAppAction,
       shortcut: toggleLeftSidebar
+    ),
+    .init(
+      id: CommandID.toggleActiveAgentsPanel,
+      title: "Toggle Active Agents Panel",
+      scope: .configurableAppAction,
+      shortcut: toggleActiveAgentsPanel
     ),
     .init(
       id: CommandID.refreshWorktrees,
@@ -863,6 +872,7 @@ enum AppShortcuts {
     openRepository,
     openPullRequest,
     toggleLeftSidebar,
+    toggleActiveAgentsPanel,
     revealInSidebar,
     refreshWorktrees,
     jumpToLatestUnread,

@@ -48,7 +48,7 @@ struct ActiveAgentsPanel: View {
                 )
               }
               .buttonStyle(.plain)
-              .help("Focus \(entry.agent.displayName) in \(repositoryName(for: entry))")
+              .help(helpText(for: entry))
             }
           }
         }
@@ -127,6 +127,11 @@ struct ActiveAgentsPanel: View {
       return entry.surfaceID != selectedSurfaceID
     }
     return false
+  }
+
+  private func helpText(for entry: ActiveAgentEntry) -> String {
+    let trimmed = entry.tabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? "Untitled tab" : trimmed
   }
 
   private var panelBackgroundShape: UnevenRoundedRectangle {

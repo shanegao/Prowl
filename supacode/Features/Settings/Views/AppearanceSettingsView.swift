@@ -53,6 +53,16 @@ struct AppearanceSettingsView: View {
           )
           .help("Fade split panes that aren't focused so the active one stands out.")
         }
+        Section("Active Agents") {
+          Toggle(
+            "Show Active Agents panel automatically",
+            isOn: $store.autoShowActiveAgentsPanel
+          )
+          .help("Open the Active Agents panel when an agent is detected.")
+          Text("When enabled, hidden panels reopen as soon as an agent starts or updates.")
+            .foregroundStyle(.secondary)
+            .font(.callout)
+        }
         Section("Default View") {
           Picker("Launch in", selection: $store.defaultViewMode) {
             ForEach(DefaultViewMode.allCases) { mode in

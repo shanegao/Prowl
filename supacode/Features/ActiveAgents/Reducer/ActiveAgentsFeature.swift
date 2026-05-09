@@ -17,7 +17,7 @@ struct ActiveAgentsFeature {
   }
 
   enum Action: Equatable {
-    case agentEntryChanged(ActiveAgentEntry)
+    case agentEntryChanged(ActiveAgentEntry, autoShowPanel: Bool)
     case agentEntryRemoved(ActiveAgentEntry.ID)
     case entryTapped(ActiveAgentEntry.ID)
     case togglePanelVisibility
@@ -27,8 +27,11 @@ struct ActiveAgentsFeature {
   var body: some Reducer<State, Action> {
     Reduce { state, action in
       switch action {
-      case .agentEntryChanged(let entry):
+      case .agentEntryChanged(let entry, let autoShowPanel):
         state.entries[id: entry.id] = entry
+        if autoShowPanel, state.isPanelHidden {
+          state.$isPanelHidden.withLock { $0 = false }
+        }
         return .none
 
       case .agentEntryRemoved(let id):

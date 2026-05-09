@@ -1040,7 +1040,13 @@ struct AppFeature {
         return .none
 
       case .terminalEvent(.agentEntryChanged(let entry)):
-        return .send(.repositories(.activeAgents(.agentEntryChanged(entry))))
+        return .send(
+          .repositories(
+            .activeAgents(
+              .agentEntryChanged(entry, autoShowPanel: state.settings.autoShowActiveAgentsPanel)
+            )
+          )
+        )
 
       case .terminalEvent(.agentEntryRemoved(let id)):
         return .send(.repositories(.activeAgents(.agentEntryRemoved(id))))

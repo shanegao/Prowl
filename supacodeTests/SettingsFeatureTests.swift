@@ -364,6 +364,24 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.keybindingUserOverrides == overrides)
   }
 
+  @Test(.dependencies) func autoShowActiveAgentsPanelPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.autoShowActiveAgentsPanel = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.autoShowActiveAgentsPanel, true))) {
+      $0.autoShowActiveAgentsPanel = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.autoShowActiveAgentsPanel == true)
+  }
+
   @Test(.dependencies) func disablingAnalyticsResetsClient() async {
     var initialSettings = GlobalSettings.default
     initialSettings.analyticsEnabled = true

@@ -4,7 +4,7 @@ import Testing
 
 struct SidebarFooterViewTests {
   @Test func activeAgentsPanelToggleUsesStableSymbols() {
-    #expect(SidebarFooterView.activeAgentsPanelIconName(isPanelHidden: true) == "eye")
-    #expect(SidebarFooterView.activeAgentsPanelIconName(isPanelHidden: false) == "eye.slash")
+    #expect(SidebarFooterView.activeAgentsPanelIconName(isPanelHidden: true) == "person.crop.rectangle.stack")
+    #expect(SidebarFooterView.activeAgentsPanelIconName(isPanelHidden: false) == "person.crop.rectangle.stack.fill")
   }
 }

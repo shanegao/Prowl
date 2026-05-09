@@ -34,6 +34,7 @@ struct SettingsFeature {
     var keybindingUserOverrides: KeybindingUserOverrideStore
     var defaultViewMode: DefaultViewMode
     var dimUnfocusedSplits: Bool
+    var autoShowActiveAgentsPanel: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     var selection: SettingsSection? = .general
@@ -72,6 +73,7 @@ struct SettingsFeature {
       keybindingUserOverrides = settings.keybindingUserOverrides
       defaultViewMode = settings.defaultViewMode
       dimUnfocusedSplits = settings.dimUnfocusedSplits
+      autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
     }
 
     var globalSettings: GlobalSettings {
@@ -106,7 +108,8 @@ struct SettingsFeature {
         terminalFontSize: terminalFontSize,
         keybindingUserOverrides: keybindingUserOverrides,
         defaultViewMode: defaultViewMode,
-        dimUnfocusedSplits: dimUnfocusedSplits
+        dimUnfocusedSplits: dimUnfocusedSplits,
+        autoShowActiveAgentsPanel: autoShowActiveAgentsPanel
       )
     }
   }
@@ -208,6 +211,7 @@ struct SettingsFeature {
         state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
         state.defaultViewMode = normalizedSettings.defaultViewMode
         state.dimUnfocusedSplits = normalizedSettings.dimUnfocusedSplits
+        state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 

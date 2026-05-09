@@ -7,6 +7,7 @@ struct ActiveAgentRow: View {
   let branchName: String
   let repositoryColor: RepositoryColorChoice?
   let isDimmed: Bool
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     HStack(spacing: 8) {
@@ -57,15 +58,52 @@ struct ActiveAgentRow: View {
   private var statusPill: some View {
     HStack(spacing: 4) {
       if entry.displayState == .working {
-        ProgressView()
-          .controlSize(.small)
-          .frame(width: 10, height: 10)
+        if reduceMotion {
+          statusText
+        } else {
+          BaguaWorkingIndicator()
+        }
+      } else {
+        statusText
       }
-      Text(entry.displayState.label)
-        .font(.caption2.weight(.semibold))
-        .lineLimit(1)
     }
     .foregroundStyle(entry.displayState.foregroundStyle)
+  }
+
+  private var statusText: some View {
+    Text(entry.displayState.label)
+      .font(.caption2.weight(.semibold))
+      .lineLimit(1)
+  }
+}
+
+struct BaguaWorkingIndicator: View {
+  static let frames = ["☰", "☱", "☲", "☳", "☴", "☵", "☶", "☷"]
+  static let frameDuration = 0.12
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: Self.frameDuration)) { context in
+      frameText(Self.frame(at: context.date))
+    }
+  }
+
+  static func frame(at date: Date) -> String {
+    frames[frameIndex(at: date)]
+  }
+
+  static func frameIndex(at date: Date) -> Int {
+    let tick = Int(date.timeIntervalSinceReferenceDate / frameDuration)
+    let cycleLength = (frames.count * 2) - 2
+    let cycleIndex = ((tick % cycleLength) + cycleLength) % cycleLength
+    return cycleIndex < frames.count ? cycleIndex : cycleLength - cycleIndex
+  }
+
+  private func frameText(_ frame: String) -> some View {
+    Text(frame)
+      .font(.system(size: 17, weight: .bold, design: .monospaced))
+      .lineLimit(1)
+      .frame(width: 20, height: 18)
+      .accessibilityHidden(true)
   }
 }
 

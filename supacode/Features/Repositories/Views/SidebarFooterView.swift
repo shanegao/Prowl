@@ -44,7 +44,13 @@ struct SidebarFooterView: View {
         Image(systemName: Self.activeAgentsPanelIconName(isPanelHidden: store.state.activeAgents.isPanelHidden))
           .accessibilityLabel(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
       }
-      .help(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
+      .help(
+        AppShortcuts.helpText(
+          title: store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents",
+          commandID: AppShortcuts.CommandID.toggleActiveAgentsPanel,
+          in: resolvedKeybindings
+        )
+      )
       Button {
         store.send(.refreshWorktrees)
       } label: {
@@ -101,6 +107,6 @@ struct SidebarFooterView: View {
   }
 
   static func activeAgentsPanelIconName(isPanelHidden: Bool) -> String {
-    isPanelHidden ? "eye" : "eye.slash"
+    isPanelHidden ? "person.crop.rectangle.stack" : "person.crop.rectangle.stack.fill"
   }
 }

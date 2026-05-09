@@ -19,20 +19,34 @@ struct ActiveAgentsFeatureTests {
     let done = entry(id: UUID(3), state: .done, changedAt: new)
     let updatedIdle = entry(id: UUID(0), state: .blocked, changedAt: Date(timeIntervalSince1970: 30))
 
-    await store.send(.agentEntryChanged(idle)) {
+    await store.send(.agentEntryChanged(idle, autoShowPanel: false)) {
       $0.entries = [idle]
     }
-    await store.send(.agentEntryChanged(blocked)) {
+    await store.send(.agentEntryChanged(blocked, autoShowPanel: false)) {
       $0.entries = [idle, blocked]
     }
-    await store.send(.agentEntryChanged(working)) {
+    await store.send(.agentEntryChanged(working, autoShowPanel: false)) {
       $0.entries = [idle, blocked, working]
     }
-    await store.send(.agentEntryChanged(done)) {
+    await store.send(.agentEntryChanged(done, autoShowPanel: false)) {
       $0.entries = [idle, blocked, working, done]
     }
-    await store.send(.agentEntryChanged(updatedIdle)) {
+    await store.send(.agentEntryChanged(updatedIdle, autoShowPanel: false)) {
       $0.entries = [updatedIdle, blocked, working, done]
+    }
+  }
+
+  @Test func autoShowRevealsHiddenPanelOnAgentEntry() async {
+    var state = ActiveAgentsFeature.State()
+    state.$isPanelHidden.withLock { $0 = true }
+    let store = TestStore(initialState: state) {
+      ActiveAgentsFeature()
+    }
+    let agent = entry(id: UUID(0), state: .working, changedAt: Date(timeIntervalSince1970: 10))
+
+    await store.send(.agentEntryChanged(agent, autoShowPanel: true)) {
+      $0.entries = [agent]
+      $0.$isPanelHidden.withLock { $0 = false }
     }
   }
 

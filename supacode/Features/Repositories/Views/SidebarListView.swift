@@ -77,7 +77,8 @@ struct SidebarListView: View {
     )
     let panelHeight = min(resizingPanelHeight ?? state.activeAgents.panelHeight, maximumPanelHeight)
     let panelOffset = state.activeAgents.isPanelHidden ? panelHeight : 0
-    let listBottomPadding = state.activeAgents.isPanelHidden ? 0 : panelHeight
+    let activeAgentsPanelTopGap = 4.0
+    let listBottomPadding = state.activeAgents.isPanelHidden ? 0 : panelHeight + activeAgentsPanelTopGap
 
     ScrollViewReader { scrollProxy in
       ScrollView {
