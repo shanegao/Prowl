@@ -906,6 +906,8 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
     switch commandID {
     case AppShortcuts.CommandID.selectNextWorktree,
       AppShortcuts.CommandID.selectPreviousWorktree,
+      AppShortcuts.CommandID.worktreeHistoryBack,
+      AppShortcuts.CommandID.worktreeHistoryForward,
       AppShortcuts.CommandID.renameBranch,
       AppShortcuts.CommandID.selectWorktree1,
       AppShortcuts.CommandID.selectWorktree2,

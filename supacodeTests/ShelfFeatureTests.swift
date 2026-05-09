@@ -442,6 +442,41 @@ struct ShelfFeatureTests {
     #expect(sentCommands.value == [.performBindingAction(wt1, action: "previous_tab")])
   }
 
+  @Test(.dependencies) func worktreeHistoryIsUnavailableWhileShelfIsActive() async {
+    let fixture = threeWorktreeFixture()
+    var state = RepositoriesFeature.State(repositories: [fixture.repo])
+    state.selection = .worktree(fixture.worktrees[1].id)
+    state.isShelfActive = true
+    state.worktreeHistoryBackStack = [fixture.worktrees[0].id]
+    state.worktreeHistoryForwardStack = [fixture.worktrees[2].id]
+    #expect(!state.canNavigateWorktreeHistoryBackward)
+    #expect(!state.canNavigateWorktreeHistoryForward)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeHistoryBack)
+    await store.send(.worktreeHistoryForward)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func worktreeHistoryIsUnavailableWhileCanvasIsActive() async {
+    let fixture = threeWorktreeFixture()
+    var state = RepositoriesFeature.State(repositories: [fixture.repo])
+    state.selection = .canvas
+    state.worktreeHistoryBackStack = [fixture.worktrees[0].id]
+    state.worktreeHistoryForwardStack = [fixture.worktrees[2].id]
+    #expect(!state.canNavigateWorktreeHistoryBackward)
+    #expect(!state.canNavigateWorktreeHistoryForward)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeHistoryBack)
+    await store.send(.worktreeHistoryForward)
+    await store.finish()
+  }
+
   @Test(.dependencies) func selectNextWorktreeOutsideShelfStillCyclesWorktrees() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let wt1 = Worktree(
@@ -477,6 +512,7 @@ struct ShelfFeatureTests {
       $0.selection = .worktree(wt2.id)
       $0.sidebarSelectedWorktreeIDs = [wt2.id]
       $0.openedWorktreeIDs = [wt2.id]
+      $0.worktreeHistoryBackStack = [wt1.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
@@ -765,6 +801,7 @@ struct ShelfFeatureTests {
 
     await store.send(.selectArchivedWorktrees) {
       $0.isShelfActive = false
+      $0.worktreeHistoryBackStack = [worktree.id]
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
     }

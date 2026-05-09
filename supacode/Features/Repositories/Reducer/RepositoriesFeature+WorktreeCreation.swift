@@ -257,7 +257,7 @@ extension RepositoriesFeature {
           progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
         )
       )
-      setSingleWorktreeSelection(pendingID, state: &state)
+      setSingleWorktreeSelection(pendingID, state: &state, recordHistory: true)
       let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
       let createWorktreeStream = gitClient.createWorktreeStream
       let isValidBranchName = gitClient.isValidBranchName
@@ -558,7 +558,7 @@ extension RepositoriesFeature {
       state.pendingTerminalFocusWorktreeIDs.insert(worktree.id)
       removePendingWorktree(pendingID, state: &state)
       if state.selection == .worktree(pendingID) {
-        setSingleWorktreeSelection(worktree.id, state: &state)
+        setSingleWorktreeSelection(worktree.id, state: &state, recordHistory: false)
       }
       insertWorktree(worktree, repositoryID: repositoryID, state: &state)
       return .merge(

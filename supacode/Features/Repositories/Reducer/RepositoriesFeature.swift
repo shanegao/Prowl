@@ -216,6 +216,8 @@ struct RepositoriesFeature {
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
     var isShelfActive: Bool = false
+    var worktreeHistoryBackStack: [Worktree.ID] = []
+    var worktreeHistoryForwardStack: [Worktree.ID] = []
     /// IDs of worktrees (and plain-folder repositories) that have been
     /// "opened" at least once in this session — i.e., had their
     /// terminal state created by a user selection or CLI activation.
@@ -302,9 +304,11 @@ struct RepositoriesFeature {
     case markWorktreeClosed(Worktree.ID)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
-    case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
+    case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
     case selectNextWorktree
     case selectPreviousWorktree
+    case worktreeHistoryBack
+    case worktreeHistoryForward
     case revealSelectedWorktreeInSidebar
     case consumePendingSidebarReveal(Int)
     case requestRenameBranch(Worktree.ID, String)
@@ -703,6 +707,7 @@ struct RepositoriesFeature {
 
         case .selectArchivedWorktrees:
           state.isShelfActive = false
+          recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
           state.selection = .archivedWorktrees
           state.sidebarSelectedWorktreeIDs = []
           return .send(.delegate(.selectedWorktreeChanged(nil)))
@@ -858,6 +863,7 @@ struct RepositoriesFeature {
           let selectRepoToken = repositoriesLogger.beginInterval("reducer.selectRepository")
           defer { repositoriesLogger.endInterval(selectRepoToken) }
           guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
+          recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
           state.selection = .repository(repositoryID)
           state.sidebarSelectedWorktreeIDs = []
           if state.repositories[id: repositoryID]?.kind == .plain {
@@ -866,10 +872,10 @@ struct RepositoriesFeature {
           }
           return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
 
-        case .selectWorktree(let worktreeID, let focusTerminal):
+        case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
           let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
           defer { repositoriesLogger.endInterval(selectWtToken) }
-          setSingleWorktreeSelection(worktreeID, state: &state)
+          setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: recordHistory)
           if focusTerminal, let worktreeID {
             state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
           }
@@ -899,6 +905,12 @@ struct RepositoriesFeature {
           }
           guard let id = state.worktreeID(byOffset: -1) else { return .none }
           return .send(.selectWorktree(id))
+
+        case .worktreeHistoryBack:
+          return navigateWorktreeHistory(direction: .backward, state: &state)
+
+        case .worktreeHistoryForward:
+          return navigateWorktreeHistory(direction: .forward, state: &state)
 
         case .revealSelectedWorktreeInSidebar:
           guard let worktreeID = state.selectedWorktreeID,
@@ -1548,6 +1560,16 @@ extension RepositoriesFeature.State {
     selection?.worktreeID
   }
 
+  var canNavigateWorktreeHistoryBackward: Bool {
+    guard canUseWorktreeHistory else { return false }
+    return canNavigateWorktreeHistory(stack: worktreeHistoryBackStack)
+  }
+
+  var canNavigateWorktreeHistoryForward: Bool {
+    guard canUseWorktreeHistory else { return false }
+    return canNavigateWorktreeHistory(stack: worktreeHistoryForwardStack)
+  }
+
   var selectedRepositoryID: Repository.ID? {
     guard case .repository(let repositoryID) = selection else { return nil }
     return repositoryID
@@ -1621,12 +1643,26 @@ extension RepositoriesFeature.State {
     isShelfActive
   }
 
+  private var canUseWorktreeHistory: Bool {
+    // History navigation only makes sense when a worktree is the current
+    // anchor. With selection on `.repository`, `.archivedWorktrees`, or `nil`,
+    // there is no "current" position to step away from, so the menu items
+    // (and their shortcuts) must be disabled.
+    !isShowingShelf && !isShowingCanvas && selectedWorktreeID != nil
+  }
+
   var archivedWorktreeIDSet: Set<Worktree.ID> {
     Set(archivedWorktrees.map(\.id))
   }
 
   func isWorktreeArchived(_ id: Worktree.ID) -> Bool {
     archivedWorktreeIDSet.contains(id)
+  }
+
+  private func canNavigateWorktreeHistory(stack: [Worktree.ID]) -> Bool {
+    stack.reversed().contains { id in
+      id != selectedWorktreeID && isSelectionValid(id, state: self)
+    }
   }
 
   func worktreeInfo(for worktreeID: Worktree.ID) -> WorktreeInfoEntry? {
@@ -2350,8 +2386,10 @@ func restoreSelection(
   guard state.selection == .worktree(pendingID) else { return }
   setSingleWorktreeSelection(
     isSelectionValid(id, state: state) ? id : nil,
-    state: &state
+    state: &state,
+    recordHistory: false
   )
+  pruneWorktreeHistoryTails(state: &state)
 }
 
 func isSelectionValid(
@@ -2415,7 +2453,7 @@ func shelfBookSelectionEffect(
 ) -> Effect<RepositoriesFeature.Action> {
   switch book.kind {
   case .worktree:
-    return .send(.selectWorktree(book.id, focusTerminal: true))
+    return .send(.selectWorktree(book.id, focusTerminal: true, recordHistory: false))
   case .plainFolder:
     return .send(.selectRepository(book.repositoryID))
   }
@@ -2439,13 +2477,115 @@ private func isSidebarSelectionValid(
 
 func setSingleWorktreeSelection(
   _ worktreeID: Worktree.ID?,
-  state: inout RepositoriesFeature.State
+  state: inout RepositoriesFeature.State,
+  recordHistory: Bool = false
 ) {
+  if recordHistory {
+    recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: worktreeID, state: &state)
+  }
   state.selection = worktreeID.map(SidebarSelection.worktree)
   if let worktreeID {
     state.sidebarSelectedWorktreeIDs = [worktreeID]
   } else {
     state.sidebarSelectedWorktreeIDs = []
+  }
+}
+
+private enum WorktreeHistoryDirection {
+  case backward
+  case forward
+}
+
+private let worktreeHistoryStackLimit = 50
+
+private func navigateWorktreeHistory(
+  direction: WorktreeHistoryDirection,
+  state: inout RepositoriesFeature.State
+) -> Effect<RepositoriesFeature.Action> {
+  guard !state.isShowingShelf, !state.isShowingCanvas else { return .none }
+  guard let currentID = state.selectedWorktreeID else { return .none }
+  var sourceStack =
+    direction == .backward
+    ? state.worktreeHistoryBackStack
+    : state.worktreeHistoryForwardStack
+  guard let destinationID = popValidWorktreeHistoryDestination(from: &sourceStack, currentID: currentID, state: state)
+  else {
+    if direction == .backward {
+      state.worktreeHistoryBackStack = sourceStack
+    } else {
+      state.worktreeHistoryForwardStack = sourceStack
+    }
+    return .none
+  }
+
+  if direction == .backward {
+    state.worktreeHistoryBackStack = sourceStack
+    pushWorktreeHistoryID(currentID, onto: &state.worktreeHistoryForwardStack)
+  } else {
+    state.worktreeHistoryForwardStack = sourceStack
+    pushWorktreeHistoryID(currentID, onto: &state.worktreeHistoryBackStack)
+  }
+  setSingleWorktreeSelection(destinationID, state: &state, recordHistory: false)
+  state.openedWorktreeIDs.insert(destinationID)
+  return .send(.delegate(.selectedWorktreeChanged(state.worktree(for: destinationID))))
+}
+
+private func recordWorktreeHistoryTransition(
+  from previousID: Worktree.ID?,
+  to nextID: Worktree.ID?,
+  state: inout RepositoriesFeature.State
+) {
+  // Shelf / Canvas are mode switches, not worktree navigation — leave
+  // history frozen so users can resume Back/Forward where they left off.
+  guard !state.isShowingShelf, !state.isShowingCanvas else { return }
+  // No-op transitions (same worktree, or both endpoints nil) leave history alone.
+  if previousID == nextID { return }
+  // Any user-initiated selection change invalidates the redo path. Crucially
+  // this also fires when the user navigates to/from .repository or
+  // .archivedWorktrees (one or both IDs nil), so a stale forward stack
+  // can't carry over into an unrelated path.
+  state.worktreeHistoryForwardStack = []
+  // Only push onto the back stack when leaving a still-valid worktree; we
+  // don't want non-worktree selections (repository / archived) showing up
+  // as Back targets.
+  guard let previousID, isSelectionValid(previousID, state: state) else { return }
+  pushWorktreeHistoryID(previousID, onto: &state.worktreeHistoryBackStack)
+}
+
+private func popValidWorktreeHistoryDestination(
+  from stack: inout [Worktree.ID],
+  currentID: Worktree.ID,
+  state: RepositoriesFeature.State
+) -> Worktree.ID? {
+  while let candidateID = stack.popLast() {
+    guard candidateID != currentID, isSelectionValid(candidateID, state: state) else {
+      continue
+    }
+    return candidateID
+  }
+  return nil
+}
+
+private func pushWorktreeHistoryID(_ id: Worktree.ID, onto stack: inout [Worktree.ID]) {
+  stack.append(id)
+  if stack.count > worktreeHistoryStackLimit {
+    stack.removeFirst(stack.count - worktreeHistoryStackLimit)
+  }
+}
+
+private func pruneWorktreeHistoryTails(state: inout RepositoriesFeature.State) {
+  pruneWorktreeHistoryTail(stack: &state.worktreeHistoryBackStack, state: state)
+  pruneWorktreeHistoryTail(stack: &state.worktreeHistoryForwardStack, state: state)
+}
+
+private func pruneWorktreeHistoryTail(
+  stack: inout [Worktree.ID],
+  state: RepositoriesFeature.State
+) {
+  while let last = stack.last,
+    last == state.selectedWorktreeID || !isSelectionValid(last, state: state)
+  {
+    stack.removeLast()
   }
 }
 

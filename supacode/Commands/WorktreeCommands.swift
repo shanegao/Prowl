@@ -41,6 +41,22 @@ struct WorktreeCommands: Commands {
       )
       .help(helpText(title: "Select Previous Worktree", commandID: AppShortcuts.CommandID.selectPreviousWorktree))
       .disabled(orderedRows.isEmpty)
+      Button("Back in Worktree History") {
+        store.send(.repositories(.worktreeHistoryBack))
+      }
+      .modifier(
+        KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.worktreeHistoryBack))
+      )
+      .help(helpText(title: "Back in Worktree History", commandID: AppShortcuts.CommandID.worktreeHistoryBack))
+      .disabled(!repositories.canNavigateWorktreeHistoryBackward)
+      Button("Forward in Worktree History") {
+        store.send(.repositories(.worktreeHistoryForward))
+      }
+      .modifier(
+        KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.worktreeHistoryForward))
+      )
+      .help(helpText(title: "Forward in Worktree History", commandID: AppShortcuts.CommandID.worktreeHistoryForward))
+      .disabled(!repositories.canNavigateWorktreeHistoryForward)
       Divider()
       ForEach(worktreeMenuEntries(orderedRows: orderedRows)) { entry in
         worktreeMenuButton(entry: entry)

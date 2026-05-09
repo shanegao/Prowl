@@ -116,6 +116,8 @@ enum AppShortcuts {
     static let archivedWorktrees = "archived_worktrees"
     static let selectNextWorktree = "select_next_worktree"
     static let selectPreviousWorktree = "select_previous_worktree"
+    static let worktreeHistoryBack = "worktree_history_back"
+    static let worktreeHistoryForward = "worktree_history_forward"
     static let selectWorktree1 = "select_worktree_1"
     static let selectWorktree2 = "select_worktree_2"
     static let selectWorktree3 = "select_worktree_3"
@@ -238,6 +240,8 @@ enum AppShortcuts {
   static let selectPreviousWorktree = AppShortcut(
     keyEquivalent: .upArrow, ghosttyKeyName: "arrow_up", modifiers: [.command, .control]
   )
+  static let worktreeHistoryBack = AppShortcut(key: "[", modifiers: [.command, .option])
+  static let worktreeHistoryForward = AppShortcut(key: "]", modifiers: [.command, .option])
   static let selectWorktree1 = AppShortcut(key: "1", modifiers: [.control])
   static let selectWorktree2 = AppShortcut(key: "2", modifiers: [.control])
   static let selectWorktree3 = AppShortcut(key: "3", modifiers: [.control])
@@ -531,6 +535,18 @@ enum AppShortcuts {
       title: "Select Previous Worktree (Tab in Shelf View)",
       scope: .configurableAppAction,
       shortcut: selectPreviousWorktree
+    ),
+    .init(
+      id: CommandID.worktreeHistoryBack,
+      title: "Back in Worktree History",
+      scope: .configurableAppAction,
+      shortcut: worktreeHistoryBack
+    ),
+    .init(
+      id: CommandID.worktreeHistoryForward,
+      title: "Forward in Worktree History",
+      scope: .configurableAppAction,
+      shortcut: worktreeHistoryForward
     ),
     .init(
       id: CommandID.selectWorktree1,
@@ -870,6 +886,8 @@ enum AppShortcuts {
     archivedWorktrees,
     selectNextWorktree,
     selectPreviousWorktree,
+    worktreeHistoryBack,
+    worktreeHistoryForward,
     selectWorktree1,
     selectWorktree2,
     selectWorktree3,

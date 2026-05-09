@@ -944,6 +944,7 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(wt2.id)
       $0.sidebarSelectedWorktreeIDs = [wt2.id]
       $0.openedWorktreeIDs = [wt2.id]
+      $0.worktreeHistoryBackStack = [wt1.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -959,6 +960,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.selectRepository(repository.id)) {
+      $0.worktreeHistoryBackStack = [worktree.id]
       $0.selection = .repository(repository.id)
       $0.sidebarSelectedWorktreeIDs = []
     }
@@ -1086,6 +1088,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.selectArchivedWorktrees) {
+      $0.worktreeHistoryBackStack = [worktree1.id]
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
     }
@@ -4189,6 +4192,7 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(wt1.id)
       $0.sidebarSelectedWorktreeIDs = [wt1.id]
       $0.openedWorktreeIDs = [wt1.id]
+      $0.worktreeHistoryBackStack = [wt2.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -4208,6 +4212,7 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(wt2.id)
       $0.sidebarSelectedWorktreeIDs = [wt2.id]
       $0.openedWorktreeIDs = [wt2.id]
+      $0.worktreeHistoryBackStack = [wt1.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -4246,6 +4251,7 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(wt2.id)
       $0.sidebarSelectedWorktreeIDs = [wt2.id]
       $0.openedWorktreeIDs = [wt2.id]
+      $0.worktreeHistoryBackStack = [wt1.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -4312,6 +4318,7 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(wt3.id)
       $0.sidebarSelectedWorktreeIDs = [wt3.id]
       $0.openedWorktreeIDs = [wt3.id]
+      $0.worktreeHistoryBackStack = [wt1.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -4335,6 +4342,7 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(wt1.id)
       $0.sidebarSelectedWorktreeIDs = [wt1.id]
       $0.openedWorktreeIDs = [wt1.id]
+      $0.worktreeHistoryBackStack = [wt3.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -4384,8 +4392,218 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(wt1.id)
       $0.sidebarSelectedWorktreeIDs = [wt1.id]
       $0.openedWorktreeIDs = [wt1.id]
+      $0.worktreeHistoryBackStack = [wt3.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  // MARK: - Worktree History Back/Forward
+
+  @Test func selectingDifferentWorktreePushesPreviousOntoBackStack() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+    state.worktreeHistoryForwardStack = [wt2.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(wt2.id)) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.openedWorktreeIDs = [wt2.id]
+      $0.worktreeHistoryBackStack = [wt1.id]
+      $0.worktreeHistoryForwardStack = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func worktreeHistoryBackPopsPreviousAndPushesCurrentToForward() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt2.id)
+    state.worktreeHistoryBackStack = [wt1.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeHistoryBack) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+      $0.openedWorktreeIDs = [wt1.id]
+      $0.worktreeHistoryBackStack = []
+      $0.worktreeHistoryForwardStack = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func worktreeHistoryForwardPopsNextAndPushesCurrentToBack() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+    state.worktreeHistoryForwardStack = [wt2.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeHistoryForward) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.openedWorktreeIDs = [wt2.id]
+      $0.worktreeHistoryBackStack = [wt1.id]
+      $0.worktreeHistoryForwardStack = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func worktreeHistoryBackSkipsStaleEntriesUntilValidIDFound() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt3 = makeWorktree(id: "/tmp/wt3", name: "gamma")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt3])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt3.id)
+    state.worktreeHistoryBackStack = [wt1.id, "/tmp/wt2-deleted"]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeHistoryBack) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+      $0.openedWorktreeIDs = [wt1.id]
+      $0.worktreeHistoryBackStack = []
+      $0.worktreeHistoryForwardStack = [wt3.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func canNavigateBackwardFiltersStaleAndSelfReferentialEntries() {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+
+    state.worktreeHistoryBackStack = ["/tmp/gone-a", "/tmp/gone-b"]
+    #expect(!state.canNavigateWorktreeHistoryBackward)
+
+    state.worktreeHistoryBackStack = [wt1.id]
+    #expect(!state.canNavigateWorktreeHistoryBackward)
+
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    state.repositories = [makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])]
+    state.worktreeHistoryBackStack = [wt2.id, "/tmp/gone"]
+    #expect(state.canNavigateWorktreeHistoryBackward)
+  }
+
+  @Test func canNavigateWorktreeHistoryDisabledWhenSelectionIsNotAWorktree() {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.worktreeHistoryBackStack = [wt1.id]
+    state.worktreeHistoryForwardStack = [wt2.id]
+
+    state.selection = .repository(repository.id)
+    #expect(!state.canNavigateWorktreeHistoryBackward)
+    #expect(!state.canNavigateWorktreeHistoryForward)
+
+    state.selection = .archivedWorktrees
+    #expect(!state.canNavigateWorktreeHistoryBackward)
+    #expect(!state.canNavigateWorktreeHistoryForward)
+
+    state.selection = nil
+    #expect(!state.canNavigateWorktreeHistoryBackward)
+    #expect(!state.canNavigateWorktreeHistoryForward)
+
+    state.selection = .worktree(wt1.id)
+    #expect(state.canNavigateWorktreeHistoryForward)
+  }
+
+  @Test func selectRepositoryPushesWorktreeOntoBackStackAndClearsForwardStack() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+    state.sidebarSelectedWorktreeIDs = [wt1.id]
+    state.worktreeHistoryForwardStack = [wt2.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(repository.id)) {
+      $0.worktreeHistoryBackStack = [wt1.id]
+      $0.worktreeHistoryForwardStack = []
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectArchivedWorktreesPushesWorktreeOntoBackStackAndClearsForwardStack() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+    state.sidebarSelectedWorktreeIDs = [wt1.id]
+    state.worktreeHistoryForwardStack = [wt2.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.worktreeHistoryBackStack = [wt1.id]
+      $0.worktreeHistoryForwardStack = []
+      $0.selection = .archivedWorktrees
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func reselectingWorktreeAfterRepositoryDoesNotResurrectStaleForwardEntry() async {
+    // Reproduces the scenario from the Copilot review: after the user
+    // navigates Back and then leaves the worktree view through a
+    // non-worktree selection, the stale forward target must not survive
+    // the next worktree selection.
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let wt3 = makeWorktree(id: "/tmp/wt3", name: "gamma")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2, wt3])
+    var state = makeState(repositories: [repository])
+    // User landed on wt2 via Back, leaving wt3 in the forward stack.
+    state.selection = .worktree(wt2.id)
+    state.worktreeHistoryBackStack = [wt1.id]
+    state.worktreeHistoryForwardStack = [wt3.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    // Detour through repository view.
+    await store.send(.selectRepository(repository.id)) {
+      $0.worktreeHistoryBackStack = [wt1.id, wt2.id]
+      $0.worktreeHistoryForwardStack = []
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    // Reselect a worktree — no leftover forward target should remain.
+    await store.send(.selectWorktree(wt2.id)) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.openedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    #expect(!store.state.canNavigateWorktreeHistoryForward)
+    #expect(store.state.canNavigateWorktreeHistoryBackward)
   }
 
   private func makeWorktree(
