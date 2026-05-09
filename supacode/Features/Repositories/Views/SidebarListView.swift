@@ -38,6 +38,7 @@ struct SidebarListView: View {
   @State private var isDragActive = false
   @State private var draggingRepositoryID: Repository.ID?
   @State private var targetedRepositoryDropDestination: Int?
+  @State private var sidebarHeight = 0.0
 
   var body: some View {
     let state = store.state
@@ -58,95 +59,97 @@ struct SidebarListView: View {
     let selectedWorktreeIDs = Self.selectedWorktreeIDs(in: state)
     let pendingSidebarReveal = state.pendingSidebarReveal
 
+    let maximumPanelHeight = ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: sidebarHeight)
+
     ScrollViewReader { scrollProxy in
-      GeometryReader { proxy in
-        let maximumPanelHeight = ActiveAgentsFeature.maximumPanelHeight(
-          forContainerHeight: Double(proxy.size.height)
-        )
-        VStack(spacing: 0) {
-          ScrollView {
-            LazyVStack(spacing: 0) {
-              if showsRepositoryListHeader {
-                repositoryListHeader(
-                  action: repositoryListHeaderAction,
-                  expandableRepositoryIDs: expandableRepositoryIDs
-                )
-              }
-
-              if repositoryItems.isEmpty {
-                emptyRepositoryHint()
-              }
-
-              ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
-                repositoryItemView(
-                  item,
-                  index: index,
-                  repositoryOrderIDs: presentation.repositoryOrderIDs,
-                  hotkeyRows: hotkeyRows,
-                  selectedWorktreeIDs: selectedWorktreeIDs
-                )
-              }
+      VStack(spacing: 0) {
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            if showsRepositoryListHeader {
+              repositoryListHeader(
+                action: repositoryListHeaderAction,
+                expandableRepositoryIDs: expandableRepositoryIDs
+              )
             }
-            .padding(.vertical, 2)
-          }
-          .scrollIndicators(.never)
-          .frame(maxHeight: .infinity)
 
-          if !state.activeAgents.isPanelHidden {
-            ActiveAgentsPanel(
-              store: store.scope(state: \.activeAgents, action: \.activeAgents),
-              maximumHeight: maximumPanelHeight
-            )
-            .frame(height: min(state.activeAgents.panelHeight, maximumPanelHeight))
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            if repositoryItems.isEmpty {
+              emptyRepositoryHint()
+            }
+
+            ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
+              repositoryItemView(
+                item,
+                index: index,
+                repositoryOrderIDs: presentation.repositoryOrderIDs,
+                hotkeyRows: hotkeyRows,
+                selectedWorktreeIDs: selectedWorktreeIDs
+              )
+            }
           }
+          .padding(.vertical, 2)
         }
-        .frame(minWidth: 220)
+        .scrollIndicators(.never)
+        .frame(maxHeight: .infinity)
+
+        if !state.activeAgents.isPanelHidden {
+          ActiveAgentsPanel(
+            store: store.scope(state: \.activeAgents, action: \.activeAgents),
+            maximumHeight: maximumPanelHeight
+          )
+          .frame(height: min(state.activeAgents.panelHeight, maximumPanelHeight))
+          .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+      }
+      .frame(minWidth: 220)
+      .background(.bar)
+      .clipped()
+      .onGeometryChange(for: Double.self) { proxy in
+        Double(proxy.size.height)
+      } action: { newHeight in
+        sidebarHeight = newHeight
+      }
+      .animation(.spring(response: 0.4, dampingFraction: 0.85), value: state.activeAgents.isPanelHidden)
+      .onDragSessionUpdated { session in
+        if case .ended = session.phase {
+          endSidebarDrag()
+          return
+        }
+        if case .dataTransferCompleted = session.phase {
+          endSidebarDrag()
+        }
+      }
+      .safeAreaInset(edge: .top) {
+        HStack(spacing: 4) {
+          CanvasSidebarButton(
+            store: store,
+            isSelected: state.isShowingCanvas
+          )
+          ShelfSidebarButton(
+            store: store,
+            isSelected: state.isShowingShelf
+          )
+        }
+        .padding(.top, 4)
+        .padding(.horizontal, 4)
         .background(.bar)
-        .clipped()
-        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: state.activeAgents.isPanelHidden)
-        .onDragSessionUpdated { session in
-          if case .ended = session.phase {
-            endSidebarDrag()
-            return
-          }
-          if case .dataTransferCompleted = session.phase {
-            endSidebarDrag()
-          }
+        .overlay(alignment: .bottom) {
+          Divider()
         }
-        .safeAreaInset(edge: .top) {
-          HStack(spacing: 4) {
-            CanvasSidebarButton(
-              store: store,
-              isSelected: state.isShowingCanvas
-            )
-            ShelfSidebarButton(
-              store: store,
-              isSelected: state.isShowingShelf
-            )
-          }
-          .padding(.top, 4)
-          .padding(.horizontal, 4)
-          .background(.bar)
-          .overlay(alignment: .bottom) {
-            Divider()
-          }
-        }
-        .safeAreaInset(edge: .bottom) {
-          SidebarFooterView(store: store)
-        }
-        .dropDestination(for: URL.self) { urls, _ in
-          let fileURLs = urls.filter(\.isFileURL)
-          guard !fileURLs.isEmpty else { return false }
-          store.send(.repositoryManagement(.openRepositories(fileURLs)))
-          return true
-        }
-        .onAppear {
-          resetSidebarDrag()
-        }
-        .task(id: pendingSidebarReveal?.id) {
-          await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
-        }
+      }
+      .safeAreaInset(edge: .bottom) {
+        SidebarFooterView(store: store)
+      }
+      .dropDestination(for: URL.self) { urls, _ in
+        let fileURLs = urls.filter(\.isFileURL)
+        guard !fileURLs.isEmpty else { return false }
+        store.send(.repositoryManagement(.openRepositories(fileURLs)))
+        return true
+      }
+      .onAppear {
+        resetSidebarDrag()
+      }
+      .task(id: pendingSidebarReveal?.id) {
+        await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
       }
     }  // ScrollViewReader
   }
