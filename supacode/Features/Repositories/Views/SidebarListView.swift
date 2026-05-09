@@ -1,6 +1,8 @@
 import ComposableArchitecture
 import SwiftUI
 
+// Uses LazyVStack rather than List for repository drag precision; keyboard
+// worktree navigation goes through Cmd+Ctrl+↑/↓ (`selectNextWorktree`).
 struct SidebarListView: View {
   enum RepositoryListHeaderAction: Equatable {
     case expandAll
@@ -33,7 +35,6 @@ struct SidebarListView: View {
   @Binding var expandedRepoIDs: Set<Repository.ID>
   @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
-  @FocusState private var isSidebarFocused: Bool
   @State private var isDragActive = false
   @State private var draggingRepositoryID: Repository.ID?
   @State private var targetedRepositoryDropDestination: Int?
@@ -122,7 +123,6 @@ struct SidebarListView: View {
         store.send(.repositoryManagement(.openRepositories(fileURLs)))
         return true
       }
-      .focused($isSidebarFocused)
       .onAppear {
         resetSidebarDrag()
       }
@@ -344,7 +344,6 @@ struct SidebarListView: View {
     // Give SwiftUI time to materialize newly expanded section rows before scrolling.
     await Task.yield()
     await Task.yield()
-    isSidebarFocused = true
     withAnimation(.easeOut(duration: 0.2)) {
       scrollProxy.scrollTo(SidebarScrollID.worktree(pendingSidebarReveal.worktreeID), anchor: .center)
     }
