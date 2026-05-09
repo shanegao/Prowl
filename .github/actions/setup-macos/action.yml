@@ -51,7 +51,7 @@ runs:
     - name: SPM cache
       uses: actions/cache@v4
       with:
-        path: /tmp/supacode-spm-cache/SourcePackages
+        path: ~/Library/Caches/supacode-spm-cache/SourcePackages
         key: ${{ runner.os }}-${{ runner.arch }}-spm-v0-${{ hashFiles('**/Package.resolved') }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-spm-v0-
