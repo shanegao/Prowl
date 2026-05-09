@@ -26,10 +26,10 @@
 
 ### Verification
 
-- `xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -only-testing:supacodeTests/AgentClassifierTests -only-testing:supacodeTests/ScreenHeuristicsTests -only-testing:supacodeTests/PaneAgentStateTests -only-testing:supacodeTests/ActiveAgentsFeatureTests -only-testing:supacodeTests/ProcessDetectionSmokeTests CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation 2>&1 | xcsift -f toon -w` passed 18 tests.
+- `xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -only-testing:supacodeTests/DetectedAgentTests -only-testing:supacodeTests/AgentClassifierTests -only-testing:supacodeTests/ScreenHeuristicsTests -only-testing:supacodeTests/PaneAgentStateTests -only-testing:supacodeTests/ActiveAgentsFeatureTests -only-testing:supacodeTests/ProcessDetectionSmokeTests CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation 2>&1 | xcsift -f toon -w` passed 19 tests.
 - `make check` passed after keeping the `pi` agent case name and disabling SwiftLint's `identifier_name` rule on that enum case only.
 - `xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | xcsift -f toon -w` passed.
 - `DEVELOPER_DIR=/Applications/Xcode-26.3.0.app/Contents/Developer make sync-ghostty` completed successfully.
 - `nm -gU Frameworks/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a | rg 'ghostty_surface_(pid|process_exited)'` finds both `_ghostty_surface_pid` and `_ghostty_surface_process_exited`.
 - `make build-app` completed successfully after building the app and embedded CLI.
-- `make test` passed 1037 tests. It printed the same GhosttyKit preflight Zig link failure under Xcode 26.4.1, then continued to the Xcode test suite.
+- `make test` passed 1038 tests with GhosttyKit already up-to-date.
