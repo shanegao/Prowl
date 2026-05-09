@@ -3,15 +3,17 @@ import SwiftUI
 
 struct ActiveAgentRow: View {
   let entry: ActiveAgentEntry
+  let repositoryName: String
+  let branchName: String
 
   var body: some View {
     HStack(spacing: 8) {
       agentIcon
       VStack(alignment: .leading, spacing: 2) {
-        Text(entry.agent.displayName)
+        Text("\(entry.agent.displayName) · \(repositoryName)")
           .font(.body.monospaced())
           .lineLimit(1)
-        Text(entry.subtitle)
+        Text(branchName)
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)

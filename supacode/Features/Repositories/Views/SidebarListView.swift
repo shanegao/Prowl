@@ -65,6 +65,10 @@ struct SidebarListView: View {
       sidebarHeight > 0
       ? ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: sidebarHeight)
       : ActiveAgentsFeature.maximumPanelHeight
+    let agentWorktreeMetadata = Self.activeAgentWorktreeMetadata(
+      repositories: state.repositories,
+      customTitles: state.repositoryCustomTitles
+    )
     let panelHeight = min(resizingPanelHeight ?? state.activeAgents.panelHeight, maximumPanelHeight)
     let panelOffset = state.activeAgents.isPanelHidden ? panelHeight : 0
     let listBottomPadding = state.activeAgents.isPanelHidden ? 0 : panelHeight
@@ -144,6 +148,8 @@ struct SidebarListView: View {
         ZStack(alignment: .bottom) {
           ActiveAgentsPanel(
             store: store.scope(state: \.activeAgents, action: \.activeAgents),
+            repositoryNamesByWorktreeID: agentWorktreeMetadata.repositoryNamesByWorktreeID,
+            branchNamesByWorktreeID: agentWorktreeMetadata.branchNamesByWorktreeID,
             height: panelHeight,
             maximumHeight: maximumPanelHeight,
             onHeightChanged: { height in
@@ -425,6 +431,31 @@ struct SidebarListView: View {
       selectedWorktreeIDs.insert(selectedWorktreeID)
     }
     return selectedWorktreeIDs
+  }
+
+  static func activeAgentWorktreeMetadata(
+    repositories: IdentifiedArrayOf<Repository>,
+    customTitles: [Repository.ID: String]
+  ) -> (
+    repositoryNamesByWorktreeID: [Worktree.ID: String],
+    branchNamesByWorktreeID: [Worktree.ID: String]
+  ) {
+    var repositoryNamesByWorktreeID: [Worktree.ID: String] = [:]
+    var branchNamesByWorktreeID: [Worktree.ID: String] = [:]
+
+    for repository in repositories {
+      let repositoryName = customTitles[repository.id] ?? repository.name
+      if repository.capabilities.supportsRunnableFolderActions && !repository.capabilities.supportsWorktrees {
+        repositoryNamesByWorktreeID[repository.id] = repositoryName
+        branchNamesByWorktreeID[repository.id] = repository.name
+      }
+      for worktree in repository.worktrees {
+        repositoryNamesByWorktreeID[worktree.id] = repositoryName
+        branchNamesByWorktreeID[worktree.id] = worktree.name
+      }
+    }
+
+    return (repositoryNamesByWorktreeID, branchNamesByWorktreeID)
   }
 }
 

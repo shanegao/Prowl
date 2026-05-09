@@ -3,6 +3,8 @@ import SwiftUI
 
 struct ActiveAgentsPanel: View {
   @Bindable var store: StoreOf<ActiveAgentsFeature>
+  let repositoryNamesByWorktreeID: [Worktree.ID: String]
+  let branchNamesByWorktreeID: [Worktree.ID: String]
   let height: Double
   let maximumHeight: Double
   let onHeightChanged: (Double) -> Void
@@ -35,10 +37,14 @@ struct ActiveAgentsPanel: View {
               Button {
                 store.send(.entryTapped(entry.id))
               } label: {
-                ActiveAgentRow(entry: entry)
+                ActiveAgentRow(
+                  entry: entry,
+                  repositoryName: repositoryName(for: entry),
+                  branchName: branchName(for: entry)
+                )
               }
               .buttonStyle(.plain)
-              .help("Focus \(entry.agent.displayName) in \(entry.worktreeName)")
+              .help("Focus \(entry.agent.displayName) in \(repositoryName(for: entry))")
             }
           }
         }
@@ -98,6 +104,14 @@ struct ActiveAgentsPanel: View {
 
   private func clampedHeight(_ height: Double) -> Double {
     min(maximumHeight, max(ActiveAgentsFeature.minimumPanelHeight, height))
+  }
+
+  private func repositoryName(for entry: ActiveAgentEntry) -> String {
+    repositoryNamesByWorktreeID[entry.worktreeID] ?? entry.worktreeName
+  }
+
+  private func branchName(for entry: ActiveAgentEntry) -> String {
+    branchNamesByWorktreeID[entry.worktreeID] ?? entry.worktreeName
   }
 
   private var panelBackgroundShape: UnevenRoundedRectangle {

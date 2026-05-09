@@ -12,10 +12,6 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
   let rawState: AgentRawState
   let displayState: AgentDisplayState
   let lastChangedAt: Date
-
-  var subtitle: String {
-    "\(worktreeName) · tab \(tabTitle) · pane \(paneIndex)"
-  }
 }
 
 extension ActiveAgentEntry {
