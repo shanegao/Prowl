@@ -5,6 +5,10 @@ import Sharing
 
 @Reducer
 struct ActiveAgentsFeature {
+  static let minimumPanelHeight = 120.0
+  static let maximumPanelHeight = 420.0
+  static let reservedSidebarListHeight = 200.0
+
   @ObservableState
   struct State: Equatable {
     var entries: IdentifiedArrayOf<ActiveAgentEntry> = []
@@ -47,6 +51,10 @@ struct ActiveAgentsFeature {
   }
 
   static func clampedPanelHeight(_ height: Double) -> Double {
-    min(420, max(120, height))
+    min(maximumPanelHeight, max(minimumPanelHeight, height))
+  }
+
+  static func maximumPanelHeight(forContainerHeight height: Double) -> Double {
+    max(minimumPanelHeight, min(maximumPanelHeight, height - reservedSidebarListHeight))
   }
 }

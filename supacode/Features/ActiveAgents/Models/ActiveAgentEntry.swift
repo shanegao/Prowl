@@ -1,9 +1,7 @@
 import Foundation
 
 struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
-  typealias ID = UUID
-
-  let id: ID
+  let id: UUID
   let worktreeID: Worktree.ID
   let worktreeName: String
   let tabID: TerminalTabID

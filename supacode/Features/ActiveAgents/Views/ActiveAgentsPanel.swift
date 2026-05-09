@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ActiveAgentsPanel: View {
   @Bindable var store: StoreOf<ActiveAgentsFeature>
+  let maximumHeight: Double
   @State private var dragStartHeight: Double?
 
   var body: some View {
@@ -63,7 +64,8 @@ struct ActiveAgentsPanel: View {
           .onChanged { value in
             let start = dragStartHeight ?? store.panelHeight
             dragStartHeight = start
-            store.send(.panelHeightChanged(start - value.translation.height))
+            let height = ActiveAgentsFeature.clampedPanelHeight(start - value.translation.height)
+            store.send(.panelHeightChanged(min(maximumHeight, height)))
           }
           .onEnded { _ in
             dragStartHeight = nil

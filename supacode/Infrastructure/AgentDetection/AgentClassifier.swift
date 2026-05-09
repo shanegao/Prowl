@@ -30,13 +30,13 @@ func identifyAgent(processName: String) -> DetectedAgent? {
 }
 
 func identifyAgentInJob(_ job: ForegroundJob) -> (agent: DetectedAgent, name: String)? {
-  var best: (score: Int, agent: DetectedAgent, name: String)?
+  var best: AgentCandidate?
 
   for process in job.processes {
     for candidate in agentCandidates(for: process) {
       guard let agent = identifyAgent(processName: candidate.name) else { continue }
       if best == nil || candidate.score > best!.score {
-        best = (candidate.score, agent, candidate.name)
+        best = AgentCandidate(score: candidate.score, agent: agent, name: candidate.name)
       }
     }
   }
@@ -63,6 +63,12 @@ private func agentCandidates(for process: ForegroundProcess) -> [(name: String, 
   }
 
   return candidates
+}
+
+private struct AgentCandidate {
+  let score: Int
+  let agent: DetectedAgent
+  let name: String
 }
 
 private func normalizedProcessName(_ raw: String) -> String? {

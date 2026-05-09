@@ -45,6 +45,12 @@ struct ActiveAgentsFeatureTests {
     }
   }
 
+  @Test func maximumPanelHeightKeepsRepositoryListVisible() {
+    #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 900) == 420)
+    #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 500) == 300)
+    #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 250) == 120)
+  }
+
   private func entry(id: UUID, state: AgentDisplayState, changedAt: Date) -> ActiveAgentEntry {
     ActiveAgentEntry(
       id: id,
