@@ -6,7 +6,7 @@ import Sharing
 @Reducer
 struct ActiveAgentsFeature {
   static let minimumPanelHeight = 120.0
-  static let maximumPanelHeight = 420.0
+  static let maximumPanelHeight = 560.0
   static let reservedSidebarListHeight = 200.0
 
   @ObservableState

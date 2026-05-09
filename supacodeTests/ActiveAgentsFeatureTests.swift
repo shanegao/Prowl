@@ -45,12 +45,12 @@ struct ActiveAgentsFeatureTests {
       $0.$panelHeight.withLock { $0 = 120 }
     }
     await store.send(.panelHeightChanged(900)) {
-      $0.$panelHeight.withLock { $0 = 420 }
+      $0.$panelHeight.withLock { $0 = 560 }
     }
   }
 
   @Test func maximumPanelHeightKeepsRepositoryListVisible() {
-    #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 900) == 420)
+    #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 900) == 560)
     #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 500) == 300)
     #expect(ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: 250) == 120)
   }
