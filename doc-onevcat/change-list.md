@@ -4,12 +4,53 @@
 
 | Key | Value |
 | --- | --- |
-| Commit | `c4e9be3b74085c60a209e8c231d98a9638c838f3` |
-| Tag | v0.8.1 |
-| Date | 2026-04-19 |
+| Commit | `5e88ec5dfc74af165781e8d5a41505867b23dc06` |
+| Tag | post-v0.8.5 |
+| Date | 2026-05-05 |
 
 All upstream changes up to and including this commit have been reviewed.
 Future upstream checks should only inspect commits **after** this baseline.
+
+---
+
+## 2026-05-08 — Review through post-v0.8.5
+
+### Upstream changes reviewed
+
+Reviewed 25 commits on `supabitapp/supacode` from `c4e9be3b` (v0.8.1, 2026-04-19) through
+`5e88ec5d` (post-v0.8.5, 2026-05-05). Significant additions:
+
+- **Ghostty key event routing** (`6c807c63`, #259; `539c0feb`, #264) — upstream fixed two
+  `performKeyEquivalent` edge cases: only forward unmatched Ghostty bindings to a real main-menu item, and only
+  consume keys from the actual first responder.
+- **Repository and PR targeting** (`a4cdad9e`, #261) — resolves the GitHub PR owner/repo with `gh repo view`, which
+  matters for fork clones whose remotes may point at different owners.
+- **Notification, tab, focus, and window UX** (`072ad1e7`, #266; `6615f49c`, #269; `b34a66d5`, #279;
+  `71dc4b57`, #295; `028ef412`, #297; `5e88ec5d`, #298) — upstream added jump-to-unread notifications,
+  custom tab titles, worktree history, sidebar-to-terminal arrow focus, dynamic window titles, and main-window-only
+  quit confirmation.
+- **Sidebar/repository appearance and polish** (`4d19b068`, #260; `9bae228e`, #276; `3af3a164`, #258;
+  `57e620a7`, #265; `514c3ceb`, #283) — dim inactive split panes, per-repo title/color, detail toolbar and loading
+  state polish, sidebar animation CPU reductions, and script menu cache fixes.
+- **Agent/editor/platform additions** (`943f3fab`, #245; `6fff0218`, #262; `650a6b52`, #292; `e06c07a0`) —
+  Kiro and Pi agents, Android Studio editor support, and app icon bundle metadata.
+- **Build/release housekeeping** (`92c7c461`, `644bd468`, `3b07571b`, `34da9417`, `bd9da925`, `4a8611d9`) —
+  CI concurrency and upstream semantic version/build-number bumps.
+
+### Decisions
+
+- **Ported to Prowl PRs**: Ghostty key routing (#255), fork-aware PR repo resolution (#256), worktree history
+  (#260), dynamic window title plus main-window quit behavior (#261), loading overlay polish (#262), sidebar animation
+  CPU fix (#263), Android Studio editor support (#264), sidebar right-arrow focus (#265), test workflow concurrency
+  (#266), and `CFBundleIconName` metadata (#267).
+- **Reviewed and skipped**: Notifications UX (#266 upstream), inactive split dimming (#260 upstream), tab renaming
+  (#269 upstream), and bare-repo detection (#263 upstream) were already covered, intentionally different, or not
+  currently applicable in the fork.
+- **Skipped due fork-specific architecture**: Repository title/color (#276 upstream) conflicts with Prowl's richer
+  repository appearance model; Kiro/Pi agent hooks rely on upstream settings/hook modules not present in this fork;
+  Run Script dropdown caching does not apply to Prowl's current popover/button implementation.
+- **Skipped due fork release policy**: Upstream release-tip/warm-cache/inspect-dependencies workflow concurrency and
+  semantic version bumps do not apply. Prowl keeps local, notarized, date-based releases.
 
 ---
 
