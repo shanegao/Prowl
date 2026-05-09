@@ -260,6 +260,10 @@ struct ShelfSpineView: View {
           tab: tab,
           hotkeyIndex: hotkeyIndex,
           isActive: terminalState.tabManager.selectedTabId == tab.id,
+          // Only the open book's tabs respond to Cmd+N — closed books
+          // show their static icons even while ⌘ is held so the
+          // shortcut hint isn't a lie.
+          isOpenBook: isOpen,
           hasUnseenNotification: terminalState.hasUnseenNotification(for: tab.id),
           activeHighlightTint: effectiveTintColor,
           activeHighlightAlpha: activeTabHighlightAlpha,
@@ -402,6 +406,10 @@ private struct ShelfSpineTabSlot: View {
   let tab: TerminalTabItem
   let hotkeyIndex: Int?
   let isActive: Bool
+  /// Whether this tab belongs to the currently open book. Cmd+N only
+  /// targets the open book's tabs, so closed-book spines must not
+  /// advertise hotkeys they can't service.
+  let isOpenBook: Bool
   let hasUnseenNotification: Bool
   /// Hue used for the active-tab background fill — repo color when
   /// the owning book has one pinned, otherwise `Color.accentColor`.
@@ -433,7 +441,11 @@ private struct ShelfSpineTabSlot: View {
     }
     .buttonStyle(.plain)
     .overlay(alignment: .topTrailing) {
-      if isHovering && !commandKeyObserver.isPressed {
+      // Hide the close button only when the ⌘ glyph would actually take
+      // its place — on closed-book spines the glyph never appears, so
+      // hovering should still surface the close affordance even with ⌘
+      // held.
+      if isHovering && !(commandKeyObserver.isPressed && isOpenBook) {
         Button(action: onClose) {
           Image(systemName: "xmark.circle.fill")
             .imageScale(.small)
@@ -452,12 +464,14 @@ private struct ShelfSpineTabSlot: View {
     .help(tab.displayTitle)
   }
 
-  /// When ⌘ is held AND this tab has a `Cmd+N` hotkey, swap the icon
-  /// for a compact `⌘N` glyph in-place. Slot frame stays the same either
-  /// way so nothing reflows.
+  /// When ⌘ is held AND this tab has a `Cmd+N` hotkey AND this slot is
+  /// on the open book's spine, swap the icon for a compact `⌘N` glyph
+  /// in-place. Closed-book spines opt out entirely: Cmd+N only routes
+  /// to the open book, so showing the hint there would be misleading.
+  /// Slot frame stays the same either way so nothing reflows.
   @ViewBuilder
   private var slotContent: some View {
-    let showsHotkey = commandKeyObserver.isPressed && hotkeyIndex != nil
+    let showsHotkey = commandKeyObserver.isPressed && hotkeyIndex != nil && isOpenBook
     if let hotkeyIndex, showsHotkey {
       HStack(spacing: 1) {
         Image(systemName: "command")
@@ -474,10 +488,11 @@ private struct ShelfSpineTabSlot: View {
         pointSize: ShelfMetrics.tabIconPointSize
       )
       .foregroundStyle(foregroundTint)
-      // Dim tabs without a hotkey when ⌘ is held, so the "this slot
-      // can't be jumped to via Cmd+N" affordance is legible without
-      // shifting any layout.
-      .opacity(commandKeyObserver.isPressed && hotkeyIndex == nil ? 0.45 : 1)
+      // Dim tabs without a hotkey when ⌘ is held — but only on the open
+      // book, where the dimming pairs with the visible ⌘N glyphs on its
+      // siblings. On closed books no glyph appears, so dimming would be
+      // a stray visual change with no story behind it.
+      .opacity(commandKeyObserver.isPressed && hotkeyIndex == nil && isOpenBook ? 0.45 : 1)
       .accessibilityHidden(true)
     }
   }
