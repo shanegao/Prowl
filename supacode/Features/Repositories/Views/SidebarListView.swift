@@ -61,6 +61,9 @@ struct SidebarListView: View {
       return false
     }
     let selectedWorktreeIDs = Self.selectedWorktreeIDs(in: state)
+    let selectedSurfaceID = state.selectedWorktreeID.flatMap { worktreeID in
+      terminalManager.stateIfExists(for: worktreeID)?.activeSurfaceID
+    }
     let pendingSidebarReveal = state.pendingSidebarReveal
 
     let maximumPanelHeight =
@@ -154,7 +157,7 @@ struct SidebarListView: View {
             repositoryNamesByWorktreeID: agentWorktreeMetadata.repositoryNamesByWorktreeID,
             branchNamesByWorktreeID: agentWorktreeMetadata.branchNamesByWorktreeID,
             repositoryColorsByWorktreeID: agentWorktreeMetadata.repositoryColorsByWorktreeID,
-            selectedWorktreeIDs: selectedWorktreeIDs,
+            selectedSurfaceID: selectedSurfaceID,
             height: panelHeight,
             maximumHeight: maximumPanelHeight,
             onHeightChanged: { height in

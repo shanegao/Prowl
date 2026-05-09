@@ -6,7 +6,7 @@ struct ActiveAgentsPanel: View {
   let repositoryNamesByWorktreeID: [Worktree.ID: String]
   let branchNamesByWorktreeID: [Worktree.ID: String]
   let repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice]
-  let selectedWorktreeIDs: Set<Worktree.ID>
+  let selectedSurfaceID: UUID?
   let height: Double
   let maximumHeight: Double
   let onHeightChanged: (Double) -> Void
@@ -123,7 +123,10 @@ struct ActiveAgentsPanel: View {
   }
 
   private func isDimmed(_ entry: ActiveAgentEntry) -> Bool {
-    !selectedWorktreeIDs.isEmpty && !selectedWorktreeIDs.contains(entry.worktreeID)
+    if let selectedSurfaceID {
+      return entry.surfaceID != selectedSurfaceID
+    }
+    return false
   }
 
   private var panelBackgroundShape: UnevenRoundedRectangle {

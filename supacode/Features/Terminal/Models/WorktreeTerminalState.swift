@@ -159,6 +159,10 @@ final class WorktreeTerminalState {
     return surfaces[surfaceId]
   }
 
+  var activeSurfaceID: UUID? {
+    currentFocusedSurfaceId()
+  }
+
   func surfaceView(for tabId: TerminalTabID) -> GhosttySurfaceView? {
     guard let surfaceId = focusedSurfaceIdByTab[tabId] else { return nil }
     return surfaces[surfaceId]
