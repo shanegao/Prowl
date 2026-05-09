@@ -16,6 +16,7 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "github-copilot") == .copilot)
     #expect(identifyAgent(processName: "ghcs") == .copilot)
     #expect(identifyAgent(processName: "kimi") == .kimi)
+    #expect(identifyAgent(processName: "Kimi Code") == .kimi)
     #expect(identifyAgent(processName: "droid") == .droid)
     #expect(identifyAgent(processName: "amp") == .amp)
     #expect(identifyAgent(processName: "amp-local") == .amp)

@@ -18,7 +18,7 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .opencode
   case "copilot", "github-copilot", "ghcs":
     return .copilot
-  case "kimi":
+  case "kimi", "kimi code":
     return .kimi
   case "droid":
     return .droid
