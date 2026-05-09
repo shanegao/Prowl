@@ -152,6 +152,14 @@ struct ScreenHeuristicsTests {
     #expect(
       DetectedAgent.kimi.detectState(
         in: """
+          ⠋ Using Shell (git remote -v)
+          \(String(repeating: "\n", count: 40))
+          """
+      ) == .working
+    )
+    #expect(
+      DetectedAgent.kimi.detectState(
+        in: """
           ⠸ Using Shell (git remote -v && echo "--..." && git log --oneline -3)
           ╭─ approval ─────────────────────────────────────────────────────────╮
           │  Shell is requesting approval to run command:                      │
@@ -163,6 +171,7 @@ struct ScreenHeuristicsTests {
           │                                                                    │
           │   ▲/▼ select  1/2/3/4 choose  ↵ confirm                            │
           ╰────────────────────────────────────────────────────────────────────╯
+          \(String(repeating: "\n", count: 40))
           """
       ) == .blocked
     )

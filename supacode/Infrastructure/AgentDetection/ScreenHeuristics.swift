@@ -33,8 +33,11 @@ extension DetectedAgent {
 }
 
 private func recentLines(_ content: String, limit: Int) -> String {
-  let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-  guard lines.count > limit else { return content }
+  var lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+  while lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true {
+    lines.removeLast()
+  }
+  guard lines.count > limit else { return lines.joined(separator: "\n") }
   return lines.suffix(limit).joined(separator: "\n")
 }
 
