@@ -1,8 +1,13 @@
+import ComposableArchitecture
 import SwiftUI
 
 struct WindowCommands: Commands {
+  @Bindable var store: StoreOf<AppFeature>
+  let terminalManager: WorktreeTerminalManager
   let ghosttyShortcuts: GhosttyShortcutManager
   let resolvedKeybindings: ResolvedKeybindingMap
+  @Bindable var settingsWindowManager: SettingsWindowManager
+  @Dependency(SettingsWindowClient.self) private var settingsWindowClient
   @FocusedValue(\.closeTabAction) private var closeTabAction
   @FocusedValue(\.closeSurfaceAction) private var closeSurfaceAction
   @FocusedValue(\.selectPreviousTerminalTabAction) private var selectPreviousTerminalTabAction
@@ -34,16 +39,13 @@ struct WindowCommands: Commands {
       )
     }
 
-    CommandGroup(replacing: .windowArrangement) {
-      Button("Prowl") {
-        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
-          window.makeKeyAndOrderFront(nil)
-          NSApp.activate(ignoringOtherApps: true)
-        }
-      }
-      .help("Show main window")
-      Divider()
+    let mainWindowTitle = WindowTitle.compute(
+      repositories: store.repositories,
+      terminalManager: terminalManager
+    )
+    let isSettingsOpen = settingsWindowManager.isOpen
 
+    CommandGroup(replacing: .windowArrangement) {
       Button("Select Previous Tab") {
         selectPreviousTerminalTabAction?()
       }
@@ -126,6 +128,20 @@ struct WindowCommands: Commands {
           )
         )
         .disabled(selectTerminalPaneRightAction == nil)
+      }
+
+      Divider()
+
+      Button(mainWindowTitle) {
+        NSApp.surfaceMainWindow()
+      }
+      .help("Show main window")
+
+      if isSettingsOpen {
+        Button("Settings") {
+          settingsWindowClient.show()
+        }
+        .help("Show Settings window")
       }
     }
   }

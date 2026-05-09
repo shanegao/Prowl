@@ -50,13 +50,16 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidBecomeActive(_ notification: Notification) {
     let app = NSApplication.shared
-    guard !app.windows.contains(where: \.isVisible) else { return }
-    _ = showMainWindow(from: app)
+    let hasVisibleMainWindow = app.windows.contains { window in
+      window.isVisible && !(window is NSPanel)
+    }
+    guard !hasVisibleMainWindow else { return }
+    app.surfaceMainWindow()
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if flag { return true }
-    return showMainWindow(from: sender) ? false : true
+    return !sender.surfaceMainWindow()
   }
 
   func applicationWillTerminate(_ notification: Notification) {
@@ -70,25 +73,6 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     false
   }
 
-  private func mainWindow(from sender: NSApplication) -> NSWindow? {
-    if let window = sender.windows.first(where: { $0.identifier?.rawValue == "main" }) {
-      return window
-    }
-    if let window = sender.windows.first(where: { $0.identifier?.rawValue != "settings" }) {
-      return window
-    }
-    return sender.windows.first
-  }
-
-  private func showMainWindow(from sender: NSApplication) -> Bool {
-    guard let window = mainWindow(from: sender) else { return false }
-    if window.isMiniaturized {
-      window.deminiaturize(nil)
-    }
-    sender.activate(ignoringOtherApps: true)
-    window.makeKeyAndOrderFront(nil)
-    return true
-  }
 }
 
 @main
@@ -605,30 +589,11 @@ struct SupacodeApp: App {
   }
 
   private static func bringMainWindowToFront() -> Bool {
-    let app = NSApplication.shared
-    guard let window = mainWindow(from: app) else {
-      return false
-    }
-    if window.isMiniaturized {
-      window.deminiaturize(nil)
-    }
-    app.activate(ignoringOtherApps: true)
-    window.makeKeyAndOrderFront(nil)
-    return true
-  }
-
-  private static func mainWindow(from app: NSApplication) -> NSWindow? {
-    if let window = app.windows.first(where: { $0.identifier?.rawValue == "main" }) {
-      return window
-    }
-    if let window = app.windows.first(where: { $0.identifier?.rawValue != "settings" }) {
-      return window
-    }
-    return app.windows.first
+    NSApplication.shared.surfaceMainWindow()
   }
 
   var body: some Scene {
-    Window("Prowl", id: "main") {
+    Window("Prowl", id: WindowID.main) {
       GhosttyColorSchemeSyncView(
         ghostty: ghostty,
         preferredColorScheme: store.settings.appearanceMode.colorScheme
@@ -656,8 +621,11 @@ struct SupacodeApp: App {
         SidebarCommands(store: store)
         TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)
         WindowCommands(
+          store: store,
+          terminalManager: terminalManager,
           ghosttyShortcuts: ghosttyShortcuts,
-          resolvedKeybindings: store.resolvedKeybindings
+          resolvedKeybindings: store.resolvedKeybindings,
+          settingsWindowManager: SettingsWindowManager.shared
         )
       }
       CommandGroup(after: .textEditing) {
