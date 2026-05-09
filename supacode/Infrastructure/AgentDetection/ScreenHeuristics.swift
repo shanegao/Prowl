@@ -139,16 +139,12 @@ private func detectCline(_ content: String) -> AgentRawState {
 }
 
 private func detectOpenCode(_ content: String) -> AgentRawState {
-  let lower = content.lowercased()
   if content.contains("△ Permission required")
-    || (lower.contains("↑↓ select")
-      && (lower.contains("enter confirm") || lower.contains("enter submit") || lower.contains("enter toggle"))
-      && lower.contains("esc dismiss"))
-    || hasConfirmationPrompt(lower)
+    || hasOpenCodeQuestionPrompt(content)
   {
     return .blocked
   }
-  if lower.contains("esc to interrupt") {
+  if hasInterruptPattern(content.lowercased()) {
     return .working
   }
   return .idle
@@ -158,7 +154,6 @@ private func detectCopilot(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   if lower.contains("│ do you want")
     || (lower.contains("confirm with") && lower.contains("enter"))
-    || hasConfirmationPrompt(lower)
   {
     return .blocked
   }
@@ -181,7 +176,7 @@ private func detectKimi(_ content: String) -> AgentRawState {
   }
 
   let workingPatterns = [
-    "thinking", "processing", "generating", "waiting for response", "ctrl+c to cancel",
+    "thinking", "processing", "generating", "waiting for response", "ctrl+c to cancel", "ctrl-c to cancel",
   ]
   if workingPatterns.contains(where: lower.contains)
     || hasKimiMoonSpinner(content)
@@ -194,12 +189,22 @@ private func detectKimi(_ content: String) -> AgentRawState {
 
 private func detectDroid(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
-  if content.contains("EXECUTE")
-    && (lower.contains("enter to select") || lower.contains("↑↓ to navigate"))
-  {
+  let hasExecute = content.contains("EXECUTE")
+  let hasSelectionChrome =
+    lower.contains("enter to select")
+    || lower.contains("↑↓ to navigate")
+    || lower.contains("esc to cancel")
+  let hasSelectionOptions =
+    lower.contains("> yes, allow")
+    || lower.contains("> no, cancel")
+
+  if hasExecute && (hasSelectionChrome || hasSelectionOptions) {
     return .blocked
   }
-  if hasDroidSpinner(content) {
+  if hasSelectionChrome && hasSelectionOptions {
+    return .blocked
+  }
+  if hasDroidSpinner(content) || lower.contains("esc to stop") {
     return .working
   }
   return .idle
@@ -207,11 +212,21 @@ private func detectDroid(_ content: String) -> AgentRawState {
 
 private func detectAmp(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
-  if (lower.contains("waiting for approval")
-    || lower.contains("invoke tool")
-    || lower.contains("run this command?"))
-    && (lower.contains("approve") || lower.contains("allow all for this session"))
-  {
+  let hasWaitingForApproval = lower.contains("waiting for approval")
+  let hasApprovalHeader =
+    lower.contains("invoke tool")
+    || lower.contains("run this command?")
+    || lower.contains("allow editing file:")
+    || lower.contains("allow creating file:")
+    || lower.contains("confirm tool call")
+  let hasApprovalActions =
+    lower.contains("approve")
+    && (lower.contains("allow all for this session")
+      || lower.contains("allow all for every session")
+      || lower.contains("allow file for every session")
+      || lower.contains("deny with feedback"))
+
+  if hasApprovalActions && (hasWaitingForApproval || hasApprovalHeader) {
     return .blocked
   }
   if lower.contains("esc to cancel") {
@@ -311,12 +326,19 @@ private func hasKimiToolSpinner(content: String, lower: String) -> Bool {
 }
 
 private func hasConfirmationPrompt(_ lower: String) -> Bool {
-  (lower.contains("allow") || lower.contains("approve") || lower.contains("confirm") || lower.contains("proceed"))
-    && (lower.contains("[y/n]") || lower.contains("(y/n)") || lower.contains(" yes") || lower.contains(" yes (y)"))
+  guard
+    let range = lower.range(of: "do you want") ?? lower.range(of: "would you like")
+  else {
+    return false
+  }
+  let after = lower[range.lowerBound...]
+  return after.contains("yes") || after.contains("❯")
 }
 
 private func hasInterruptPattern(_ lower: String) -> Bool {
-  lower.contains("esc to interrupt") || lower.contains("ctrl+c to interrupt")
+  lower.contains("esc to interrupt")
+    || lower.contains("ctrl+c to interrupt")
+    || (lower.contains("esc") && lower.contains("interrupt"))
 }
 
 private func hasCodexWorkingHeader(_ content: String) -> Bool {
@@ -327,12 +349,18 @@ private func hasCodexWorkingHeader(_ content: String) -> Bool {
 
 private func hasSpinnerActivity(_ content: String) -> Bool {
   let spinnerScalars: Set<UnicodeScalar> = [
-    "✱", "✲", "✳", "✴", "✵", "✶", "✷", "✸", "✹", "✺", "✻", "✼", "✽", "✾", "✿", "·",
+    "·", "✱", "✲", "✳", "✴", "✵", "✶", "✷", "✸", "✹", "✺", "✻", "✼", "✽", "✾", "✿",
+    "❀", "❁", "❂", "❃", "❇", "❈", "❉", "❊", "❋", "✢", "✣", "✤", "✥", "✦", "✧", "✨",
+    "⊛", "⊕", "⊙", "◉", "◎", "◍", "⁂", "⁕", "※", "⍟", "☼", "★", "☆",
   ]
   return content.split(separator: "\n").contains { line in
     let trimmed = line.trimmingCharacters(in: .whitespaces)
     guard let first = trimmed.unicodeScalars.first else { return false }
-    return spinnerScalars.contains(first) && trimmed.contains("…")
+    let rest = String(trimmed.unicodeScalars.dropFirst())
+    return spinnerScalars.contains(first)
+      && rest.hasPrefix(" ")
+      && rest.contains("…")
+      && rest.contains(where: \.isLetter)
   }
 }
 
@@ -349,4 +377,17 @@ private func hasDroidSpinner(_ content: String) -> Bool {
     guard let first = trimmed.unicodeScalars.first else { return false }
     return (0x2800...0x28FF).contains(Int(first.value)) && trimmed.contains("esc to stop")
   }
+}
+
+private func hasOpenCodeQuestionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  let hasEnterAction =
+    lower.contains("enter confirm")
+    || lower.contains("enter submit")
+    || lower.contains("enter toggle")
+  let hasQuestionNavigation =
+    content.contains("↑↓ select")
+    || content.contains("⇆ tab")
+
+  return lower.contains("esc dismiss") && hasEnterAction && hasQuestionNavigation
 }

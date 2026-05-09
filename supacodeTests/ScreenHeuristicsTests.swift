@@ -169,15 +169,26 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.cline.detectState(in: "still processing") == .working)
 
     #expect(DetectedAgent.opencode.detectState(in: "△ Permission required") == .blocked)
+    #expect(
+      DetectedAgent.opencode.detectState(
+        in: """
+          Run command?
+          ↑↓ select  ⇆ tab  enter confirm  esc dismiss
+          """
+      ) == .blocked
+    )
     #expect(DetectedAgent.opencode.detectState(in: "esc to interrupt") == .working)
+    #expect(DetectedAgent.opencode.detectState(in: "Do you want to continue?\nYes") == .idle)
     #expect(DetectedAgent.opencode.detectState(in: "done") == .idle)
 
     #expect(DetectedAgent.copilot.detectState(in: "│ do you want to run this?") == .blocked)
     #expect(DetectedAgent.copilot.detectState(in: "esc to cancel") == .working)
+    #expect(DetectedAgent.copilot.detectState(in: "Do you want to continue?\nYes") == .idle)
     #expect(DetectedAgent.copilot.detectState(in: "done") == .idle)
 
     #expect(DetectedAgent.kimi.detectState(in: "approve? [y/n]") == .blocked)
     #expect(DetectedAgent.kimi.detectState(in: "thinking") == .working)
+    #expect(DetectedAgent.kimi.detectState(in: "ctrl-c to cancel") == .working)
     #expect(DetectedAgent.kimi.detectState(in: "🌘") == .working)
     #expect(DetectedAgent.kimi.detectState(in: "⠸ Using Shell (git status)") == .working)
     #expect(
@@ -226,10 +237,21 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.kimi.detectState(in: "done") == .idle)
 
     #expect(DetectedAgent.droid.detectState(in: "EXECUTE\nenter to select") == .blocked)
+    #expect(DetectedAgent.droid.detectState(in: "> Yes, allow\n> No, cancel\nUse ↑↓ to navigate") == .blocked)
     #expect(DetectedAgent.droid.detectState(in: "⠋ esc to stop") == .working)
+    #expect(DetectedAgent.droid.detectState(in: "esc to stop") == .working)
     #expect(DetectedAgent.droid.detectState(in: "done") == .idle)
 
-    #expect(DetectedAgent.amp.detectState(in: "waiting for approval\nallow all for this session") == .blocked)
+    #expect(
+      DetectedAgent.amp.detectState(
+        in: """
+          Waiting for approval
+          Approve
+          Allow All for This Session
+          """
+      ) == .blocked
+    )
+    #expect(DetectedAgent.amp.detectState(in: "waiting for approval\nallow all for this session") == .idle)
     #expect(DetectedAgent.amp.detectState(in: "esc to cancel") == .working)
     #expect(DetectedAgent.amp.detectState(in: "done") == .idle)
   }
