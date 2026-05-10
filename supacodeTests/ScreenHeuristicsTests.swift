@@ -155,11 +155,13 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.codex.detectState(in: "Ready for input") == .idle)
   }
 
-  @Test func otherAgentDetectorsCoverStateTriplets() {
+  @Test func geminiDetection() {
     #expect(DetectedAgent.gemini.detectState(in: "│ Apply this change") == .blocked)
     #expect(DetectedAgent.gemini.detectState(in: "esc to cancel") == .working)
     #expect(DetectedAgent.gemini.detectState(in: "done") == .idle)
+  }
 
+  @Test func cursorDetection() {
     #expect(DetectedAgent.cursor.detectState(in: "Run command? (y) (enter)") == .blocked)
     #expect(
       DetectedAgent.cursor.detectState(
@@ -174,11 +176,15 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.cursor.detectState(in: "⏳ Trusting workspace...") == .working)
     #expect(DetectedAgent.cursor.detectState(in: "⬡ indexing") == .working)
     #expect(DetectedAgent.cursor.detectState(in: "done") == .idle)
+  }
 
+  @Test func clineDetection() {
     #expect(DetectedAgent.cline.detectState(in: "Let Cline use this tool? yes") == .blocked)
     #expect(DetectedAgent.cline.detectState(in: "Cline is ready for your message") == .idle)
     #expect(DetectedAgent.cline.detectState(in: "still processing") == .working)
+  }
 
+  @Test func opencodeDetection() {
     #expect(DetectedAgent.opencode.detectState(in: "△ Permission required") == .blocked)
     #expect(
       DetectedAgent.opencode.detectState(
@@ -191,12 +197,16 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.opencode.detectState(in: "esc to interrupt") == .working)
     #expect(DetectedAgent.opencode.detectState(in: "Do you want to continue?\nYes") == .idle)
     #expect(DetectedAgent.opencode.detectState(in: "done") == .idle)
+  }
 
+  @Test func copilotDetection() {
     #expect(DetectedAgent.copilot.detectState(in: "│ do you want to run this?") == .blocked)
     #expect(DetectedAgent.copilot.detectState(in: "esc to cancel") == .working)
     #expect(DetectedAgent.copilot.detectState(in: "Do you want to continue?\nYes") == .idle)
     #expect(DetectedAgent.copilot.detectState(in: "done") == .idle)
+  }
 
+  @Test func kimiDetection() {
     #expect(DetectedAgent.kimi.detectState(in: "approve? [y/n]") == .blocked)
     #expect(DetectedAgent.kimi.detectState(in: "thinking") == .working)
     #expect(DetectedAgent.kimi.detectState(in: "ctrl-c to cancel") == .working)
@@ -246,13 +256,17 @@ struct ScreenHeuristicsTests {
       ) == .blocked
     )
     #expect(DetectedAgent.kimi.detectState(in: "done") == .idle)
+  }
 
+  @Test func droidDetection() {
     #expect(DetectedAgent.droid.detectState(in: "EXECUTE\nenter to select") == .blocked)
     #expect(DetectedAgent.droid.detectState(in: "> Yes, allow\n> No, cancel\nUse ↑↓ to navigate") == .blocked)
     #expect(DetectedAgent.droid.detectState(in: "⠋ esc to stop") == .working)
     #expect(DetectedAgent.droid.detectState(in: "esc to stop") == .working)
     #expect(DetectedAgent.droid.detectState(in: "done") == .idle)
+  }
 
+  @Test func ampDetection() {
     #expect(
       DetectedAgent.amp.detectState(
         in: """
