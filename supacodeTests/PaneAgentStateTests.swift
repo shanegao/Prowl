@@ -69,6 +69,7 @@ struct PaneAgentStateTests {
     )
 
     #expect(idle == .idle)
+    #expect(lastWorking == nil)
   }
 
   @Test func presenceRequiresSixMissesBeforeRelease() {

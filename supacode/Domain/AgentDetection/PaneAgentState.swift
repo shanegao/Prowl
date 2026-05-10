@@ -77,6 +77,7 @@ func stabilizeAgentState(
   lastClaudeWorkingAt: inout Date?
 ) -> AgentRawState {
   guard agent == .claude else {
+    lastClaudeWorkingAt = nil
     return raw
   }
 
