@@ -180,8 +180,47 @@ struct ScreenHeuristicsTests {
 
   @Test func clineDetection() {
     #expect(DetectedAgent.cline.detectState(in: "Let Cline use this tool? yes") == .blocked)
+    #expect(
+      DetectedAgent.cline.detectState(
+        in: """
+          ⏺ 我已准备好开始。你现在希望我帮你做什么？
+            1. 实现一个新功能
+            2. 排查/修复一个 bug
+          ╭───╮
+          │ (1-5 or type)                                                           │
+          ╰───╯
+           / for commands · @ for files
+          """
+      ) == .blocked
+    )
+    #expect(
+      DetectedAgent.cline.detectState(
+        in: """
+          ⠋ Acting... (3s · esc to interrupt)
+          💡 Tip: Use /skills to browse and attach reusable skill files.
+          ╭───╮
+          │                                                                         │
+          ╰───╯
+           / for commands · @ for files
+          """
+      ) == .working
+    )
+    #expect(
+      DetectedAgent.cline.detectState(
+        in: """
+          ⏺ Task completed
+            你好！👋
+
+                                    Start New Task (1)                       Exit (2)
+          ╭───╮
+          │                                                                         │
+          ╰───╯
+           / for commands · @ for files
+          """
+      ) == .idle
+    )
     #expect(DetectedAgent.cline.detectState(in: "Cline is ready for your message") == .idle)
-    #expect(DetectedAgent.cline.detectState(in: "still processing") == .working)
+    #expect(DetectedAgent.cline.detectState(in: "Start New Task (1)") == .idle)
   }
 
   @Test func opencodeDetection() {

@@ -1,9 +1,9 @@
 import Foundation
 
-private let agentDetectionRecentLineLimit = 24
+nonisolated private let agentDetectionRecentLineLimit = 24
 
 extension DetectedAgent {
-  func detectState(in screen: String) -> AgentRawState {
+  nonisolated func detectState(in screen: String) -> AgentRawState {
     let screen = recentLines(screen, limit: agentDetectionRecentLineLimit)
     switch self {
     case .pi:
@@ -32,7 +32,7 @@ extension DetectedAgent {
   }
 }
 
-private func recentLines(_ content: String, limit: Int) -> String {
+nonisolated private func recentLines(_ content: String, limit: Int) -> String {
   let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
   var remainingNonBlankLines = limit
   var startIndex = lines.startIndex
@@ -51,11 +51,11 @@ private func recentLines(_ content: String, limit: Int) -> String {
   return lines[startIndex...].joined(separator: "\n")
 }
 
-private func detectPi(_ content: String) -> AgentRawState {
+nonisolated private func detectPi(_ content: String) -> AgentRawState {
   content.contains("Working...") ? .working : .idle
 }
 
-private func detectClaude(_ content: String) -> AgentRawState {
+nonisolated private func detectClaude(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
 
   if content.contains("⌕ Search…") || lower.contains("ctrl+r to toggle") {
@@ -77,7 +77,7 @@ private func detectClaude(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectCodex(_ content: String) -> AgentRawState {
+nonisolated private func detectCodex(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   if lower.contains("press enter to confirm or esc to cancel")
     || lower.contains("enter to submit answer")
@@ -94,7 +94,7 @@ private func detectCodex(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectGemini(_ content: String) -> AgentRawState {
+nonisolated private func detectGemini(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   if lower.contains("waiting for user confirmation")
     || content.contains("│ Apply this change")
@@ -110,7 +110,7 @@ private func detectGemini(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectCursor(_ content: String) -> AgentRawState {
+nonisolated private func detectCursor(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   if lower.contains("workspace trust required")
     || lower.contains("trust this workspace")
@@ -127,20 +127,21 @@ private func detectCursor(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectCline(_ content: String) -> AgentRawState {
+nonisolated private func detectCline(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   if lower.contains("let cline use this tool")
     || ((lower.contains("[act mode]") || lower.contains("[plan mode]")) && lower.contains("yes"))
+    || hasClineNumberedChoicePrompt(content)
   {
     return .blocked
   }
-  if lower.contains("cline is ready for your message") {
-    return .idle
+  if hasInterruptPattern(lower) {
+    return .working
   }
-  return .working
+  return .idle
 }
 
-private func detectOpenCode(_ content: String) -> AgentRawState {
+nonisolated private func detectOpenCode(_ content: String) -> AgentRawState {
   if content.contains("△ Permission required")
     || hasOpenCodeQuestionPrompt(content)
   {
@@ -152,7 +153,7 @@ private func detectOpenCode(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectCopilot(_ content: String) -> AgentRawState {
+nonisolated private func detectCopilot(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   if lower.contains("│ do you want")
     || (lower.contains("confirm with") && lower.contains("enter"))
@@ -165,7 +166,7 @@ private func detectCopilot(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectKimi(_ content: String) -> AgentRawState {
+nonisolated private func detectKimi(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   let blockedPatterns = [
     "allow?", "confirm?", "approve?", "proceed?", "[y/n]", "(y/n)",
@@ -189,7 +190,7 @@ private func detectKimi(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectDroid(_ content: String) -> AgentRawState {
+nonisolated private func detectDroid(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   let hasExecute = content.contains("EXECUTE")
   let hasSelectionChrome =
@@ -212,7 +213,7 @@ private func detectDroid(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func detectAmp(_ content: String) -> AgentRawState {
+nonisolated private func detectAmp(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   let hasWaitingForApproval = lower.contains("waiting for approval")
   let hasApprovalHeader =
@@ -237,7 +238,7 @@ private func detectAmp(_ content: String) -> AgentRawState {
   return .idle
 }
 
-private func contentAbovePromptBox(_ content: String) -> String {
+nonisolated private func contentAbovePromptBox(_ content: String) -> String {
   let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
   guard let promptIndex = lines.lastIndex(where: { $0.contains("❯") }) else {
     return content
@@ -247,13 +248,13 @@ private func contentAbovePromptBox(_ content: String) -> String {
   return lines[..<endIndex].joined(separator: "\n")
 }
 
-private func isBoxBorderLine(_ line: String) -> Bool {
+nonisolated private func isBoxBorderLine(_ line: String) -> Bool {
   let trimmed = line.trimmingCharacters(in: .whitespaces)
   guard trimmed.count >= 3 else { return false }
   return trimmed.allSatisfy { $0 == "─" || $0 == "-" }
 }
 
-private func claudeCurrentInteractionRegion(_ content: String) -> String {
+nonisolated private func claudeCurrentInteractionRegion(_ content: String) -> String {
   let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
   guard let promptIndex = lines.lastIndex(where: { $0.contains("❯") }) else {
     return lines.suffix(18).joined(separator: "\n")
@@ -264,7 +265,7 @@ private func claudeCurrentInteractionRegion(_ content: String) -> String {
   return lines[lowerBound..<upperBound].joined(separator: "\n")
 }
 
-private func hasClaudeBlockedPrompt(content: String, lower: String) -> Bool {
+nonisolated private func hasClaudeBlockedPrompt(content: String, lower: String) -> Bool {
   if lower.contains("do you want to proceed?")
     || lower.contains("would you like to proceed?")
     || lower.contains("waiting for permission")
@@ -281,7 +282,7 @@ private func hasClaudeBlockedPrompt(content: String, lower: String) -> Bool {
     || (hasClaudeSelectionPrompt(content) && hasClaudeYesNoChoice(content))
 }
 
-private func hasClaudeSelectionPrompt(_ content: String) -> Bool {
+nonisolated private func hasClaudeSelectionPrompt(_ content: String) -> Bool {
   content.split(separator: "\n").contains { line in
     let trimmed = line.trimmingCharacters(in: .whitespaces)
     return trimmed.hasPrefix("❯")
@@ -290,7 +291,7 @@ private func hasClaudeSelectionPrompt(_ content: String) -> Bool {
   }
 }
 
-private func hasClaudeYesNoChoice(_ content: String) -> Bool {
+nonisolated private func hasClaudeYesNoChoice(_ content: String) -> Bool {
   content.split(separator: "\n").contains { line in
     let line = line.trimmingCharacters(in: .whitespaces)
     let option =
@@ -307,18 +308,28 @@ private func hasClaudeYesNoChoice(_ content: String) -> Bool {
   }
 }
 
-private func hasKimiApprovalPanel(content: String, lower: String) -> Bool {
+nonisolated private func hasClineNumberedChoicePrompt(_ content: String) -> Bool {
+  content.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
+    guard let suffix = line.range(of: " or type)") else { return false }
+    let prefix = line[..<suffix.lowerBound]
+    guard let openParen = prefix.lastIndex(of: "(") else { return false }
+    let between = prefix[prefix.index(after: openParen)...]
+    return between.contains("-") && between.allSatisfy { $0.isNumber || $0 == "-" }
+  }
+}
+
+nonisolated private func hasKimiApprovalPanel(content: String, lower: String) -> Bool {
   lower.contains("requesting approval")
     || (lower.contains("approve once") && lower.contains("approve for this session") && lower.contains("reject"))
     || (content.contains("─ approval") && content.contains("↵ confirm"))
 }
 
-private func hasKimiMoonSpinner(_ content: String) -> Bool {
+nonisolated private func hasKimiMoonSpinner(_ content: String) -> Bool {
   let moonSpinners: Set<Character> = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
   return content.contains { moonSpinners.contains($0) }
 }
 
-private func hasKimiToolSpinner(content: String, lower: String) -> Bool {
+nonisolated private func hasKimiToolSpinner(content: String, lower: String) -> Bool {
   guard lower.contains("using ") else { return false }
   return content.split(separator: "\n").contains { line in
     let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -327,7 +338,7 @@ private func hasKimiToolSpinner(content: String, lower: String) -> Bool {
   }
 }
 
-private func hasConfirmationPrompt(_ lower: String) -> Bool {
+nonisolated private func hasConfirmationPrompt(_ lower: String) -> Bool {
   guard
     let range = lower.range(of: "do you want") ?? lower.range(of: "would you like")
   else {
@@ -337,19 +348,19 @@ private func hasConfirmationPrompt(_ lower: String) -> Bool {
   return after.contains("yes") || after.contains("❯")
 }
 
-private func hasInterruptPattern(_ lower: String) -> Bool {
+nonisolated private func hasInterruptPattern(_ lower: String) -> Bool {
   lower.contains("esc to interrupt")
     || lower.contains("ctrl+c to interrupt")
     || (lower.contains("esc") && lower.contains("interrupt"))
 }
 
-private func hasCodexWorkingHeader(_ content: String) -> Bool {
+nonisolated private func hasCodexWorkingHeader(_ content: String) -> Bool {
   content.split(separator: "\n").contains { line in
     line.trimmingCharacters(in: .whitespaces).hasPrefix("• Working (")
   }
 }
 
-private func hasSpinnerActivity(_ content: String) -> Bool {
+nonisolated private func hasSpinnerActivity(_ content: String) -> Bool {
   let spinnerScalars: Set<UnicodeScalar> = [
     "·", "✱", "✲", "✳", "✴", "✵", "✶", "✷", "✸", "✹", "✺", "✻", "✼", "✽", "✾", "✿",
     "❀", "❁", "❂", "❃", "❇", "❈", "❉", "❊", "❋", "✢", "✣", "✤", "✥", "✦", "✧", "✨",
@@ -366,14 +377,14 @@ private func hasSpinnerActivity(_ content: String) -> Bool {
   }
 }
 
-private func hasCursorSpinner(_ content: String) -> Bool {
+nonisolated private func hasCursorSpinner(_ content: String) -> Bool {
   content.split(separator: "\n").contains { line in
     let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
     return (trimmed.hasPrefix("⬡") || trimmed.hasPrefix("⬢")) && trimmed.contains("ing")
   }
 }
 
-private func hasDroidSpinner(_ content: String) -> Bool {
+nonisolated private func hasDroidSpinner(_ content: String) -> Bool {
   content.split(separator: "\n").contains { line in
     let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
     guard let first = trimmed.unicodeScalars.first else { return false }
@@ -381,7 +392,7 @@ private func hasDroidSpinner(_ content: String) -> Bool {
   }
 }
 
-private func hasOpenCodeQuestionPrompt(_ content: String) -> Bool {
+nonisolated private func hasOpenCodeQuestionPrompt(_ content: String) -> Bool {
   let lower = content.lowercased()
   let hasEnterAction =
     lower.contains("enter confirm")

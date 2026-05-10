@@ -59,4 +59,8 @@ struct ActiveAgentsFeature {
   static func maximumPanelHeight(forContainerHeight height: Double) -> Double {
     max(minimumPanelHeight, min(maximumPanelHeight, height - reservedSidebarListHeight))
   }
+
+  static func detectionEnabled(isPanelHidden: Bool, autoShowPanel: Bool) -> Bool {
+    !isPanelHidden || autoShowPanel
+  }
 }

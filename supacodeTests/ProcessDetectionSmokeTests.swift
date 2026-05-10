@@ -16,4 +16,10 @@ struct ProcessDetectionSmokeTests {
     #expect(!cmdline.isEmpty)
     #expect(!comm.isEmpty)
   }
+
+  @Test func listsCurrentProcessGroupWithoutScanningAllProcesses() {
+    let pids = ProcessDetection.processGroupPIDs(getpgrp())
+
+    #expect(pids.contains(getpid()))
+  }
 }

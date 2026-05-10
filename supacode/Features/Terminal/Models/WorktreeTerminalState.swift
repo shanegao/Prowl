@@ -39,6 +39,7 @@ final class WorktreeTerminalState {
   private var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
   private var lastClaudeWorkingAtBySurface: [UUID: Date] = [:]
   private var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
+  private var agentDetectionEnabled = true
   var tabIsRunningById: [TerminalTabID: Bool] = [:]
   private var runScriptTabId: TerminalTabID?
   private var pendingSetupScript: Bool
@@ -967,6 +968,20 @@ final class WorktreeTerminalState {
     commandFinishedNotificationThreshold = threshold
   }
 
+  func setAgentDetectionEnabled(_ enabled: Bool) {
+    guard agentDetectionEnabled != enabled else { return }
+    agentDetectionEnabled = enabled
+
+    if enabled {
+      for (surfaceID, view) in surfaces {
+        guard let tabId = tabId(containing: surfaceID) else { continue }
+        startAgentDetection(for: view, tabId: tabId)
+      }
+    } else {
+      cleanupAllAgentDetectionState()
+    }
+  }
+
   func clearNotificationIndicator() {
     markAllNotificationsRead()
   }
@@ -1566,6 +1581,7 @@ final class WorktreeTerminalState {
   }
 
   private func startAgentDetection(for view: GhosttySurfaceView, tabId: TerminalTabID) {
+    guard agentDetectionEnabled else { return }
     agentDetectionTasks[view.id]?.cancel()
     surfaceAgentStates[view.id] = PaneAgentState(lastChangedAt: Date())
     terminalStateLogger.debug(
@@ -1575,21 +1591,20 @@ final class WorktreeTerminalState {
     agentDetectionTasks[view.id] = Task { @MainActor [weak self, weak view] in
       while !Task.isCancelled {
         guard let self, let view, self.surfaces[view.id] != nil else { return }
-        self.detectAgentState(for: view, tabId: tabId)
+        await self.detectAgentState(for: view, tabId: tabId)
         let hasAgent = self.surfaceAgentStates[view.id]?.detectedAgent != nil
         try? await Task.sleep(for: hasAgent ? .milliseconds(300) : .milliseconds(500))
       }
     }
   }
 
-  private func detectAgentState(for view: GhosttySurfaceView, tabId: TerminalTabID) {
+  private func detectAgentState(for view: GhosttySurfaceView, tabId: TerminalTabID) async {
     let surfaceID = view.id
-    let now = Date()
     let childPID = view.bridge.childPID()
     let processGroupID = view.bridge.foregroundProcessGroupID()
-    let job =
-      processGroupID.flatMap { ProcessDetection.foregroundJob(processGroupID: $0) }
-      ?? childPID.flatMap { ProcessDetection.foregroundJob(childPID: $0) }
+    let job = await AgentProcessProbe.shared.foregroundJob(processGroupID: processGroupID, childPID: childPID)
+    guard surfaces[surfaceID] != nil else { return }
+
     let identified = job.flatMap { identifyAgentInJob($0) }
     let probedAgent = identified?.agent
 
@@ -1615,8 +1630,14 @@ final class WorktreeTerminalState {
       return
     }
 
+    let now = Date()
     let previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
-    let raw = agent.detectState(in: view.bridge.readViewportText() ?? "")
+    let viewportText = view.bridge.readViewportText() ?? ""
+    let raw = await Task.detached(priority: .utility) {
+      agent.detectState(in: viewportText)
+    }.value
+    guard surfaces[surfaceID] != nil else { return }
+
     var lastClaudeWorkingAt = lastClaudeWorkingAtBySurface[surfaceID]
     let stabilized = stabilizeAgentState(
       agent: agent,

@@ -13,7 +13,57 @@ struct ForegroundJob: Equatable, Sendable {
   let processes: [ForegroundProcess]
 }
 
-enum ProcessDetection {
+actor AgentProcessProbe {
+  static let shared = AgentProcessProbe()
+
+  private struct CachedJob {
+    let capturedAt: Date
+    let job: ForegroundJob?
+  }
+
+  private let cacheLifetime: TimeInterval
+  private var jobsByProcessGroupID: [pid_t: CachedJob] = [:]
+
+  init(cacheLifetime: TimeInterval = 0.75) {
+    self.cacheLifetime = cacheLifetime
+  }
+
+  func foregroundJob(processGroupID: pid_t?, childPID: pid_t?) -> ForegroundJob? {
+    let resolvedProcessGroupID: pid_t?
+    if let processGroupID, processGroupID > 0 {
+      resolvedProcessGroupID = processGroupID
+    } else if let childPID, childPID > 0 {
+      resolvedProcessGroupID = ProcessDetection.foregroundProcessGroupID(pid: childPID)
+    } else {
+      resolvedProcessGroupID = nil
+    }
+
+    guard let resolvedProcessGroupID else { return nil }
+    return cachedForegroundJob(processGroupID: resolvedProcessGroupID, now: Date())
+  }
+
+  private func cachedForegroundJob(processGroupID: pid_t, now: Date) -> ForegroundJob? {
+    if let cached = jobsByProcessGroupID[processGroupID],
+      now.timeIntervalSince(cached.capturedAt) < cacheLifetime
+    {
+      return cached.job
+    }
+
+    let job = ProcessDetection.foregroundJob(processGroupID: processGroupID)
+    jobsByProcessGroupID[processGroupID] = CachedJob(capturedAt: now, job: job)
+    removeExpiredJobs(now: now)
+    return job
+  }
+
+  private func removeExpiredJobs(now: Date) {
+    guard jobsByProcessGroupID.count > 64 else { return }
+    jobsByProcessGroupID = jobsByProcessGroupID.filter { _, cached in
+      now.timeIntervalSince(cached.capturedAt) < cacheLifetime
+    }
+  }
+}
+
+nonisolated enum ProcessDetection {
   static func foregroundJob(childPID: pid_t) -> ForegroundJob? {
     guard childPID > 0, let processGroupID = foregroundProcessGroupID(pid: childPID) else {
       return nil
@@ -23,31 +73,51 @@ enum ProcessDetection {
 
   static func foregroundJob(processGroupID: pid_t) -> ForegroundJob? {
     guard processGroupID > 0 else { return nil }
-    var pids = [pid_t](repeating: 0, count: 4096)
-    let bytes = pids.withUnsafeMutableBufferPointer { buffer in
-      proc_listallpids(buffer.baseAddress, Int32(buffer.count * MemoryLayout<pid_t>.size))
-    }
-    guard bytes > 0 else { return nil }
-
-    let count = Int(bytes) / MemoryLayout<pid_t>.size
-    let processes = pids.prefix(count).compactMap { pid -> ForegroundProcess? in
+    let processes = processGroupPIDs(processGroupID).compactMap { pid -> ForegroundProcess? in
       guard pid > 0,
         let info = processBSDInfo(pid: pid),
-        pid_t(info.pbi_pgid) == processGroupID,
         let name = comm(from: info)
       else {
         return nil
       }
+      let argv = processArguments(pid: pid)
       return ForegroundProcess(
         pid: pid,
         name: name,
-        argv0: processArgv0Name(pid: pid),
-        cmdline: processCommandLine(pid: pid)
+        argv0: argv?.first.flatMap(basename),
+        cmdline: argv?.joined(separator: " ")
       )
     }
 
     guard !processes.isEmpty else { return nil }
     return ForegroundJob(processGroupID: processGroupID, processes: processes)
+  }
+
+  static func processGroupPIDs(_ processGroupID: pid_t) -> [pid_t] {
+    guard processGroupID > 0 else { return [] }
+    var capacity = 16
+
+    while capacity <= 4096 {
+      var pids = [pid_t](repeating: 0, count: capacity)
+      let bytes = pids.withUnsafeMutableBufferPointer { buffer in
+        proc_listpids(
+          UInt32(PROC_PGRP_ONLY),
+          UInt32(processGroupID),
+          buffer.baseAddress,
+          Int32(buffer.count * MemoryLayout<pid_t>.size)
+        )
+      }
+      guard bytes > 0 else { return [] }
+
+      let count = Int(bytes) / MemoryLayout<pid_t>.size
+      let result = pids.prefix(count).filter { $0 > 0 }
+      if count < capacity {
+        return Array(result)
+      }
+      capacity *= 2
+    }
+
+    return []
   }
 
   static func foregroundProcessGroupID(pid: pid_t) -> pid_t? {
@@ -58,17 +128,21 @@ enum ProcessDetection {
   }
 
   static func processCommandLine(pid: pid_t) -> String? {
-    guard let buffer = kernProcargs2(pid: pid), let argv = procargs2Argv(buffer), !argv.isEmpty else {
-      return nil
-    }
-    return argv.joined(separator: " ")
+    processArguments(pid: pid)?.joined(separator: " ")
   }
 
   static func processArgv0Name(pid: pid_t) -> String? {
-    guard let buffer = kernProcargs2(pid: pid), let argv0 = procargs2Argv(buffer)?.first else {
+    guard let argv0 = processArguments(pid: pid)?.first else {
       return nil
     }
     return basename(argv0)
+  }
+
+  static func processArguments(pid: pid_t) -> [String]? {
+    guard let buffer = kernProcargs2(pid: pid) else {
+      return nil
+    }
+    return procargs2Argv(buffer)
   }
 
   static func processBSDInfo(pid: pid_t) -> proc_bsdinfo? {

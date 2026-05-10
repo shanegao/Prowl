@@ -37,7 +37,7 @@ struct ActiveAgentsFeatureTests {
   }
 
   @Test func autoShowRevealsHiddenPanelOnAgentEntry() async {
-    var state = ActiveAgentsFeature.State()
+    let state = ActiveAgentsFeature.State()
     state.$isPanelHidden.withLock { $0 = true }
     let store = TestStore(initialState: state) {
       ActiveAgentsFeature()

@@ -170,11 +170,18 @@ struct AppFeature {
         appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
         state.launchedAt = now
         state.repositories.launchRestoreMode = state.launchRestoreMode
+        let agentDetectionEnabled = ActiveAgentsFeature.detectionEnabled(
+          isPanelHidden: state.repositories.activeAgents.isPanelHidden,
+          autoShowPanel: state.settings.autoShowActiveAgentsPanel
+        )
         analyticsClient.capture("app_launched", nil)
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
           .send(.updates(.task)),
+          .run { _ in
+            await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
+          },
           .run { _ in
             await MainActor.run {
               NSApplication.shared.dockTile.badgeLabel = nil
@@ -420,6 +427,10 @@ struct AppFeature {
           settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
         state.settings.keybindingUserOverrides = settings.keybindingUserOverrides
+        let agentDetectionEnabled = ActiveAgentsFeature.detectionEnabled(
+          isPanelHidden: state.repositories.activeAgents.isPanelHidden,
+          autoShowPanel: settings.autoShowActiveAgentsPanel
+        )
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           let rootURL = selectedWorktree.repositoryRootURL
           @Shared(.repositorySettings(rootURL)) var repositorySettings
@@ -478,6 +489,9 @@ struct AppFeature {
                 threshold: settings.commandFinishedNotificationThreshold
               )
             )
+          },
+          .run { _ in
+            await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
           },
           .run { _ in
             await worktreeInfoWatcher.send(
@@ -898,6 +912,16 @@ struct AppFeature {
 
       case .alert:
         return .none
+
+      case .repositories(.activeAgents(.togglePanelVisibility)):
+        let nextIsPanelHidden = !state.repositories.activeAgents.isPanelHidden
+        let agentDetectionEnabled = ActiveAgentsFeature.detectionEnabled(
+          isPanelHidden: nextIsPanelHidden,
+          autoShowPanel: state.settings.autoShowActiveAgentsPanel
+        )
+        return .run { _ in
+          await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
+        }
 
       case .repositories:
         return .none
