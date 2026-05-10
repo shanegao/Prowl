@@ -6,6 +6,8 @@ import Observation
 import Sharing
 
 private let terminalStateLogger = SupaLogger("TerminalState")
+private let activeAgentDetectionInterval: Duration = .milliseconds(300)
+private let idleAgentDetectionInterval: Duration = .seconds(2)
 
 private struct AgentDetectionDiagnostic {
   let tabId: TerminalTabID
@@ -1593,7 +1595,7 @@ final class WorktreeTerminalState {
         guard let self, let view, self.surfaces[view.id] != nil else { return }
         await self.detectAgentState(for: view, tabId: tabId)
         let hasAgent = self.surfaceAgentStates[view.id]?.detectedAgent != nil
-        try? await Task.sleep(for: hasAgent ? .milliseconds(300) : .milliseconds(500))
+        try? await Task.sleep(for: hasAgent ? activeAgentDetectionInterval : idleAgentDetectionInterval)
       }
     }
   }

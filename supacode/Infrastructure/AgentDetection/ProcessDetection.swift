@@ -181,7 +181,7 @@ nonisolated enum ProcessDetection {
   static func procargs2Argv(_ buffer: [UInt8]) -> [String]? {
     guard buffer.count >= MemoryLayout<Int32>.size else { return nil }
     let argc = buffer.withUnsafeBytes { rawBuffer in
-      rawBuffer.load(as: Int32.self)
+      rawBuffer.loadUnaligned(as: Int32.self)
     }
     guard argc > 0 else { return nil }
 
