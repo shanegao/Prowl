@@ -10,7 +10,7 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .codex
   case "gemini":
     return .gemini
-  case "agent", "cursor", "cursor-agent":
+  case "cursor", "cursor-agent":
     return .cursor
   case "cline":
     return .cline
@@ -34,7 +34,7 @@ func identifyAgentInJob(_ job: ForegroundJob) -> (agent: DetectedAgent, name: St
 
   for process in job.processes {
     for candidate in agentCandidates(for: process) {
-      guard let agent = identifyAgent(processName: candidate.name) else { continue }
+      guard let agent = identifyAgent(candidate: candidate, process: process) else { continue }
       if best == nil || candidate.score > best!.score {
         best = AgentCandidate(score: candidate.score, agent: agent, name: candidate.name)
       }
@@ -63,6 +63,26 @@ private func agentCandidates(for process: ForegroundProcess) -> [(name: String, 
   }
 
   return candidates
+}
+
+private func identifyAgent(candidate: (name: String, score: Int), process: ForegroundProcess) -> DetectedAgent? {
+  if candidate.name == "agent", isCursorAgentAlias(process) {
+    return .cursor
+  }
+  return identifyAgent(processName: candidate.name)
+}
+
+private func isCursorAgentAlias(_ process: ForegroundProcess) -> Bool {
+  let haystack = [
+    process.argv0,
+    process.cmdline,
+  ]
+  .compactMap(\.self)
+  .joined(separator: " ")
+  .lowercased()
+
+  return haystack.contains("cursor-agent")
+    || haystack.contains("cursor.app")
 }
 
 private struct AgentCandidate {

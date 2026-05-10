@@ -9,7 +9,6 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "claude-code") == .claude)
     #expect(identifyAgent(processName: "codex") == .codex)
     #expect(identifyAgent(processName: "gemini") == .gemini)
-    #expect(identifyAgent(processName: "agent") == .cursor)
     #expect(identifyAgent(processName: "cursor") == .cursor)
     #expect(identifyAgent(processName: "cursor-agent") == .cursor)
     #expect(identifyAgent(processName: "cline") == .cline)
@@ -31,8 +30,11 @@ struct AgentClassifierTests {
         ForegroundProcess(
           pid: 100,
           name: "agent",
-          argv0: "agent",
-          cmdline: "agent"
+          argv0: "/Users/onevcat/.local/bin/agent",
+          cmdline: """
+            /Users/onevcat/.local/bin/agent --use-system-ca \
+            /Users/onevcat/.local/share/cursor-agent/versions/2026.05.09-0afadcc/index.js
+            """
         )
       ]
     )
@@ -40,6 +42,23 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .cursor)
     #expect(result.name == "agent")
+  }
+
+  @Test func ignoresGenericAgentProcessWithoutCursorContext() {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "agent",
+          argv0: "agent",
+          cmdline: "agent --serve"
+        )
+      ]
+    )
+
+    #expect(identifyAgent(processName: "agent") == nil)
+    #expect(identifyAgentInJob(job) == nil)
   }
 
   @Test func identifiesCursorAgentCommandLines() throws {
