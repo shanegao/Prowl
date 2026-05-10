@@ -11,11 +11,23 @@ Prowl embeds GhosttyKit from `ThirdParty/ghostty`. The submodule points to the `
 
 Each patched branch starts at the matching upstream tag and only adds onevcat patches. Do not rewrite an existing patched branch after publishing it.
 
-## Current Patch
+## Current Patches
 
-- Commit: `76dce319f55db097b2b7ae3cad2f6267475936f0`
-- Summary: expose `ghostty_surface_pid(ghostty_surface_t)` from the embedded C API.
-- Behavior: returns the local surface child process PID, or `0` when unavailable or exited.
+Listed in topological order on `release/v1.3.1-patched`. When upgrading to a new
+upstream tag, cherry-pick all of them.
+
+1. `76dce319f55db097b2b7ae3cad2f6267475936f0` — `embedded: expose surface child PID`
+   - Adds `ghostty_surface_pid(ghostty_surface_t)` to the embedded C API.
+   - Returns the local surface child process PID, or `0` when unavailable or exited.
+2. `a284127166ce76d872320d7dfa2a5c57268be9de` — `embedded: expose surface foreground process group`
+   - Adds `ghostty_surface_foreground_process_group(ghostty_surface_t)` to the
+     embedded C API for callers that need the pty's foreground job, not just the
+     shell PID.
+3. `fe714860c12da41442b63135d09ba80e293b66ad` — `surface: use libc tcgetpgrp for foreground group`
+   - Switches the foreground-group lookup from `proc_bsdinfo.e_tpgid` to
+     `tcgetpgrp` on the pty fd, which is more reliable when the shell PID
+     itself is not the controlling process.
+   - This is the commit the submodule currently points at.
 
 ## Upgrade To A New Ghostty Tag
 
