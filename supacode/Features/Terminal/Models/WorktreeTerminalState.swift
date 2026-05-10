@@ -1724,7 +1724,7 @@ final class WorktreeTerminalState {
       surfaceID: surfaceID,
       paneIndex: paneIndex,
       agent: agent,
-      rawState: state.state,
+      rawState: state.fallbackState,
       displayState: state.displayState,
       lastChangedAt: state.lastChangedAt
     )
