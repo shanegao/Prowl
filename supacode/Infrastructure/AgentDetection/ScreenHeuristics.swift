@@ -114,10 +114,7 @@ nonisolated private func detectCursor(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
   if lower.contains("workspace trust required")
     || lower.contains("trust this workspace")
-    || lower.contains("(y) (enter)")
-    || lower.contains("keep (n)")
-    || lower.contains("skip (esc or n)")
-    || (lower.contains("(y)") && (lower.contains("allow") || lower.contains("run")))
+    || hasCursorPermissionPrompt(content: content, lower: lower)
   {
     return .blocked
   }
@@ -306,6 +303,31 @@ nonisolated private func hasClaudeYesNoChoice(_ content: String) -> Bool {
       || trimmed.hasPrefix("yes, and ")
       || trimmed.hasPrefix("no, and tell claude")
   }
+}
+
+nonisolated private func hasCursorPermissionPrompt(content: String, lower: String) -> Bool {
+  if lower.contains("(y) (enter)") {
+    return true
+  }
+
+  let hasPermissionHeader =
+    lower.contains("run this command?")
+    || lower.contains("run command?")
+    || lower.contains("not in allowlist")
+    || lower.contains("to allowlist?")
+    || lower.contains("allow execution")
+  guard hasPermissionHeader else { return false }
+
+  let hasConfirmAction = content.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
+    guard trimmed.contains("(y)") else { return false }
+    return trimmed.contains("run") || trimmed.contains("allow")
+  }
+  let hasCancelAction =
+    lower.contains("skip (esc or n)")
+    || lower.contains("keep (n)")
+
+  return hasConfirmAction || hasCancelAction
 }
 
 nonisolated private func hasClineNumberedChoicePrompt(_ content: String) -> Bool {

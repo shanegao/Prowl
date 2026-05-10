@@ -166,6 +166,18 @@ struct ScreenHeuristicsTests {
     #expect(
       DetectedAgent.cursor.detectState(
         in: """
+          Run this command?
+          Not in allowlist: git log --oneline --decorate -n 8
+           → Run (once) (y)
+             Add Shell(git log) to allowlist? (tab)
+             Auto-run everything (shift+tab)
+             Skip (esc or n)
+          """
+      ) == .blocked
+    )
+    #expect(
+      DetectedAgent.cursor.detectState(
+        in: """
           ⚠ Workspace Trust Required
           Cursor Agent can execute code and access files in this directory.
           [a] Trust this workspace
@@ -175,6 +187,15 @@ struct ScreenHeuristicsTests {
     )
     #expect(DetectedAgent.cursor.detectState(in: "⏳ Trusting workspace...") == .working)
     #expect(DetectedAgent.cursor.detectState(in: "⬡ indexing") == .working)
+    #expect(
+      DetectedAgent.cursor.detectState(
+        in: """
+          The docs mention pressing (y) to allow a run.
+          This is historical output, not a prompt.
+          """
+      ) == .idle
+    )
+    #expect(DetectedAgent.cursor.detectState(in: "Skip (esc or n)") == .idle)
     #expect(DetectedAgent.cursor.detectState(in: "done") == .idle)
   }
 
