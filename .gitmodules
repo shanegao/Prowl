@@ -1,6 +1,6 @@
 [submodule "ThirdParty/ghostty"]
 	path = ThirdParty/ghostty
-	url = git@github.com:onevcat/ghostty.git
+	url = https://github.com/onevcat/ghostty.git
 [submodule "Resources/git-wt"]
 	path = Resources/git-wt
 	url = https://github.com/khoi/git-wt.git
