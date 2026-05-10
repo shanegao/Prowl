@@ -28,6 +28,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var keybindingUserOverrides: KeybindingUserOverrideStore
   var defaultViewMode: DefaultViewMode
   var dimUnfocusedSplits: Bool
+  var autoShowActiveAgentsPanel: Bool
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -58,7 +59,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     terminalFontSize: nil,
     keybindingUserOverrides: .empty,
     defaultViewMode: .normal,
-    dimUnfocusedSplits: true
+    dimUnfocusedSplits: true,
+    autoShowActiveAgentsPanel: false
   )
 
   init(
@@ -90,7 +92,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty,
     defaultViewMode: DefaultViewMode = .normal,
-    dimUnfocusedSplits: Bool = true
+    dimUnfocusedSplits: Bool = true,
+    autoShowActiveAgentsPanel: Bool = false
   ) {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
@@ -121,6 +124,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.keybindingUserOverrides = keybindingUserOverrides
     self.defaultViewMode = defaultViewMode
     self.dimUnfocusedSplits = dimUnfocusedSplits
+    self.autoShowActiveAgentsPanel = autoShowActiveAgentsPanel
   }
 
   func encode(to encoder: any Encoder) throws {
@@ -154,6 +158,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(keybindingUserOverrides, forKey: .keybindingUserOverrides)
     try container.encode(defaultViewMode, forKey: .defaultViewMode)
     try container.encode(dimUnfocusedSplits, forKey: .dimUnfocusedSplits)
+    try container.encode(autoShowActiveAgentsPanel, forKey: .autoShowActiveAgentsPanel)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -186,6 +191,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case keybindingUserOverrides
     case defaultViewMode
     case dimUnfocusedSplits
+    case autoShowActiveAgentsPanel
     // Legacy key for migration
     case automaticallyArchiveMergedWorktrees
   }
@@ -281,5 +287,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dimUnfocusedSplits =
       try container.decodeIfPresent(Bool.self, forKey: .dimUnfocusedSplits)
       ?? Self.default.dimUnfocusedSplits
+    autoShowActiveAgentsPanel =
+      try container.decodeIfPresent(Bool.self, forKey: .autoShowActiveAgentsPanel)
+      ?? Self.default.autoShowActiveAgentsPanel
   }
 }

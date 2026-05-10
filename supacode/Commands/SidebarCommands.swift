@@ -21,6 +21,13 @@ struct SidebarCommands: Commands {
       .help(helpText(title: "Reveal in Sidebar", commandID: AppShortcuts.CommandID.revealInSidebar))
       .disabled(revealInSidebarAction == nil)
       Divider()
+      Button("Active Agents") {
+        store.send(.repositories(.activeAgents(.togglePanelVisibility)))
+      }
+      .modifier(
+        KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleActiveAgentsPanel))
+      )
+      .help(helpText(title: "Active Agents", commandID: AppShortcuts.CommandID.toggleActiveAgentsPanel))
       Button("Canvas") {
         store.send(.repositories(.toggleCanvas))
       }

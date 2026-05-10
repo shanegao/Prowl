@@ -65,14 +65,25 @@ struct CommandIconMapTests {
   @Test func codingAgentsResolved() {
     // Sample of the coding-agent set — they all share the sparkle SF
     // Symbol fallback, asset names match the imageset folders.
+    #expect(CommandIconMap.iconForFirstToken("agent")?.assetName == "Cursor")
     #expect(CommandIconMap.iconForFirstToken("claude")?.assetName == "ClaudeCode")
     #expect(CommandIconMap.iconForFirstToken("codex")?.assetName == "Codex")
     #expect(CommandIconMap.iconForFirstToken("gemini")?.assetName == "Gemini")
     #expect(CommandIconMap.iconForFirstToken("copilot")?.assetName == "GitHubCopilot")
-    // aider/droid have no brand asset — sparkle fallback only.
+    #expect(CommandIconMap.iconForFirstToken("pi")?.assetName == "Pi")
+    #expect(CommandIconMap.iconForFirstToken("cursor")?.assetName == "Cursor")
+    #expect(CommandIconMap.iconForFirstToken("cursor-agent")?.assetName == "Cursor")
+    #expect(CommandIconMap.iconForFirstToken("cline")?.assetName == "Cline")
+    #expect(CommandIconMap.iconForFirstToken("droid")?.assetName == "Droid")
+    // Aider has no bundled brand asset — sparkle fallback only.
     #expect(CommandIconMap.iconForFirstToken("aider")?.systemSymbol == "sparkle")
     #expect(CommandIconMap.iconForFirstToken("aider")?.assetName == nil)
-    #expect(CommandIconMap.iconForFirstToken("droid")?.systemSymbol == "sparkle")
+  }
+
+  @Test func allDetectedAgentsResolveToIcons() {
+    for agent in DetectedAgent.allCases {
+      #expect(CommandIconMap.iconForFirstToken(agent.iconLookupToken) != nil)
+    }
   }
 
   // MARK: - Debug catalog

@@ -1,11 +1,16 @@
 import ComposableArchitecture
 import CustomDump
 import DependenciesTestSupport
+import Foundation
 import Testing
 
 @testable import supacode
 
 @MainActor
+@Suite(
+  .serialized,
+  .dependency(\.defaultAppStorage, .appFeatureSettingsChangedTests)
+)
 struct AppFeatureSettingsChangedTests {
   @Test(.dependencies) func settingsChangedPropagatesRepositorySettings() async {
     var settings = GlobalSettings.default
@@ -56,6 +61,42 @@ struct AppFeatureSettingsChangedTests {
 
     #expect(sentTerminalCommands.value.isEmpty)
     #expect(watcherCommands.value.isEmpty)
+  }
+
+  @Test(.dependencies) func agentEntryAutoShowsActiveAgentsPanelWhenEnabled() async {
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = true
+    UserDefaults.appFeatureSettingsChangedTests.set(true, forKey: "activeAgentsPanelHidden")
+    let state = AppFeature.State(settings: settings)
+    let entry = activeAgentEntry()
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.agentEntryChanged(entry))) {
+      $0.repositories.activeAgents.$isPanelHidden.withLock { $0 = false }
+    }
+    await store.receive(\.repositories.activeAgents.agentEntryChanged) {
+      $0.repositories.activeAgents.entries = [entry]
+    }
+  }
+
+  @Test(.dependencies) func agentEntryKeepsActiveAgentsPanelHiddenWhenAutoShowDisabled() async {
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = false
+    UserDefaults.appFeatureSettingsChangedTests.set(true, forKey: "activeAgentsPanelHidden")
+    let state = AppFeature.State(settings: settings)
+    let entry = activeAgentEntry()
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.agentEntryChanged(entry)))
+    await store.receive(\.repositories.activeAgents.agentEntryChanged) {
+      $0.repositories.activeAgents.entries = [entry]
+    }
   }
 
   @Test(.dependencies) func settingsChangedRecomputesResolvedKeybindings() async {
@@ -114,4 +155,30 @@ struct AppFeatureSettingsChangedTests {
       $0.repositories.statusToast = .success("Saved terminal layout cleared")
     }
   }
+
+  private func activeAgentEntry() -> ActiveAgentEntry {
+    ActiveAgentEntry(
+      id: fixedUUID(0),
+      worktreeID: "/repo/wt",
+      worktreeName: "wt",
+      tabID: TerminalTabID(rawValue: fixedUUID(1)),
+      tabTitle: "codex",
+      surfaceID: fixedUUID(0),
+      paneIndex: 1,
+      agent: .codex,
+      rawState: .working,
+      displayState: .working,
+      lastChangedAt: Date(timeIntervalSince1970: 10)
+    )
+  }
+
+  private func fixedUUID(_ value: UInt8) -> UUID {
+    UUID(uuid: (value, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+  }
+}
+
+extension UserDefaults {
+  fileprivate nonisolated(unsafe) static let appFeatureSettingsChangedTests = UserDefaults(
+    suiteName: "com.onevcat.Prowl.AppFeatureSettingsChangedTests"
+  )!
 }

@@ -15,6 +15,7 @@ final class WorktreeTerminalManager {
   private var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
   private var commandFinishedNotificationThreshold = 10
+  private var agentDetectionEnabled = true
   private var preferredFontSize: Float32?
   private let baselineFontSize: Float32
   private var lastNotificationIndicatorCount: Int?
@@ -146,6 +147,8 @@ final class WorktreeTerminalManager {
       setNotificationsEnabled(enabled)
     case .setCommandFinishedNotification(let enabled, let threshold):
       setCommandFinishedNotification(enabled: enabled, threshold: threshold)
+    case .setAgentDetectionEnabled(let enabled):
+      setAgentDetectionEnabled(enabled)
     case .setCanvasMode(let enabled):
       if enabled {
         terminalLogger.info("[CanvasExit] enteringCanvas previousSelectedWorktree=\(selectedWorktreeID ?? "nil")")
@@ -224,6 +227,7 @@ final class WorktreeTerminalManager {
       enabled: commandFinishedNotificationEnabled,
       threshold: commandFinishedNotificationThreshold
     )
+    state.setAgentDetectionEnabled(agentDetectionEnabled)
     state.isSelected = { [weak self] in
       self?.selectedWorktreeID == worktree.id
     }
@@ -246,6 +250,12 @@ final class WorktreeTerminalManager {
     }
     state.onTaskStatusChanged = { [weak self] status in
       self?.emit(.taskStatusChanged(worktreeID: worktree.id, status: status))
+    }
+    state.onAgentEntryChanged = { [weak self] entry in
+      self?.emit(.agentEntryChanged(entry))
+    }
+    state.onAgentEntryRemoved = { [weak self] id in
+      self?.emit(.agentEntryRemoved(id))
     }
     state.onRunScriptStatusChanged = { [weak self] isRunning in
       self?.emit(.runScriptStatusChanged(worktreeID: worktree.id, isRunning: isRunning))
@@ -427,6 +437,14 @@ final class WorktreeTerminalManager {
     commandFinishedNotificationThreshold = threshold
     for state in states.values {
       state.setCommandFinishedNotification(enabled: enabled, threshold: threshold)
+    }
+  }
+
+  func setAgentDetectionEnabled(_ enabled: Bool) {
+    guard agentDetectionEnabled != enabled else { return }
+    agentDetectionEnabled = enabled
+    for state in states.values {
+      state.setAgentDetectionEnabled(enabled)
     }
   }
 

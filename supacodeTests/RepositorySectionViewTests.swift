@@ -91,6 +91,53 @@ struct RepositorySectionViewTests {
     #expect(SidebarListView.selectedWorktreeIDs(in: state) == [worktree.id])
   }
 
+  @Test func activeAgentWorktreeMetadataUsesCustomRepositoryTitleAndCurrentBranchName() {
+    let repositoryRootURL = URL(fileURLWithPath: "/tmp/prowl")
+    let worktree = Worktree(
+      id: "/tmp/prowl/worktrees/active-agents",
+      name: "feat/active-agents-panel",
+      detail: "active-agents",
+      workingDirectory: URL(fileURLWithPath: "/tmp/prowl/worktrees/active-agents"),
+      repositoryRootURL: repositoryRootURL
+    )
+    let repository = Repository(
+      id: "/tmp/prowl",
+      rootURL: repositoryRootURL,
+      name: "supacode",
+      kind: .git,
+      worktrees: [worktree]
+    )
+
+    let metadata = SidebarListView.activeAgentWorktreeMetadata(
+      repositories: [repository],
+      customTitles: [repository.id: "Prowl"],
+      repositoryAppearances: [repository.id: RepositoryAppearance(color: .blue)]
+    )
+
+    #expect(metadata.repositoryNamesByWorktreeID[worktree.id] == "Prowl")
+    #expect(metadata.branchNamesByWorktreeID[worktree.id] == "feat/active-agents-panel")
+    #expect(metadata.repositoryColorsByWorktreeID[worktree.id] == .blue)
+  }
+
+  @Test func activeAgentWorktreeMetadataFallsBackToRepositoryNameForPlainFolders() {
+    let repository = Repository(
+      id: "/tmp/plain",
+      rootURL: URL(fileURLWithPath: "/tmp/plain"),
+      name: "plain",
+      kind: .plain,
+      worktrees: []
+    )
+
+    let metadata = SidebarListView.activeAgentWorktreeMetadata(
+      repositories: [repository],
+      customTitles: [:]
+    )
+
+    #expect(metadata.repositoryNamesByWorktreeID[repository.id] == "plain")
+    #expect(metadata.branchNamesByWorktreeID[repository.id] == "plain")
+    #expect(metadata.repositoryColorsByWorktreeID[repository.id] == nil)
+  }
+
   @Test func openTabCountForGitRepositorySumsAllWorktrees() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let repositoryRootURL = URL(fileURLWithPath: "/tmp/repo")

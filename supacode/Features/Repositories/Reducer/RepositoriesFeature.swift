@@ -240,6 +240,7 @@ struct RepositoriesFeature {
     var pendingSidebarReveal: PendingSidebarReveal?
     var isSidebarDragActive = false
     var pendingSidebarNotifyReorderIDs: [Worktree.ID] = []
+    var activeAgents = ActiveAgentsFeature.State()
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
@@ -274,6 +275,7 @@ struct RepositoriesFeature {
     case worktreeOrdering(WorktreeOrderingAction)
     case githubIntegration(GithubIntegrationAction)
     case repositoryManagement(RepositoryManagementAction)
+    case activeAgents(ActiveAgentsFeature.Action)
     case task
     case repositorySnapshotLoaded([Repository]?)
     case setOpenPanelPresented(Bool)
@@ -400,6 +402,18 @@ struct RepositoriesFeature {
       Reduce { state, action in
         switch action {
         case .worktreeCreation, .worktreeLifecycle, .worktreeOrdering, .githubIntegration, .repositoryManagement:
+          return .none
+
+        case .activeAgents(.entryTapped(let id)):
+          guard let entry = state.activeAgents.entries[id: id] else { return .none }
+          return .merge(
+            .send(.selectWorktree(entry.worktreeID, focusTerminal: false)),
+            .run { _ in
+              _ = await terminalClient.focusSurface(entry.worktreeID, entry.surfaceID)
+            }
+          )
+
+        case .activeAgents:
           return .none
 
         case .task:
@@ -1121,6 +1135,9 @@ struct RepositoriesFeature {
       worktreeOrderingReducer
       githubIntegrationReducer
       repositoryManagementReducer
+      Scope(state: \.activeAgents, action: \.activeAgents) {
+        ActiveAgentsFeature()
+      }
     }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()

@@ -6,6 +6,19 @@ import Observation
 import Sharing
 
 private let terminalStateLogger = SupaLogger("TerminalState")
+private let activeAgentDetectionInterval: Duration = .milliseconds(300)
+private let idleAgentDetectionInterval: Duration = .seconds(2)
+
+private struct AgentDetectionDiagnostic {
+  let tabId: TerminalTabID
+  let childPID: pid_t?
+  let processGroupID: pid_t?
+  let job: ForegroundJob?
+  let identified: (agent: DetectedAgent, name: String)?
+  let retainedAgent: DetectedAgent?
+  let raw: AgentRawState?
+  let stabilized: AgentRawState?
+}
 
 @MainActor
 @Observable
@@ -23,6 +36,12 @@ final class WorktreeTerminalState {
   private var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
   private var surfaces: [UUID: GhosttySurfaceView] = [:]
   private var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
+  private(set) var surfaceAgentStates: [UUID: PaneAgentState] = [:]
+  private var agentDetectionTasks: [UUID: Task<Void, Never>] = [:]
+  private var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
+  private var lastClaudeWorkingAtBySurface: [UUID: Date] = [:]
+  private var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
+  private var agentDetectionEnabled = true
   var tabIsRunningById: [TerminalTabID: Bool] = [:]
   private var runScriptTabId: TerminalTabID?
   private var pendingSetupScript: Bool
@@ -103,6 +122,8 @@ final class WorktreeTerminalState {
   var onTabClosed: (() -> Void)?
   var onFocusChanged: ((UUID) -> Void)?
   var onTaskStatusChanged: ((WorktreeTaskStatus) -> Void)?
+  var onAgentEntryChanged: ((ActiveAgentEntry) -> Void)?
+  var onAgentEntryRemoved: ((ActiveAgentEntry.ID) -> Void)?
   var onRunScriptStatusChanged: ((Bool) -> Void)?
   var onCommandPaletteToggle: (() -> Void)?
   var onSetupScriptConsumed: (() -> Void)?
@@ -139,6 +160,10 @@ final class WorktreeTerminalState {
       return nil
     }
     return surfaces[surfaceId]
+  }
+
+  var activeSurfaceID: UUID? {
+    currentFocusedSurfaceId()
   }
 
   func surfaceView(for tabId: TerminalTabID) -> GhosttySurfaceView? {
@@ -580,6 +605,7 @@ final class WorktreeTerminalState {
       newSurface.closeSurface()
       surfaces.removeValue(forKey: newSurface.id)
       cleanupCommandDetectorState(forSurfaceId: newSurface.id)
+      cleanupAgentDetectionState(forSurfaceId: newSurface.id)
       return nil
     }
   }
@@ -664,6 +690,7 @@ final class WorktreeTerminalState {
         newSurface.closeSurface()
         surfaces.removeValue(forKey: newSurface.id)
         cleanupCommandDetectorState(forSurfaceId: newSurface.id)
+        cleanupAgentDetectionState(forSurfaceId: newSurface.id)
 
         return false
       }
@@ -760,6 +787,7 @@ final class WorktreeTerminalState {
     surfaces.removeAll()
     trees.removeAll()
     focusedSurfaceIdByTab.removeAll()
+    cleanupAllAgentDetectionState()
     tabIsRunningById.removeAll()
     autoCloseSurfaceIds.removeAll()
     pendingCustomCommands.removeAll()
@@ -942,6 +970,20 @@ final class WorktreeTerminalState {
     commandFinishedNotificationThreshold = threshold
   }
 
+  func setAgentDetectionEnabled(_ enabled: Bool) {
+    guard agentDetectionEnabled != enabled else { return }
+    agentDetectionEnabled = enabled
+
+    if enabled {
+      for (surfaceID, view) in surfaces {
+        guard let tabId = tabId(containing: surfaceID) else { continue }
+        startAgentDetection(for: view, tabId: tabId)
+      }
+    } else {
+      cleanupAllAgentDetectionState()
+    }
+  }
+
   func clearNotificationIndicator() {
     markAllNotificationsRead()
   }
@@ -1060,6 +1102,7 @@ final class WorktreeTerminalState {
     configureBridgeCallbacks(for: view, tabId: tabId)
     configureSurfaceCallbacks(for: view, tabId: tabId)
     surfaces[view.id] = view
+    startAgentDetection(for: view, tabId: tabId)
     return view
   }
 
@@ -1307,6 +1350,7 @@ final class WorktreeTerminalState {
 
   private func recordActiveSurface(_ surface: GhosttySurfaceView, in tabId: TerminalTabID) {
     focusedSurfaceIdByTab[tabId] = surface.id
+    markAgentSeen(surfaceID: surface.id)
     markNotificationsRead(forSurfaceID: surface.id)
     updateTabTitle(for: tabId)
     emitFocusChangedIfNeeded(surface.id)
@@ -1538,6 +1582,210 @@ final class WorktreeTerminalState {
     awaitingIdleTitleLearningBySurface.remove(surfaceId)
   }
 
+  private func startAgentDetection(for view: GhosttySurfaceView, tabId: TerminalTabID) {
+    guard agentDetectionEnabled else { return }
+    agentDetectionTasks[view.id]?.cancel()
+    surfaceAgentStates[view.id] = PaneAgentState(lastChangedAt: Date())
+    terminalStateLogger.debug(
+      "agent detection started worktree=\(worktree.name) "
+        + "surface=\(view.id.uuidString.prefix(8)) tab=\(tabId.rawValue.uuidString.prefix(8))"
+    )
+    agentDetectionTasks[view.id] = Task { @MainActor [weak self, weak view] in
+      while !Task.isCancelled {
+        guard let self, let view, self.surfaces[view.id] != nil else { return }
+        await self.detectAgentState(for: view, tabId: tabId)
+        let hasAgent = self.surfaceAgentStates[view.id]?.detectedAgent != nil
+        try? await Task.sleep(for: hasAgent ? activeAgentDetectionInterval : idleAgentDetectionInterval)
+      }
+    }
+  }
+
+  private func detectAgentState(for view: GhosttySurfaceView, tabId: TerminalTabID) async {
+    let surfaceID = view.id
+    let childPID = view.bridge.childPID()
+    let processGroupID = view.bridge.foregroundProcessGroupID()
+    let job = await AgentProcessProbe.shared.foregroundJob(processGroupID: processGroupID, childPID: childPID)
+    guard surfaces[surfaceID] != nil else { return }
+
+    let identified = job.flatMap { identifyAgentInJob($0) }
+    let probedAgent = identified?.agent
+
+    var presence = agentDetectionPresenceBySurface[surfaceID] ?? AgentDetectionPresence()
+    let agent = presence.update(detectedAgent: probedAgent)
+    agentDetectionPresenceBySurface[surfaceID] = presence
+
+    guard let agent else {
+      logAgentDetectionDiagnostic(
+        surfaceID: surfaceID,
+        diagnostic: AgentDetectionDiagnostic(
+          tabId: tabId,
+          childPID: childPID,
+          processGroupID: processGroupID,
+          job: job,
+          identified: identified,
+          retainedAgent: nil,
+          raw: nil,
+          stabilized: nil
+        )
+      )
+      removeAgentEntryIfNeeded(surfaceID: surfaceID)
+      return
+    }
+
+    let now = Date()
+    let previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
+    let viewportText = view.bridge.readViewportText() ?? ""
+    let raw = await Task.detached(priority: .utility) {
+      agent.detectState(in: viewportText)
+    }.value
+    guard surfaces[surfaceID] != nil else { return }
+
+    var lastClaudeWorkingAt = lastClaudeWorkingAtBySurface[surfaceID]
+    let stabilized = stabilizeAgentState(
+      agent: agent,
+      previous: previous.state,
+      raw: raw,
+      now: now,
+      lastClaudeWorkingAt: &lastClaudeWorkingAt
+    )
+    lastClaudeWorkingAtBySurface[surfaceID] = lastClaudeWorkingAt
+
+    let isForeground = isSelected() && isFocusedSurface(surfaceID)
+    let becameIdleFromActive =
+      (previous.state == .working || previous.state == .blocked)
+      && stabilized == .idle
+    let seen: Bool
+    if isForeground || stabilized == .blocked {
+      seen = true
+    } else if becameIdleFromActive {
+      seen = false
+    } else {
+      seen = previous.seen
+    }
+    let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
+    let next = PaneAgentState(
+      detectedAgent: agent,
+      fallbackState: raw,
+      state: stabilized,
+      seen: seen,
+      lastChangedAt: lastChangedAt
+    )
+    logAgentDetectionDiagnostic(
+      surfaceID: surfaceID,
+      diagnostic: AgentDetectionDiagnostic(
+        tabId: tabId,
+        childPID: childPID,
+        processGroupID: processGroupID,
+        job: job,
+        identified: identified,
+        retainedAgent: agent,
+        raw: raw,
+        stabilized: stabilized
+      )
+    )
+    guard next != previous else { return }
+    surfaceAgentStates[surfaceID] = next
+    emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
+  }
+
+  private func markAgentSeen(surfaceID: UUID) {
+    guard var state = surfaceAgentStates[surfaceID], !state.seen else { return }
+    state.seen = true
+    state.lastChangedAt = Date()
+    surfaceAgentStates[surfaceID] = state
+    guard let tabId = tabId(containing: surfaceID) else { return }
+    emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: state)
+  }
+
+  private func removeAgentEntryIfNeeded(surfaceID: UUID) {
+    guard surfaceAgentStates[surfaceID]?.detectedAgent != nil else { return }
+    surfaceAgentStates[surfaceID] = PaneAgentState(lastChangedAt: Date())
+    lastClaudeWorkingAtBySurface.removeValue(forKey: surfaceID)
+    onAgentEntryRemoved?(surfaceID)
+  }
+
+  private func emitAgentEntry(surfaceID: UUID, tabId: TerminalTabID, state: PaneAgentState) {
+    guard let entry = activeAgentEntry(surfaceID: surfaceID, tabId: tabId, state: state) else {
+      onAgentEntryRemoved?(surfaceID)
+      return
+    }
+    onAgentEntryChanged?(entry)
+  }
+
+  private func activeAgentEntry(surfaceID: UUID, tabId: TerminalTabID, state: PaneAgentState) -> ActiveAgentEntry? {
+    guard let agent = state.detectedAgent, state.state != .unknown else { return nil }
+    let paneIDs = trees[tabId]?.leaves().map(\.id) ?? []
+    let paneIndex = paneIDs.firstIndex(of: surfaceID).map { $0 + 1 } ?? 1
+    let tabTitle = tabManager.tabs.first(where: { $0.id == tabId })?.displayTitle ?? "?"
+    return ActiveAgentEntry(
+      id: surfaceID,
+      worktreeID: worktree.id,
+      worktreeName: worktree.name,
+      tabID: tabId,
+      tabTitle: tabTitle,
+      surfaceID: surfaceID,
+      paneIndex: paneIndex,
+      agent: agent,
+      rawState: state.fallbackState,
+      displayState: state.displayState,
+      lastChangedAt: state.lastChangedAt
+    )
+  }
+
+  private func cleanupAgentDetectionState(forSurfaceId surfaceId: UUID) {
+    agentDetectionTasks[surfaceId]?.cancel()
+    agentDetectionTasks.removeValue(forKey: surfaceId)
+    surfaceAgentStates.removeValue(forKey: surfaceId)
+    agentDetectionPresenceBySurface.removeValue(forKey: surfaceId)
+    lastClaudeWorkingAtBySurface.removeValue(forKey: surfaceId)
+    lastAgentDetectionDiagnosticsBySurface.removeValue(forKey: surfaceId)
+    onAgentEntryRemoved?(surfaceId)
+  }
+
+  private func cleanupAllAgentDetectionState() {
+    for task in agentDetectionTasks.values {
+      task.cancel()
+    }
+    let removedIDs = Array(surfaceAgentStates.keys)
+    agentDetectionTasks.removeAll()
+    surfaceAgentStates.removeAll()
+    agentDetectionPresenceBySurface.removeAll()
+    lastClaudeWorkingAtBySurface.removeAll()
+    lastAgentDetectionDiagnosticsBySurface.removeAll()
+    for id in removedIDs {
+      onAgentEntryRemoved?(id)
+    }
+  }
+
+  private func agentDetectionDiagnosticMessage(_ diagnostic: AgentDetectionDiagnostic) -> String {
+    let processSummary =
+      diagnostic.job?.processes
+      .map { "\($0.pid):\($0.argv0 ?? $0.name)" }
+      .joined(separator: ",") ?? "none"
+    return [
+      "tab=\(diagnostic.tabId.rawValue.uuidString.prefix(8))",
+      "childPID=\(diagnostic.childPID.map(String.init) ?? "nil")",
+      "ptyPGID=\(diagnostic.processGroupID.map(String.init) ?? "nil")",
+      "fgPGID=\(diagnostic.job.map { String($0.processGroupID) } ?? "nil")",
+      "processes=\(processSummary)",
+      "identified=\(diagnostic.identified.map { "\($0.agent.rawValue)(\($0.name))" } ?? "nil")",
+      "retained=\(diagnostic.retainedAgent?.rawValue ?? "nil")",
+      "raw=\(diagnostic.raw?.rawValue ?? "nil")",
+      "state=\(diagnostic.stabilized?.rawValue ?? "nil")",
+    ].joined(separator: " ")
+  }
+
+  private func logAgentDetectionDiagnostic(surfaceID: UUID, diagnostic: AgentDetectionDiagnostic) {
+    #if DEBUG
+      let message = agentDetectionDiagnosticMessage(diagnostic)
+      guard lastAgentDetectionDiagnosticsBySurface[surfaceID] != message else { return }
+      lastAgentDetectionDiagnosticsBySurface[surfaceID] = message
+      terminalStateLogger.debug(
+        "agent detection worktree=\(worktree.name) surface=\(surfaceID.uuidString.prefix(8)) \(message)"
+      )
+    #endif
+  }
+
   /// Heuristic shape-only detection for shell idle prompts. The
   /// bootstrap filter — before `awaitingIdleTitleLearning` has caught
   /// the precmd-set prompt at least once on this surface — for two
@@ -1605,6 +1853,7 @@ final class WorktreeTerminalState {
       autoCloseSurfaceIds.remove(surface.id)
       pendingCustomCommands.removeValue(forKey: surface.id)
       cleanupCommandDetectorState(forSurfaceId: surface.id)
+      cleanupAgentDetectionState(forSurfaceId: surface.id)
     }
     focusedSurfaceIdByTab.removeValue(forKey: tabId)
     tabIsRunningById.removeValue(forKey: tabId)
@@ -1753,6 +2002,7 @@ final class WorktreeTerminalState {
       autoCloseSurfaceIds.remove(view.id)
       pendingCustomCommands.removeValue(forKey: view.id)
       cleanupCommandDetectorState(forSurfaceId: view.id)
+      cleanupAgentDetectionState(forSurfaceId: view.id)
       return
     }
     guard let node = tree.find(id: view.id) else {
@@ -1761,6 +2011,7 @@ final class WorktreeTerminalState {
       autoCloseSurfaceIds.remove(view.id)
       pendingCustomCommands.removeValue(forKey: view.id)
       cleanupCommandDetectorState(forSurfaceId: view.id)
+      cleanupAgentDetectionState(forSurfaceId: view.id)
       return
     }
     let nextSurface =
@@ -1773,6 +2024,7 @@ final class WorktreeTerminalState {
     autoCloseSurfaceIds.remove(view.id)
     pendingCustomCommands.removeValue(forKey: view.id)
     cleanupCommandDetectorState(forSurfaceId: view.id)
+    cleanupAgentDetectionState(forSurfaceId: view.id)
     if newTree.isEmpty {
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)

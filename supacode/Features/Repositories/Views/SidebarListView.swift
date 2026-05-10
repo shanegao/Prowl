@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import Sharing
 import SwiftUI
 
 // Uses LazyVStack rather than List for repository drag precision; keyboard
@@ -38,6 +39,10 @@ struct SidebarListView: View {
   @State private var isDragActive = false
   @State private var draggingRepositoryID: Repository.ID?
   @State private var targetedRepositoryDropDestination: Int?
+  @State private var sidebarHeight = 0.0
+  @State private var sidebarFooterHeight = 0.0
+  @State private var resizingPanelHeight: Double?
+  @Shared(.repositoryAppearances) private var repositoryAppearances
 
   var body: some View {
     let state = store.state
@@ -56,7 +61,24 @@ struct SidebarListView: View {
       return false
     }
     let selectedWorktreeIDs = Self.selectedWorktreeIDs(in: state)
+    let selectedSurfaceID = state.selectedWorktreeID.flatMap { worktreeID in
+      terminalManager.stateIfExists(for: worktreeID)?.activeSurfaceID
+    }
     let pendingSidebarReveal = state.pendingSidebarReveal
+
+    let maximumPanelHeight =
+      sidebarHeight > 0
+      ? ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: sidebarHeight)
+      : ActiveAgentsFeature.maximumPanelHeight
+    let agentWorktreeMetadata = Self.activeAgentWorktreeMetadata(
+      repositories: state.repositories,
+      customTitles: state.repositoryCustomTitles,
+      repositoryAppearances: repositoryAppearances
+    )
+    let panelHeight = min(resizingPanelHeight ?? state.activeAgents.panelHeight, maximumPanelHeight)
+    let panelOffset = state.activeAgents.isPanelHidden ? panelHeight : 0
+    let activeAgentsPanelTopGap = 4.0
+    let listBottomPadding = state.activeAgents.isPanelHidden ? 0 : panelHeight + activeAgentsPanelTopGap
 
     ScrollViewReader { scrollProxy in
       ScrollView {
@@ -83,10 +105,17 @@ struct SidebarListView: View {
           }
         }
         .padding(.vertical, 2)
+        .padding(.bottom, listBottomPadding)
       }
       .scrollIndicators(.never)
       .frame(minWidth: 220)
       .background(.bar)
+      .clipped()
+      .onGeometryChange(for: Double.self) { proxy in
+        Double(proxy.size.height)
+      } action: { newHeight in
+        sidebarHeight = newHeight
+      }
       .onDragSessionUpdated { session in
         if case .ended = session.phase {
           endSidebarDrag()
@@ -96,7 +125,7 @@ struct SidebarListView: View {
           endSidebarDrag()
         }
       }
-      .safeAreaInset(edge: .top) {
+      .safeAreaInset(edge: .top, spacing: 0) {
         HStack(spacing: 4) {
           CanvasSidebarButton(
             store: store,
@@ -114,8 +143,40 @@ struct SidebarListView: View {
           Divider()
         }
       }
-      .safeAreaInset(edge: .bottom) {
+      .safeAreaInset(edge: .bottom, spacing: 0) {
         SidebarFooterView(store: store)
+          .onGeometryChange(for: Double.self) { proxy in
+            Double(proxy.size.height)
+          } action: { newHeight in
+            sidebarFooterHeight = newHeight
+          }
+      }
+      .overlay(alignment: .bottom) {
+        ZStack(alignment: .bottom) {
+          ActiveAgentsPanel(
+            store: store.scope(state: \.activeAgents, action: \.activeAgents),
+            repositoryNamesByWorktreeID: agentWorktreeMetadata.repositoryNamesByWorktreeID,
+            branchNamesByWorktreeID: agentWorktreeMetadata.branchNamesByWorktreeID,
+            repositoryColorsByWorktreeID: agentWorktreeMetadata.repositoryColorsByWorktreeID,
+            selectedSurfaceID: selectedSurfaceID,
+            height: panelHeight,
+            maximumHeight: maximumPanelHeight,
+            onHeightChanged: { height in
+              resizingPanelHeight = height
+            },
+            onHeightChangeEnded: { height in
+              resizingPanelHeight = nil
+              store.send(.activeAgents(.panelHeightChanged(height)))
+            }
+          )
+          .frame(height: panelHeight)
+          .offset(y: panelOffset)
+        }
+        .frame(height: panelHeight)
+        .clipped()
+        .padding(.bottom, sidebarFooterHeight)
+        .allowsHitTesting(!state.activeAgents.isPanelHidden)
+        .animation(.easeOut(duration: 0.18), value: state.activeAgents.isPanelHidden)
       }
       .dropDestination(for: URL.self) { urls, _ in
         let fileURLs = urls.filter(\.isFileURL)
@@ -380,6 +441,47 @@ struct SidebarListView: View {
     }
     return selectedWorktreeIDs
   }
+
+  static func activeAgentWorktreeMetadata(
+    repositories: IdentifiedArrayOf<Repository>,
+    customTitles: [Repository.ID: String],
+    repositoryAppearances: [Repository.ID: RepositoryAppearance] = [:]
+  ) -> ActiveAgentWorktreeMetadata {
+    var repositoryNamesByWorktreeID: [Worktree.ID: String] = [:]
+    var branchNamesByWorktreeID: [Worktree.ID: String] = [:]
+    var repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice] = [:]
+
+    for repository in repositories {
+      let repositoryName = customTitles[repository.id] ?? repository.name
+      let repositoryColor = repositoryAppearances[repository.id]?.color
+      if repository.capabilities.supportsRunnableFolderActions && !repository.capabilities.supportsWorktrees {
+        repositoryNamesByWorktreeID[repository.id] = repositoryName
+        branchNamesByWorktreeID[repository.id] = repository.name
+        if let repositoryColor {
+          repositoryColorsByWorktreeID[repository.id] = repositoryColor
+        }
+      }
+      for worktree in repository.worktrees {
+        repositoryNamesByWorktreeID[worktree.id] = repositoryName
+        branchNamesByWorktreeID[worktree.id] = worktree.name
+        if let repositoryColor {
+          repositoryColorsByWorktreeID[worktree.id] = repositoryColor
+        }
+      }
+    }
+
+    return ActiveAgentWorktreeMetadata(
+      repositoryNamesByWorktreeID: repositoryNamesByWorktreeID,
+      branchNamesByWorktreeID: branchNamesByWorktreeID,
+      repositoryColorsByWorktreeID: repositoryColorsByWorktreeID
+    )
+  }
+}
+
+struct ActiveAgentWorktreeMetadata: Equatable {
+  let repositoryNamesByWorktreeID: [Worktree.ID: String]
+  let branchNamesByWorktreeID: [Worktree.ID: String]
+  let repositoryColorsByWorktreeID: [Worktree.ID: RepositoryColorChoice]
 }
 
 extension SidebarItem {
