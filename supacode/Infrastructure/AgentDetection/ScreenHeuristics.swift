@@ -112,14 +112,16 @@ private func detectGemini(_ content: String) -> AgentRawState {
 
 private func detectCursor(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
-  if lower.contains("(y) (enter)")
+  if lower.contains("workspace trust required")
+    || lower.contains("trust this workspace")
+    || lower.contains("(y) (enter)")
     || lower.contains("keep (n)")
     || lower.contains("skip (esc or n)")
     || (lower.contains("(y)") && (lower.contains("allow") || lower.contains("run")))
   {
     return .blocked
   }
-  if lower.contains("ctrl+c to stop") || hasCursorSpinner(content) {
+  if lower.contains("trusting workspace") || lower.contains("ctrl+c to stop") || hasCursorSpinner(content) {
     return .working
   }
   return .idle

@@ -161,6 +161,17 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.gemini.detectState(in: "done") == .idle)
 
     #expect(DetectedAgent.cursor.detectState(in: "Run command? (y) (enter)") == .blocked)
+    #expect(
+      DetectedAgent.cursor.detectState(
+        in: """
+          ⚠ Workspace Trust Required
+          Cursor Agent can execute code and access files in this directory.
+          [a] Trust this workspace
+          [q] Quit
+          """
+      ) == .blocked
+    )
+    #expect(DetectedAgent.cursor.detectState(in: "⏳ Trusting workspace...") == .working)
     #expect(DetectedAgent.cursor.detectState(in: "⬡ indexing") == .working)
     #expect(DetectedAgent.cursor.detectState(in: "done") == .idle)
 

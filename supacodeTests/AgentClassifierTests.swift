@@ -9,7 +9,9 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "claude-code") == .claude)
     #expect(identifyAgent(processName: "codex") == .codex)
     #expect(identifyAgent(processName: "gemini") == .gemini)
+    #expect(identifyAgent(processName: "agent") == .cursor)
     #expect(identifyAgent(processName: "cursor") == .cursor)
+    #expect(identifyAgent(processName: "cursor-agent") == .cursor)
     #expect(identifyAgent(processName: "cline") == .cline)
     #expect(identifyAgent(processName: "opencode") == .opencode)
     #expect(identifyAgent(processName: "open-code") == .opencode)
@@ -20,6 +22,42 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "droid") == .droid)
     #expect(identifyAgent(processName: "amp") == .amp)
     #expect(identifyAgent(processName: "amp-local") == .amp)
+  }
+
+  @Test func identifiesCursorAgentAliasCommandLines() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "agent",
+          argv0: "agent",
+          cmdline: "agent"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .cursor)
+    #expect(result.name == "agent")
+  }
+
+  @Test func identifiesCursorAgentCommandLines() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "node",
+          argv0: "node",
+          cmdline: "node /opt/homebrew/bin/cursor-agent"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .cursor)
+    #expect(result.name == "cursor-agent")
   }
 
   @Test func ignoresPlainShellsAndUnknownProcesses() {

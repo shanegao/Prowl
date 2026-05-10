@@ -10,7 +10,7 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .codex
   case "gemini":
     return .gemini
-  case "cursor":
+  case "agent", "cursor", "cursor-agent":
     return .cursor
   case "cline":
     return .cline

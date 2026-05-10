@@ -32,12 +32,14 @@ enum CommandIconMap {
   private static let firstTokenMapping: [String: TabIconSource] = [
     // Coding agents
     "aider": TabIconSource(systemSymbol: "sparkle"),
+    "agent": TabIconSource(systemSymbol: "sparkle", assetName: "Cursor"),
     "amp": TabIconSource(systemSymbol: "sparkle", assetName: "Amp"),
     "claude": TabIconSource(systemSymbol: "sparkle", assetName: "ClaudeCode"),
     "cline": TabIconSource(systemSymbol: "sparkle", assetName: "Cline"),
     "codex": TabIconSource(systemSymbol: "sparkle", assetName: "Codex"),
     "copilot": TabIconSource(systemSymbol: "sparkle", assetName: "GitHubCopilot"),
     "cursor": TabIconSource(systemSymbol: "sparkle", assetName: "Cursor"),
+    "cursor-agent": TabIconSource(systemSymbol: "sparkle", assetName: "Cursor"),
     "droid": TabIconSource(systemSymbol: "sparkle", assetName: "Droid"),
     "gemini": TabIconSource(systemSymbol: "sparkle", assetName: "Gemini"),
     "kimi": TabIconSource(systemSymbol: "sparkle", assetName: "Kimi"),

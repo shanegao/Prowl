@@ -6,7 +6,7 @@ enum DetectedAgent: String, CaseIterable, Equatable, Identifiable, Sendable {
   case claude
   case codex
   case gemini
-  case cursor
+  case cursor = "cursor-agent"
   case cline
   case opencode
   case copilot
@@ -17,7 +17,12 @@ enum DetectedAgent: String, CaseIterable, Equatable, Identifiable, Sendable {
   var id: String { rawValue }
 
   var displayName: String {
-    rawValue
+    switch self {
+    case .cursor:
+      return "cursor"
+    default:
+      return rawValue
+    }
   }
 
   var iconLookupToken: String {
@@ -26,6 +31,8 @@ enum DetectedAgent: String, CaseIterable, Equatable, Identifiable, Sendable {
       return "claude"
     case .copilot:
       return "copilot"
+    case .cursor:
+      return "cursor"
     default:
       return rawValue
     }

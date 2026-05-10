@@ -5,7 +5,8 @@ import Testing
 struct DetectedAgentTests {
   @Test func displayNamesUseCommandStyleTokens() {
     for agent in DetectedAgent.allCases {
-      #expect(agent.displayName == agent.rawValue)
+      let expectedDisplayName = agent == .cursor ? "cursor" : agent.rawValue
+      #expect(agent.displayName == expectedDisplayName)
     }
   }
 }
