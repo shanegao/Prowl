@@ -15,6 +15,7 @@ struct RepositorySectionView: View {
   let onRepositorySelected: () -> Void
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isHovering = false
   @Shared(.repositoryAppearances) private var repositoryAppearances
 
@@ -198,7 +199,15 @@ struct RepositorySectionView: View {
           }
       }
     }
-    .onHover { isHovering = $0 }
+    .onHover { hovering in
+      if reduceMotion {
+        isHovering = hovering
+      } else {
+        withAnimation(.easeOut(duration: 0.15)) {
+          isHovering = hovering
+        }
+      }
+    }
     .onTapGesture {
       onRepositorySelected()
     }
