@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.5.11](https://github.com/onevcat/Prowl/releases/tag/v2026.5.11)
+
+This release centers on a new Active Agents panel that gives you a live view of every coding agent running across your worktrees.
+
+### New
+
+- **Active Agents panel**: a resizable sidebar panel that tracks every running coding agent — Claude, Codex, Cursor, Kimi, Cline, Gemini, Copilot, Droid, Amp, Pi, and more — across all worktrees, tabs, and split panes. Each row shows the worktree, branch, and current status (working, blocked, idle, or done). Click a row to jump directly to that pane. Toggle the panel with `⌘⌥P` or the button in the sidebar footer.
+- **Auto-show on agent detection**: a new toggle in Settings › Appearance › Active Agents opens the panel automatically whenever an agent is detected (off by default).
+
+### Fixed
+
+- In Shelf mode, holding `⌘` now shows `⌘1`–`⌘9` jump glyphs only on the open book's tabs. Closed-book tabs keep their icons, no longer dim, and continue to show the close button on hover while `⌘` is held.
+
+### Improved
+
+- Hovering a repository header in the sidebar animates the color dot smoothly as the action buttons appear, instead of snapping. The animation is skipped when Reduce Motion is enabled.
+
 ## [2026.5.9](https://github.com/onevcat/Prowl/releases/tag/v2026.5.9)
 
 This release adds browser-style worktree navigation, inline tab title editing, dynamic window titles, and smarter notification handling, alongside loading-state polish and several notable bug fixes.
