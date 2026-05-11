@@ -1586,10 +1586,6 @@ final class WorktreeTerminalState {
     guard agentDetectionEnabled else { return }
     agentDetectionTasks[view.id]?.cancel()
     surfaceAgentStates[view.id] = PaneAgentState(lastChangedAt: Date())
-    terminalStateLogger.debug(
-      "agent detection started worktree=\(worktree.name) "
-        + "surface=\(view.id.uuidString.prefix(8)) tab=\(tabId.rawValue.uuidString.prefix(8))"
-    )
     agentDetectionTasks[view.id] = Task { @MainActor [weak self, weak view] in
       while !Task.isCancelled {
         guard let self, let view, self.surfaces[view.id] != nil else { return }
@@ -1615,19 +1611,23 @@ final class WorktreeTerminalState {
     agentDetectionPresenceBySurface[surfaceID] = presence
 
     guard let agent else {
-      logAgentDetectionDiagnostic(
-        surfaceID: surfaceID,
-        diagnostic: AgentDetectionDiagnostic(
-          tabId: tabId,
-          childPID: childPID,
-          processGroupID: processGroupID,
-          job: job,
-          identified: identified,
-          retainedAgent: nil,
-          raw: nil,
-          stabilized: nil
+      // Only log the moment we lose a previously detected agent; pre-agent
+      // shells churn process lists every command and would otherwise spam.
+      if surfaceAgentStates[surfaceID]?.detectedAgent != nil {
+        logAgentDetectionDiagnostic(
+          surfaceID: surfaceID,
+          diagnostic: AgentDetectionDiagnostic(
+            tabId: tabId,
+            childPID: childPID,
+            processGroupID: processGroupID,
+            job: job,
+            identified: identified,
+            retainedAgent: nil,
+            raw: nil,
+            stabilized: nil
+          )
         )
-      )
+      }
       removeAgentEntryIfNeeded(surfaceID: surfaceID)
       return
     }
@@ -1670,19 +1670,24 @@ final class WorktreeTerminalState {
       seen: seen,
       lastChangedAt: lastChangedAt
     )
-    logAgentDetectionDiagnostic(
-      surfaceID: surfaceID,
-      diagnostic: AgentDetectionDiagnostic(
-        tabId: tabId,
-        childPID: childPID,
-        processGroupID: processGroupID,
-        job: job,
-        identified: identified,
-        retainedAgent: agent,
-        raw: raw,
-        stabilized: stabilized
+    // Limit logging to meaningful transitions — agent identity or
+    // stabilized state changes. Raw oscillation and `seen` flips are
+    // routine and would otherwise dominate the log stream.
+    if previous.detectedAgent != agent || previous.state != stabilized {
+      logAgentDetectionDiagnostic(
+        surfaceID: surfaceID,
+        diagnostic: AgentDetectionDiagnostic(
+          tabId: tabId,
+          childPID: childPID,
+          processGroupID: processGroupID,
+          job: job,
+          identified: identified,
+          retainedAgent: agent,
+          raw: raw,
+          stabilized: stabilized
+        )
       )
-    )
+    }
     guard next != previous else { return }
     surfaceAgentStates[surfaceID] = next
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
