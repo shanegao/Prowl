@@ -498,6 +498,11 @@ final class WorktreeTerminalManager {
     return (runtime.unfocusedSplitFill(), runtime.unfocusedSplitOverlayOpacity())
   }
 
+  func splitDividerAppearance() -> (color: Color?, width: CGFloat?) {
+    guard let runtime else { return (nil, nil) }
+    return (runtime.splitDividerColor(), runtime.splitDividerWidth())
+  }
+
   func syncPreferredFontSize(from worktreeID: Worktree.ID) {
     guard let state = states[worktreeID] else { return }
     let fontSize = state.focusedFontSize()

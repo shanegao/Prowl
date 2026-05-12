@@ -91,6 +91,7 @@ struct CanvasView: View {
               let screenCenter = screenPosition(for: resized.center)
               let cardTotalHeight = resized.size.height + titleBarHeight
               let unfocusedSplitOverlay = terminalManager.unfocusedSplitOverlay()
+              let splitDivider = terminalManager.splitDividerAppearance()
 
               let repositoryAppearance = appearance(for: state.repositoryRootURL)
               let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
@@ -103,6 +104,7 @@ struct CanvasView: View {
                 tree: tree,
                 activeSurfaceID: state.activeSurfaceID(for: tab.id),
                 unfocusedSplitOverlay: unfocusedSplitOverlay,
+                splitDivider: splitDivider,
                 isFocused: selectionState.primaryTabID == tab.id,
                 isSelected: selectionState.selectedTabIDs.contains(tab.id),
                 hasUnseenNotification: state.hasUnseenNotification(for: tab.id),

@@ -18,6 +18,7 @@ struct CanvasCardView: View {
   let tree: SplitTree<GhosttySurfaceView>
   let activeSurfaceID: UUID?
   let unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  var splitDivider: (color: Color?, width: CGFloat?) = (nil, nil)
   let isFocused: Bool
   let isSelected: Bool
   let hasUnseenNotification: Bool
@@ -232,6 +233,7 @@ struct CanvasCardView: View {
       pinnedSize: cardSize,
       activeSurfaceID: activeSurfaceID,
       unfocusedSplitOverlay: unfocusedSplitOverlay,
+      splitDivider: splitDivider,
       hasNotification: { _ in false },
       action: onSplitOperation
     )

@@ -8,6 +8,7 @@ struct TerminalSplitTreeView: View {
   var pinnedSize: CGSize?
   var activeSurfaceID: UUID?
   var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  var splitDivider: (color: Color?, width: CGFloat?) = (nil, nil)
   let hasNotification: (UUID) -> Bool
   let action: (Operation) -> Void
 
@@ -33,6 +34,7 @@ struct TerminalSplitTreeView: View {
         pinnedSize: pinnedSize,
         activeSurfaceID: activeSurfaceID,
         unfocusedSplitOverlay: unfocusedSplitOverlay,
+        splitDivider: splitDivider,
         hasNotification: hasNotification,
         action: action
       )
@@ -52,6 +54,7 @@ struct TerminalSplitTreeView: View {
     var pinnedSize: CGSize?
     var activeSurfaceID: UUID?
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+    var splitDivider: (color: Color?, width: CGFloat?) = (nil, nil)
     let hasNotification: (UUID) -> Bool
     let action: (Operation) -> Void
 
@@ -86,7 +89,8 @@ struct TerminalSplitTreeView: View {
             set: {
               action(.resize(node: node, ratio: Double($0)))
             }),
-          dividerColor: Color(nsColor: .separatorColor),
+          dividerColor: splitDivider.color ?? Color(nsColor: .separatorColor),
+          dividerVisibleSize: splitDivider.width ?? SplitView<SubtreeView, SubtreeView>.defaultVisibleSize,
           resizeIncrements: .init(width: 1, height: 1),
           left: {
             SubtreeView(
@@ -94,6 +98,7 @@ struct TerminalSplitTreeView: View {
               pinnedSize: leftPinned,
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
+              splitDivider: splitDivider,
               hasNotification: hasNotification,
               action: action
             )
@@ -104,6 +109,7 @@ struct TerminalSplitTreeView: View {
               pinnedSize: rightPinned,
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
+              splitDivider: splitDivider,
               hasNotification: hasNotification,
               action: action
             )
@@ -375,6 +381,7 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
   let tree: SplitTree<GhosttySurfaceView>
   var activeSurfaceID: UUID?
   var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+  var splitDivider: (color: Color?, width: CGFloat?) = (nil, nil)
   let hasNotification: (UUID) -> Bool
   let action: (TerminalSplitTreeView.Operation) -> Void
 
@@ -389,6 +396,7 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
           tree: tree,
           activeSurfaceID: activeSurfaceID,
           unfocusedSplitOverlay: unfocusedSplitOverlay,
+          splitDivider: splitDivider,
           hasNotification: hasNotification,
           action: action
         )

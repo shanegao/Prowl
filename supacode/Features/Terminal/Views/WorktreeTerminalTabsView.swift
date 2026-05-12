@@ -14,6 +14,7 @@ struct WorktreeTerminalTabsView: View {
     let state = manager.state(for: worktree) { shouldRunSetupScript }
     let _ = configReloadCounter
     let unfocusedSplitOverlay = manager.unfocusedSplitOverlay()
+    let splitDivider = manager.splitDividerAppearance()
     VStack(spacing: 0) {
       TerminalTabBarView(
         manager: state.tabManager,
@@ -53,6 +54,7 @@ struct WorktreeTerminalTabsView: View {
             tree: state.splitTree(for: tabId),
             activeSurfaceID: state.activeSurfaceID(for: tabId),
             unfocusedSplitOverlay: unfocusedSplitOverlay,
+            splitDivider: splitDivider,
             hasNotification: { surfaceID in
               state.hasUnseenNotification(forSurfaceID: surfaceID)
             },
