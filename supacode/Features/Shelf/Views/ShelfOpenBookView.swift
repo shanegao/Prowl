@@ -25,6 +25,7 @@ struct ShelfOpenBookView: View {
     let state = manager.state(for: worktree) { shouldRunSetupScript }
     let _ = configReloadCounter
     let unfocusedSplitOverlay = manager.unfocusedSplitOverlay()
+    let splitDivider = manager.splitDividerAppearance()
     Group {
       if let selectedId = state.tabManager.selectedTabId {
         TerminalTabContentStack(tabs: state.tabManager.tabs, selectedTabId: selectedId) { tabId in
@@ -32,6 +33,7 @@ struct ShelfOpenBookView: View {
             tree: state.splitTree(for: tabId),
             activeSurfaceID: state.activeSurfaceID(for: tabId),
             unfocusedSplitOverlay: unfocusedSplitOverlay,
+            splitDivider: splitDivider,
             hasNotification: { surfaceID in
               state.hasUnseenNotification(forSurfaceID: surfaceID)
             },

@@ -968,6 +968,59 @@ final class GhosttyRuntime {
     return nil
   }
 
+  func splitDividerColor() -> Color? {
+    guard let config else { return nil }
+    var color = ghostty_config_color_s()
+    let key = "split-divider-color"
+    guard ghostty_config_get(config, &color, key, UInt(key.lengthOfBytes(using: .utf8))) else {
+      return nil
+    }
+    return Color(nsColor: NSColor(ghostty: color))
+  }
+
+  /// Reads a Prowl-specific override for the visible divider thickness from the
+  /// primary Ghostty config file (the one returned by `ghostty_config_open_path`).
+  /// Ghostty itself has no such option (and its own divider size is hardcoded),
+  /// so we layer a `prowl-split-divider-width = N` directive on top of the
+  /// user's existing Ghostty config to avoid carrying another fork patch.
+  func splitDividerWidth() -> CGFloat? {
+    Self.parseProwlSplitDividerWidth(at: Self.ghosttyConfigPath())
+  }
+
+  nonisolated static func ghosttyConfigPath() -> String? {
+    let configStr = ghostty_config_open_path()
+    defer { ghostty_string_free(configStr) }
+    guard let ptr = configStr.ptr, configStr.len > 0 else { return nil }
+    let path = String(data: Data(bytes: ptr, count: Int(configStr.len)), encoding: .utf8)
+    guard let path, !path.isEmpty else { return nil }
+    return path
+  }
+
+  nonisolated static func parseProwlSplitDividerWidth(at path: String?) -> CGFloat? {
+    guard let path else { return nil }
+    guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+    return parseProwlSplitDividerWidth(from: contents)
+  }
+
+  nonisolated static func parseProwlSplitDividerWidth(from contents: String) -> CGFloat? {
+    let key = "prowl-split-divider-width"
+    var resolved: CGFloat?
+    for rawLine in contents.split(whereSeparator: \.isNewline) {
+      let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+      guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+      guard let equalsIndex = trimmed.firstIndex(of: "=") else { continue }
+      let lhs = trimmed[..<equalsIndex].trimmingCharacters(in: .whitespaces)
+      guard lhs == key else { continue }
+      let rhs = trimmed[trimmed.index(after: equalsIndex)...].trimmingCharacters(in: .whitespaces)
+      guard let value = Double(rhs) else { continue }
+      // Clamp to a sane visible range — 0 disables the visible bar while
+      // keeping the invisible hit area, large values are capped to prevent
+      // accidental absurdities from a typo.
+      resolved = CGFloat(min(max(value, 0), 32))
+    }
+    return resolved
+  }
+
   func backgroundColor() -> NSColor {
     backgroundColorFromConfig() ?? NSColor.windowBackgroundColor
   }
