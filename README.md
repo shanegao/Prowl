@@ -12,6 +12,8 @@
 <p align="center">
   <a href="https://github.com/onevcat/Prowl/releases/latest/download/Prowl.dmg"><b>Download</b></a>
   ·
+  <a href="https://www.youtube.com/watch?v=4GYlXPttwi0">Watch Demo</a>
+  ·
   <a href="https://prowl.onev.cat">Website</a>
   ·
   <code>brew install --cask onevcat/tap/prowl</code>
