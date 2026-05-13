@@ -258,8 +258,7 @@ nonisolated private func claudeCurrentInteractionRegion(_ content: String) -> St
   }
 
   let lowerBound = max(lines.startIndex, promptIndex - 10)
-  let upperBound = min(lines.endIndex, promptIndex + 11)
-  return lines[lowerBound..<upperBound].joined(separator: "\n")
+  return lines[lowerBound..<lines.endIndex].joined(separator: "\n")
 }
 
 nonisolated private func hasClaudeBlockedPrompt(content: String, lower: String) -> Bool {

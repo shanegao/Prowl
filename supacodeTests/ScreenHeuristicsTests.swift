@@ -118,6 +118,34 @@ struct ScreenHeuristicsTests {
     )
   }
 
+  @Test func claudeDetectsBlockedWhenFirstOptionSelectedInLongMenu() {
+    #expect(
+      DetectedAgent.claude.detectState(
+        in: """
+          需要决策：/release 跳进去发现 APK 没有链时，怎么走接？
+
+          ❯ 1. 自动 release: scripts/build-bridge.sh (Recommended)
+              /release 路径检及发现 APK 类失败链通，自动执行 build-bridge.sh 后继续。
+              便交不会进入入想运能走链。
+              缺点: /release 隐含使用 JDK + Android SDK
+              清看的语述置自动应才进。
+            2. Pre-flight 重新链: 不动动作
+              Step 1: 检查相关 /release 提示具子选定有应作 build-bridge.sh，从是
+              scripts/build-bridge.sh。
+              缺点: 严格、明确、不会有什么动作，但有手动确认。
+            3. Pre-flight 只检查: 例丁检发标
+              选择 APK 检证，看丁路否构建？[Y/n]
+              确即标当链全式动连验。
+            4. Type something.
+            5. Chat about this
+          ──────────────────────────────────────────────────────────────────────────────
+            [Opus 4.7 (1M context) | Max] █░░░░░░░░░ 8% | Prowl git:(branch*) | 2 CLAUDE.md
+            ⏵⏵ bypass permissions on (shift+tab to cycle)
+          """
+      ) == .blocked
+    )
+  }
+
   @Test func claudeDoesNotTreatHistoryInputAndBranchNameAsPermissionPrompt() {
     #expect(
       DetectedAgent.claude.detectState(
