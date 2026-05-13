@@ -122,6 +122,10 @@ struct SupacodeApp: App {
           options.tracesSampleRate = 0.05
           options.enableAppHangTracking = false
         }
+        // Match the Sentry user id to the PostHog distinct id so an event in
+        // one system can be traced to the same install in the other.
+        let sentryUser = Sentry.User(userId: InstallIdentifier.current)
+        SentrySDK.setUser(sentryUser)
       }
       if initialSettings.analyticsEnabled,
         let apiKey = infoPlistSecret(infoDictionary, key: "ProwlPostHogAPIKey"),
