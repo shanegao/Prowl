@@ -27,6 +27,11 @@ upstream tag, cherry-pick all of them.
    - Switches the foreground-group lookup from `proc_bsdinfo.e_tpgid` to
      `tcgetpgrp` on the pty fd, which is more reliable when the shell PID
      itself is not the controlling process.
+4. `48365577c1ae8e422c0dd90489921f07b9f79171` — `Backport Ghostty text free ABI fix`
+   - Backports upstream `ghostty-org/ghostty#12025` before an upstream tag that includes it exists.
+   - Keeps the public `ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*)`
+     API shape and fixes the Zig export to accept the unused surface parameter.
+   - Drop this patch when upgrading to an upstream tag that contains `4803d58`.
    - This is the commit the submodule currently points at.
 
 ## Upgrade To A New Ghostty Tag
@@ -58,4 +63,14 @@ Do not force-push `release/v*-patched` branches. If a cherry-pick needs repair, 
 
 ## Build Note
 
-On macOS 26.3.1 with Zig 0.15.2, native `zig build` can fail before running Ghostty's build script because Zig links the build runner with `-platform_version macos 26.3.1 26.4` and fails to resolve libSystem symbols. Direct `zig build-exe -target aarch64-macos.15.0 --sysroot "$(xcrun --sdk macosx --show-sdk-path)"` works, so this is a local Zig host-target/toolchain issue rather than a Ghostty patch syntax error. Re-run `make sync-ghostty` after the Zig toolchain issue is resolved.
+Build GhosttyKit with Xcode 26.3:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode-26.3.0.app/Contents/Developer make sync-ghostty
+```
+
+Build Prowl itself with the current Xcode, typically Xcode 26.4:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode-26.4.1.app/Contents/Developer make build-app
+```
