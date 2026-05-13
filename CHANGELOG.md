@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.5.14](https://github.com/onevcat/Prowl/releases/tag/v2026.5.14)
+
+This release focuses on memory stability after the active-agent detection introduced in 2026.5.11.
+
+### New
+
+- Split pane dividers now respect your Ghostty `split-divider-color` setting. To also control the divider width, add `prowl-split-divider-width = N` (in points, 0–32) to your Ghostty config file.
+
+### Fixed
+
+- Fixed a major memory leak in the Ghostty terminal layer where viewport text buffers were never freed, causing physical memory to grow at roughly 100–200 MB/h on long-running sessions.
+- Fixed an additional leak introduced in 2026.5.11 where the active-agent detection loop allocated a Swift task per tick, adding to the footprint growth over time.
+- Agent "blocked" state is now correctly detected when the cursor sits on the first option of a tall interactive menu (e.g. a long `/` command list or permission prompt in Claude).
+
 ## [2026.5.11](https://github.com/onevcat/Prowl/releases/tag/v2026.5.11)
 
 This release centers on a new Active Agents panel that gives you a live view of every coding agent running across your worktrees.
