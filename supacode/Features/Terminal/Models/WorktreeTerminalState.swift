@@ -1635,9 +1635,13 @@ final class WorktreeTerminalState {
     let now = Date()
     let previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
     let viewportText = view.bridge.readViewportText() ?? ""
-    let raw = await Task.detached(priority: .utility) {
-      agent.detectState(in: viewportText)
-    }.value
+    // `detectState` is a `nonisolated` pure function that runs in well under a
+    // millisecond on a 24-line viewport, so the prior `Task.detached` hop
+    // bought nothing but allocator churn. In long sessions, each detection
+    // tick (300 ms or 2 s per surface) was leaving a task stack + closure
+    // capture behind that never reached ARC; over a 24 h session this added
+    // up to hundreds of MB of unreferenced allocations.
+    let raw = agent.detectState(in: viewportText)
     guard surfaces[surfaceID] != nil else { return }
 
     var lastClaudeWorkingAt = lastClaudeWorkingAtBySurface[surfaceID]
