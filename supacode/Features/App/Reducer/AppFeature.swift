@@ -124,6 +124,13 @@ struct AppFeature {
     return ["session_duration_seconds": seconds]
   }
 
+  private func restoreTerminalFocusEffect(for worktree: Worktree?) -> Effect<Action> {
+    guard let worktree else { return .none }
+    return .run { _ in
+      await terminalClient.send(.focusSelectedTab(worktree))
+    }
+  }
+
   static func sessionDurationSeconds(launchedAt: Date?, now: Date) -> Int? {
     guard let launchedAt else { return nil }
     return max(0, Int(now.timeIntervalSince(launchedAt)))
@@ -932,11 +939,22 @@ struct AppFeature {
       case .updates:
         return .none
 
+      case .commandPalette(.setPresented(false)):
+        guard state.commandPalette.isPresented else { return .none }
+        return restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+
+      case .commandPalette(.togglePresented):
+        guard state.commandPalette.isPresented else { return .none }
+        return restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+
       case .commandPalette(.delegate(.selectWorktree(let worktreeID))):
         return .send(.repositories(.selectWorktree(worktreeID)))
 
       case .commandPalette(.delegate(.checkForUpdates)):
-        return .send(.updates(.checkForUpdates))
+        return .merge(
+          .send(.updates(.checkForUpdates)),
+          restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+        )
 
       case .commandPalette(.delegate(.openSettings)):
         return .merge(
@@ -962,7 +980,10 @@ struct AppFeature {
         return .send(.repositories(.selectArchivedWorktrees))
 
       case .commandPalette(.delegate(.refreshWorktrees)):
-        return .send(.repositories(.refreshWorktrees))
+        return .merge(
+          .send(.repositories(.refreshWorktrees)),
+          restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+        )
 
       case .commandPalette(.delegate(.jumpToLatestUnread)):
         return .send(.jumpToLatestUnread)
@@ -1014,7 +1035,10 @@ struct AppFeature {
 
       #if DEBUG
         case .commandPalette(.delegate(.debugTestToast(let toast))):
-          return .send(.repositories(.showToast(toast)))
+          return .merge(
+            .send(.repositories(.showToast(toast))),
+            restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+          )
 
         case .commandPalette(.delegate(.debugSimulateUpdateFound)):
           return .send(.updates(.debugSimulateUpdateFound))

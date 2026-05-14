@@ -41,6 +41,7 @@ struct TerminalClient {
     case navigateSearchNext(Worktree)
     case navigateSearchPrevious(Worktree)
     case endSearch(Worktree)
+    case focusSelectedTab(Worktree)
     case prune(Set<Worktree.ID>)
     case setNotificationsEnabled(Bool)
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
