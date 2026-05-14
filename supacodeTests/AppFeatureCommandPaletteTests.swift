@@ -92,6 +92,71 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value.isEmpty)
   }
 
+  @Test(.dependencies) func closingCommandPaletteInCanvasRestoresCanvasFocusedTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-canvas-focus/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-canvas-focus"
+    )
+    let repository = makeRepository(id: "/tmp/repo-canvas-focus", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    var state = AppFeature.State(
+      repositories: repositoriesState,
+      settings: SettingsFeature.State()
+    )
+    state.commandPalette.isPresented = true
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.setPresented(false))) {
+      $0.commandPalette.isPresented = false
+    }
+    await store.finish()
+
+    #expect(sent.value == [.focusSelectedTab(worktree)])
+  }
+
+  @Test(.dependencies) func passiveCommandPaletteCommandInCanvasRestoresCanvasFocusedTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-canvas-passive/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-canvas-passive"
+    )
+    let repository = makeRepository(id: "/tmp/repo-canvas-passive", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.checkForUpdates)))
+    await store.receive(\.updates.checkForUpdates)
+    await store.finish()
+
+    #expect(sent.value == [.focusSelectedTab(worktree)])
+  }
+
   @Test(.dependencies) func passiveCommandPaletteCommandRestoresSelectedTerminalFocus() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-passive/wt-1",

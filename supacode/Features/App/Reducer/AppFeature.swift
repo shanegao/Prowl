@@ -124,11 +124,38 @@ struct AppFeature {
     return ["session_duration_seconds": seconds]
   }
 
-  private func restoreTerminalFocusEffect(for worktree: Worktree?) -> Effect<Action> {
-    guard let worktree else { return .none }
+  private func restoreCommandPaletteTerminalFocusEffect(repositories: RepositoriesFeature.State) -> Effect<Action> {
+    guard let worktree = commandPaletteTerminalFocusTarget(repositories: repositories) else { return .none }
     return .run { _ in
       await terminalClient.send(.focusSelectedTab(worktree))
     }
+  }
+
+  private func commandPaletteTerminalFocusTarget(repositories: RepositoriesFeature.State) -> Worktree? {
+    if let worktree = repositories.selectedTerminalWorktree {
+      return worktree
+    }
+    guard repositories.isShowingCanvas,
+      let worktreeID = terminalClient.canvasFocusedWorktreeID()
+    else {
+      return nil
+    }
+    if let worktree = repositories.worktree(for: worktreeID) {
+      return worktree
+    }
+    guard let repository = repositories.repositories[id: worktreeID],
+      repository.capabilities.supportsRunnableFolderActions,
+      !repository.capabilities.supportsWorktrees
+    else {
+      return nil
+    }
+    return Worktree(
+      id: repository.id,
+      name: repository.name,
+      detail: repository.rootURL.path(percentEncoded: false),
+      workingDirectory: repository.rootURL,
+      repositoryRootURL: repository.rootURL
+    )
   }
 
   static func sessionDurationSeconds(launchedAt: Date?, now: Date) -> Int? {
@@ -941,11 +968,11 @@ struct AppFeature {
 
       case .commandPalette(.setPresented(false)):
         guard state.commandPalette.isPresented else { return .none }
-        return restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+        return restoreCommandPaletteTerminalFocusEffect(repositories: state.repositories)
 
       case .commandPalette(.togglePresented):
         guard state.commandPalette.isPresented else { return .none }
-        return restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+        return restoreCommandPaletteTerminalFocusEffect(repositories: state.repositories)
 
       case .commandPalette(.delegate(.selectWorktree(let worktreeID))):
         return .send(.repositories(.selectWorktree(worktreeID)))
@@ -953,7 +980,7 @@ struct AppFeature {
       case .commandPalette(.delegate(.checkForUpdates)):
         return .merge(
           .send(.updates(.checkForUpdates)),
-          restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+          restoreCommandPaletteTerminalFocusEffect(repositories: state.repositories)
         )
 
       case .commandPalette(.delegate(.openSettings)):
@@ -982,7 +1009,7 @@ struct AppFeature {
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .merge(
           .send(.repositories(.refreshWorktrees)),
-          restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+          restoreCommandPaletteTerminalFocusEffect(repositories: state.repositories)
         )
 
       case .commandPalette(.delegate(.jumpToLatestUnread)):
@@ -1037,7 +1064,7 @@ struct AppFeature {
         case .commandPalette(.delegate(.debugTestToast(let toast))):
           return .merge(
             .send(.repositories(.showToast(toast))),
-            restoreTerminalFocusEffect(for: state.repositories.selectedTerminalWorktree)
+            restoreCommandPaletteTerminalFocusEffect(repositories: state.repositories)
           )
 
         case .commandPalette(.delegate(.debugSimulateUpdateFound)):
