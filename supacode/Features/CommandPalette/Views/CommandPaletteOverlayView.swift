@@ -7,7 +7,8 @@ struct CommandPaletteOverlayView: View {
   @Bindable var store: StoreOf<CommandPaletteFeature>
   let items: [CommandPaletteItem]
   let resolvedKeybindings: ResolvedKeybindingMap
-  @FocusState private var isQueryFocused: Bool
+  @State private var isQueryFocused = false
+  @State private var queryFocusTask: Task<Void, Never>?
   @State private var hoveredID: CommandPaletteItem.ID?
   @State private var filteredItems: [CommandPaletteItem] = []
 
@@ -37,7 +38,7 @@ struct CommandPaletteOverlayView: View {
                 items: filteredItems,
                 resolvedKeybindings: resolvedKeybindings,
                 hoveredID: $hoveredID,
-                isQueryFocused: _isQueryFocused,
+                isQueryFocused: isQueryFocused,
                 onEvent: { event in
                   switch event {
                   case .exit:
@@ -54,7 +55,7 @@ struct CommandPaletteOverlayView: View {
               )
               .zIndex(1)
               .task {
-                isQueryFocused = store.isPresented
+                focusQueryField()
               }
 
               Spacer(minLength: 0)
@@ -70,11 +71,14 @@ struct CommandPaletteOverlayView: View {
       }
     }
     .onChange(of: store.isPresented) { _, newValue in
-      isQueryFocused = newValue
       if newValue {
         let updatedItems = refreshFilteredItems(items: items)
         updateSelection(rows: updatedItems)
+        focusQueryField()
       } else {
+        queryFocusTask?.cancel()
+        queryFocusTask = nil
+        isQueryFocused = false
         hoveredID = nil
       }
     }
@@ -147,6 +151,26 @@ struct CommandPaletteOverlayView: View {
     filteredItems = updatedItems
     return updatedItems
   }
+
+  private func focusQueryField() {
+    queryFocusTask?.cancel()
+    isQueryFocused = false
+    queryFocusTask = Task { @MainActor in
+      let delays: [Duration?] = [nil, .milliseconds(50), .milliseconds(150)]
+      for delay in delays {
+        if let delay {
+          try? await ContinuousClock().sleep(for: delay)
+        } else {
+          await Task.yield()
+        }
+        guard !Task.isCancelled else { return }
+        isQueryFocused = false
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        isQueryFocused = true
+      }
+    }
+  }
 }
 
 private struct CommandPaletteCard: View {
@@ -157,7 +181,7 @@ private struct CommandPaletteCard: View {
   let items: [CommandPaletteItem]
   let resolvedKeybindings: ResolvedKeybindingMap
   @Binding var hoveredID: CommandPaletteItem.ID?
-  let isQueryFocused: FocusState<Bool>
+  let isQueryFocused: Bool
   let onEvent: (CommandPaletteKeyboardEvent) -> Void
   let activate: (CommandPaletteItem.ID) -> Void
 
@@ -221,17 +245,17 @@ private struct CommandPaletteQuery: View {
   static let fieldHeight: CGFloat = 48
 
   @Binding var query: String
+  let isTextFieldFocused: Bool
   var onEvent: ((CommandPaletteKeyboardEvent) -> Void)?
-  @FocusState private var isTextFieldFocused: Bool
 
   init(
     query: Binding<String>,
-    isTextFieldFocused: FocusState<Bool>,
+    isTextFieldFocused: Bool,
     onEvent: ((CommandPaletteKeyboardEvent) -> Void)? = nil
   ) {
     _query = query
+    self.isTextFieldFocused = isTextFieldFocused
     self.onEvent = onEvent
-    _isTextFieldFocused = isTextFieldFocused
   }
 
   var body: some View {
@@ -270,20 +294,120 @@ private struct CommandPaletteQuery: View {
       .frame(width: 0, height: 0)
       .accessibilityHidden(true)
 
-      TextField("Search for actions or branches...", text: $query)
-        .padding()
-        .font(.title3.weight(.light))
-        .frame(height: Self.fieldHeight)
-        .textFieldStyle(.plain)
-        .focused($isTextFieldFocused)
-        .onChange(of: isTextFieldFocused) { _, focused in
-          if !focused {
-            onEvent?(.exit)
-          }
+      CommandPaletteQueryTextField(
+        query: $query,
+        isFocused: isTextFieldFocused,
+        onEvent: { event in
+          onEvent?(event)
         }
-        .onExitCommand { onEvent?(.exit) }
-        .onMoveCommand { onEvent?(.move($0)) }
-        .onSubmit { onEvent?(.submit) }
+      )
+      .padding()
+      .frame(height: Self.fieldHeight)
+    }
+  }
+}
+
+private struct CommandPaletteQueryTextField: NSViewRepresentable {
+  @Binding var query: String
+  let isFocused: Bool
+  let onEvent: (CommandPaletteKeyboardEvent) -> Void
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(query: $query, onEvent: onEvent)
+  }
+
+  func makeNSView(context: Context) -> QueryField {
+    let field = QueryField()
+    field.delegate = context.coordinator
+    field.onEvent = onEvent
+    field.placeholderString = "Search for actions or branches..."
+    field.isBordered = false
+    field.drawsBackground = false
+    field.focusRingType = .none
+    let titleFont = NSFont.preferredFont(forTextStyle: .title3)
+    field.font = NSFont.systemFont(ofSize: titleFont.pointSize, weight: .light)
+    field.usesSingleLineMode = true
+    field.lineBreakMode = .byTruncatingTail
+    return field
+  }
+
+  func updateNSView(_ nsView: QueryField, context: Context) {
+    context.coordinator.query = $query
+    context.coordinator.onEvent = onEvent
+    nsView.onEvent = onEvent
+    if nsView.stringValue != query {
+      nsView.stringValue = query
+    }
+    if isFocused, !Self.isFocused(nsView) {
+      nsView.window?.makeFirstResponder(nsView)
+    }
+  }
+
+  private static func isFocused(_ field: NSTextField) -> Bool {
+    guard let window = field.window else { return false }
+    return window.firstResponder === field || window.firstResponder === field.currentEditor()
+  }
+
+  final class Coordinator: NSObject, NSTextFieldDelegate {
+    var query: Binding<String>
+    var onEvent: (CommandPaletteKeyboardEvent) -> Void
+
+    init(query: Binding<String>, onEvent: @escaping (CommandPaletteKeyboardEvent) -> Void) {
+      self.query = query
+      self.onEvent = onEvent
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+      guard let field = notification.object as? NSTextField else { return }
+      query.wrappedValue = field.stringValue
+    }
+
+    func control(
+      _ control: NSControl,
+      textView: NSTextView,
+      doCommandBy commandSelector: Selector
+    ) -> Bool {
+      switch commandSelector {
+      case #selector(NSResponder.cancelOperation(_:)):
+        onEvent(.exit)
+      case #selector(NSResponder.insertNewline(_:)):
+        onEvent(.submit)
+      case #selector(NSResponder.moveUp(_:)):
+        onEvent(.move(.up))
+      case #selector(NSResponder.moveDown(_:)):
+        onEvent(.move(.down))
+      default:
+        return false
+      }
+      return true
+    }
+  }
+
+  final class QueryField: NSTextField {
+    var onEvent: ((CommandPaletteKeyboardEvent) -> Void)?
+
+    override func cancelOperation(_ sender: Any?) {
+      onEvent?(.exit)
+    }
+
+    override func keyDown(with event: NSEvent) {
+      if event.keyCode == 36 || event.keyCode == 76 {
+        onEvent?(.submit)
+        return
+      }
+      if event.modifierFlags.contains(.control) {
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "p":
+          onEvent?(.move(.up))
+          return
+        case "n":
+          onEvent?(.move(.down))
+          return
+        default:
+          break
+        }
+      }
+      super.keyDown(with: event)
     }
   }
 }

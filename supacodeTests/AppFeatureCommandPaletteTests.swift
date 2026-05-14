@@ -8,6 +8,216 @@ import Testing
 
 @MainActor
 struct AppFeatureCommandPaletteTests {
+  @Test(.dependencies) func closingCommandPaletteRestoresSelectedTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-focus/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-focus"
+    )
+    let repository = makeRepository(id: "/tmp/repo-focus", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    var state = AppFeature.State(
+      repositories: repositoriesState,
+      settings: SettingsFeature.State()
+    )
+    state.commandPalette.isPresented = true
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.setPresented(false))) {
+      $0.commandPalette.isPresented = false
+    }
+    await store.finish()
+
+    #expect(sent.value == [.focusSelectedTab(worktree)])
+  }
+
+  @Test(.dependencies) func togglingPresentedCommandPaletteClosedRestoresSelectedTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-toggle-focus/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-toggle-focus"
+    )
+    let repository = makeRepository(id: "/tmp/repo-toggle-focus", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    var state = AppFeature.State(
+      repositories: repositoriesState,
+      settings: SettingsFeature.State()
+    )
+    state.commandPalette.isPresented = true
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.togglePresented)) {
+      $0.commandPalette.isPresented = false
+    }
+    await store.finish()
+
+    #expect(sent.value == [.focusSelectedTab(worktree)])
+  }
+
+  @Test(.dependencies) func closingCommandPaletteDoesNotRestoreFocusWithoutSelectedTerminal() async {
+    var state = AppFeature.State()
+    state.commandPalette.isPresented = true
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.setPresented(false))) {
+      $0.commandPalette.isPresented = false
+    }
+    await store.finish()
+
+    #expect(sent.value.isEmpty)
+  }
+
+  @Test(.dependencies) func closingCommandPaletteInCanvasRestoresCanvasFocusedTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-canvas-focus/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-canvas-focus"
+    )
+    let repository = makeRepository(id: "/tmp/repo-canvas-focus", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    var state = AppFeature.State(
+      repositories: repositoriesState,
+      settings: SettingsFeature.State()
+    )
+    state.commandPalette.isPresented = true
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.setPresented(false))) {
+      $0.commandPalette.isPresented = false
+    }
+    await store.finish()
+
+    #expect(sent.value == [.focusSelectedTab(worktree)])
+  }
+
+  @Test(.dependencies) func passiveCommandPaletteCommandInCanvasRestoresCanvasFocusedTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-canvas-passive/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-canvas-passive"
+    )
+    let repository = makeRepository(id: "/tmp/repo-canvas-passive", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.checkForUpdates)))
+    await store.receive(\.updates.checkForUpdates)
+    await store.finish()
+
+    #expect(sent.value == [.focusSelectedTab(worktree)])
+  }
+
+  @Test(.dependencies) func passiveCommandPaletteCommandRestoresSelectedTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-passive/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-passive"
+    )
+    let repository = makeRepository(id: "/tmp/repo-passive", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.checkForUpdates)))
+    await store.receive(\.updates.checkForUpdates)
+    await store.finish()
+
+    #expect(sent.value == [.focusSelectedTab(worktree)])
+  }
+
+  @Test(.dependencies) func selectingWorktreeDoesNotRestorePreviousTerminalFocus() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-select/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-select"
+    )
+    let repository = makeRepository(id: "/tmp/repo-select", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.selectWorktree(worktree.id))))
+    await store.finish()
+
+    #expect(!sent.value.contains(.focusSelectedTab(worktree)))
+  }
+
   @Test(.dependencies) func openSettingsShowsWindow() async {
     let shown = LockIsolated(false)
     var state = AppFeature.State()

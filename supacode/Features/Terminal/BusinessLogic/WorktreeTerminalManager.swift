@@ -105,6 +105,8 @@ final class WorktreeTerminalManager {
       _ = closeFocusedTab(in: worktree)
     case .closeFocusedSurface(let worktree):
       _ = closeFocusedSurface(in: worktree)
+    case .focusSelectedTab(let worktree):
+      state(for: worktree).focusSelectedTab()
     default:
       return false
     }
