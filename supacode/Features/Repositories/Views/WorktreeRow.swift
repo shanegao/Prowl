@@ -73,7 +73,9 @@ struct WorktreeRow: View {
           .font(.body)
           .foregroundStyle(nameColor)
           .lineLimit(1)
-          .truncationMode(.tail)
+          .truncationMode(.middle)
+          .layoutPriority(1)
+          .help(name)
         Spacer(minLength: 4)
         if isHovered, pinAction != nil {
           Button {
