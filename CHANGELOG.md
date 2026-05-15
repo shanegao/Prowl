@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.5.15](https://github.com/onevcat/Prowl/releases/tag/v2026.5.15)
+
+### Fixed
+
+- Command Palette (`Cmd+P`) now correctly captures keyboard input on macOS 26.4 and 26.5 (Tahoe). Previously, typed text would pass through to the terminal behind the palette instead of updating the query field.
+- Dismissing the Command Palette via Escape, repeated `Cmd+P`, or passive commands (such as "Check for Updates") now reliably returns focus to the previously active terminal, including in Canvas mode.
+- Long branch names in the sidebar are now truncated in the middle, keeping both the prefix and suffix visible. Hovering shows the full name in a tooltip.
+
 ## [2026.5.14](https://github.com/onevcat/Prowl/releases/tag/v2026.5.14)
 
 This release focuses on memory stability after the active-agent detection introduced in 2026.5.11.
