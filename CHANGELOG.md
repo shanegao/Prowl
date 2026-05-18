@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026.5.19](https://github.com/onevcat/Prowl/releases/tag/v2026.5.19)
+
+This release significantly expands the command palette, making it the central hub for navigating and controlling Prowl.
+
+### New
+
+- **Command palette now shows content on open.** Pressing Cmd+P with no query displays a Recent section (commands used in the past month) and a Suggested section (commonly useful app-level commands), so you no longer need to know what to type first.
+- **View toggle commands in the palette.** Toggle Sidebar (⌘⌃S), Toggle Active Agents Panel (⌘⌥P), Toggle Canvas (⌘⌥↩), Toggle Shelf (⌘⇧↩), and Show Diff (⌘⇧Y) are now searchable and appear in Suggested when a worktree is active.
+- **Navigation commands.** Reveal in Finder, Copy Path, and Reveal in Sidebar are available from the palette when a worktree is selected.
+- **Worktree action commands.** Run Script (⌘R), Stop Script (⌘.), Pin/Unpin Worktree, Delete Worktree, and Rename Branch (⌘⇧M) are now accessible from the palette. Run/Stop Script toggles automatically based on the current script state.
+- **Repo Settings command.** Open the Settings window navigated directly to the current repository by searching "settings" or the repo name in the palette.
+- **Custom commands appear in the palette.** Repository-defined custom commands are searchable by name; their subtitle shows the execution mode (new tab, focused terminal, or split direction).
+- **Keyword aliases for app-level commands.** Terms like `preferences`, `config`, `update`, `cli`, `repo`, and `worktree` match their corresponding commands even when the exact title isn't typed.
+
+### Fixed
+
+- Cmd+W now closes the Settings window when it is focused.
+- Diff badge in the sidebar no longer truncates on narrow layouts.
+- The "Check for Updates" menu item now has an icon, consistent with other app menu entries.
+
 ## [2026.5.15](https://github.com/onevcat/Prowl/releases/tag/v2026.5.15)
 
 ### Fixed
