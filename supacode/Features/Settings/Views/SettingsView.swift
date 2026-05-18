@@ -29,36 +29,53 @@ struct SettingsView: View {
 
     NavigationSplitView(columnVisibility: .constant(.all)) {
       VStack(spacing: 0) {
-        List(selection: $settingsStore.selection.sending(\.setSelection)) {
-          Label("General", systemImage: "gearshape")
-            .tag(SettingsSection.general)
-          Label("Notifications", systemImage: "bell")
-            .tag(SettingsSection.notifications)
-          Label("Shortcuts", systemImage: "keyboard")
-            .tag(SettingsSection.shortcuts)
-          Label("Worktree", systemImage: "archivebox")
-            .tag(SettingsSection.worktree)
-          Label("Updates", systemImage: "arrow.down.circle")
-            .tag(SettingsSection.updates)
-          Label("Advanced", systemImage: "gearshape.2")
-            .tag(SettingsSection.advanced)
-          Label("GitHub", systemImage: "arrow.triangle.branch")
-            .tag(SettingsSection.github)
+        ScrollViewReader { scrollProxy in
+          List(selection: $settingsStore.selection.sending(\.setSelection)) {
+            Label("General", systemImage: "gearshape")
+              .tag(SettingsSection.general)
+              .id(SettingsSection.general)
+            Label("Notifications", systemImage: "bell")
+              .tag(SettingsSection.notifications)
+              .id(SettingsSection.notifications)
+            Label("Shortcuts", systemImage: "keyboard")
+              .tag(SettingsSection.shortcuts)
+              .id(SettingsSection.shortcuts)
+            Label("Worktree", systemImage: "archivebox")
+              .tag(SettingsSection.worktree)
+              .id(SettingsSection.worktree)
+            Label("Updates", systemImage: "arrow.down.circle")
+              .tag(SettingsSection.updates)
+              .id(SettingsSection.updates)
+            Label("Advanced", systemImage: "gearshape.2")
+              .tag(SettingsSection.advanced)
+              .id(SettingsSection.advanced)
+            Label("GitHub", systemImage: "arrow.triangle.branch")
+              .tag(SettingsSection.github)
+              .id(SettingsSection.github)
 
-          Section("Repositories") {
-            ForEach(repositories) { repository in
-              RepoDisplayName(
-                fallbackName: repository.name,
-                customTitle: customTitles[repository.id]
-              )
-              .tag(SettingsSection.repository(repository.id))
+            Section("Repositories") {
+              ForEach(repositories) { repository in
+                let repositorySection = SettingsSection.repository(repository.id)
+                RepoDisplayName(
+                  fallbackName: repository.name,
+                  customTitle: customTitles[repository.id]
+                )
+                .tag(repositorySection)
+                .id(repositorySection)
+              }
             }
           }
+          .listStyle(.sidebar)
+          .frame(minWidth: 220, maxHeight: .infinity)
+          .navigationSplitViewColumnWidth(220)
+          .removingSidebarToggle()
+          .onAppear {
+            scrollToRepositorySelection(settingsStore.selection, proxy: scrollProxy)
+          }
+          .onChange(of: settingsStore.selection) { _, selection in
+            scrollToRepositorySelection(selection, proxy: scrollProxy)
+          }
         }
-        .listStyle(.sidebar)
-        .frame(minWidth: 220, maxHeight: .infinity)
-        .navigationSplitViewColumnWidth(220)
-        .removingSidebarToggle()
       }
     } detail: {
       switch selection {
@@ -134,5 +151,12 @@ struct SettingsView: View {
       WindowLevelSetter(level: .normal)
     }
     .ignoresSafeArea(.container, edges: .top)
+  }
+
+  private func scrollToRepositorySelection(_ selection: SettingsSection?, proxy: ScrollViewProxy) {
+    guard case .repository(let repositoryID) = selection else { return }
+    withAnimation {
+      proxy.scrollTo(SettingsSection.repository(repositoryID), anchor: .center)
+    }
   }
 }

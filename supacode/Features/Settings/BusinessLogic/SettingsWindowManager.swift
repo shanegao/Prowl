@@ -13,6 +13,7 @@ final class SettingsWindowManager {
   @ObservationIgnored private var store: StoreOf<AppFeature>?
   @ObservationIgnored private var ghosttyShortcuts: GhosttyShortcutManager?
   @ObservationIgnored private var commandKeyObserver: CommandKeyObserver?
+  @ObservationIgnored private var localEventMonitor: Any?
   @ObservationIgnored private var willCloseObserver: NSObjectProtocol?
 
   private init() {}
@@ -76,6 +77,27 @@ final class SettingsWindowManager {
     window.makeKeyAndOrderFront(nil)
 
     settingsWindow = window
+    localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak window] event in
+      guard let window, event.window === window else { return event }
+      if SettingsWindowKeyboardShortcutPolicy.isCloseWindowShortcut(
+        modifierFlags: event.modifierFlags,
+        charactersIgnoringModifiers: event.charactersIgnoringModifiers
+      ) {
+        window.performClose(nil)
+        return nil
+      }
+      return event
+    }
     isOpen = true
+  }
+}
+
+enum SettingsWindowKeyboardShortcutPolicy {
+  static func isCloseWindowShortcut(
+    modifierFlags: NSEvent.ModifierFlags,
+    charactersIgnoringModifiers: String?
+  ) -> Bool {
+    modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+      && charactersIgnoringModifiers == "w"
   }
 }
