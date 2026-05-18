@@ -71,6 +71,11 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case revealInFinder
     case copyPath
     case revealInSidebar
+    case runScript
+    case stopRunScript
+    case togglePinWorktree(Worktree.ID, isCurrentlyPinned: Bool)
+    case deleteWorktree(Worktree.ID, Repository.ID)
+    case runCustomCommand(index: Int, commandID: String, systemImage: String)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -120,6 +125,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.CommandID.showDiff
     case .revealInSidebar:
       return AppShortcuts.CommandID.revealInSidebar
+    case .runScript:
+      return AppShortcuts.CommandID.runScript
+    case .stopRunScript:
+      return AppShortcuts.CommandID.stopScript
     case .ghosttyCommand,
       .markPullRequestReady,
       .mergePullRequest,
@@ -134,7 +143,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .archiveWorktree,
       .changeFocusedTabIcon,
       .revealInFinder,
-      .copyPath:
+      .copyPath,
+      .togglePinWorktree,
+      .deleteWorktree,
+      .runCustomCommand:
       return nil
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound:

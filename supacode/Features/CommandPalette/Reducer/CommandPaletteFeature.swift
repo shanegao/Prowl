@@ -60,6 +60,10 @@ struct CommandPaletteFeature {
     case revealInFinder
     case copyPath
     case revealInSidebar
+    case runScript
+    case stopRunScript
+    case togglePinWorktree(Worktree.ID, isCurrentlyPinned: Bool)
+    case runCustomCommand(Int)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -209,6 +213,8 @@ struct CommandPaletteFeature {
 
   static func commandPaletteItems(
     from repositories: RepositoriesFeature.State,
+    customCommands: [UserCustomCommand] = [],
+    runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:],
     ghosttyCommands: [GhosttyCommand] = []
   ) -> [CommandPaletteItem] {
     let showsNewWorktreeAction =
@@ -226,7 +232,14 @@ struct CommandPaletteFeature {
         )
       )
       items.append(contentsOf: worktreeNavigationCommandItems())
+      items.append(
+        contentsOf: worktreeActionCommandItems(
+          repositories: repositories,
+          runScriptStatusByWorktreeID: runScriptStatusByWorktreeID
+        )
+      )
     }
+    items.append(contentsOf: customCommandItems(customCommands))
     if let terminalWorktree = repositories.selectedTerminalWorktree {
       items.append(
         CommandPaletteItem(
@@ -263,9 +276,11 @@ struct CommandPaletteFeature {
   }
 
   static func recencyRetentionIDs(
-    from repositories: IdentifiedArrayOf<Repository>
+    from repositories: IdentifiedArrayOf<Repository>,
+    customCommands: [UserCustomCommand] = []
   ) -> [CommandPaletteItem.ID] {
     var ids = CommandPaletteItemID.globalIDs
+    ids.append(contentsOf: customCommands.map { CommandPaletteItemID.customCommand($0.id) })
     for repository in repositories {
       ids.append(contentsOf: CommandPaletteItemID.pullRequestIDs(repositoryID: repository.id))
       for worktree in repository.worktrees {
@@ -350,6 +365,83 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
   )
   items.append(contentsOf: viewToggleCommandItems())
   return items
+}
+
+private func worktreeActionCommandItems(
+  repositories: RepositoriesFeature.State,
+  runScriptStatusByWorktreeID: [Worktree.ID: Bool]
+) -> [CommandPaletteItem] {
+  guard let worktreeID = repositories.selectedWorktreeID else { return [] }
+  var items: [CommandPaletteItem] = []
+  let isRunScriptRunning = runScriptStatusByWorktreeID[worktreeID] ?? false
+  if isRunScriptRunning {
+    items.append(
+      .appShortcut(
+        id: CommandPaletteItemID.globalStopRunScript,
+        title: "Stop Script",
+        category: .worktree,
+        kind: .stopRunScript,
+        keywords: ["stop", "kill", "cancel", "script"]
+      )
+    )
+  } else {
+    items.append(
+      .appShortcut(
+        id: CommandPaletteItemID.globalRunScript,
+        title: "Run Script",
+        category: .worktree,
+        kind: .runScript,
+        keywords: ["run", "script", "execute"]
+      )
+    )
+  }
+  if let row = repositories.selectedRow(for: worktreeID), !row.isMainWorktree {
+    let pinTitle = row.isPinned ? "Unpin Worktree" : "Pin Worktree"
+    let pinKeywords =
+      row.isPinned ? ["unpin", "favorite"] : ["pin", "favorite", "top"]
+    items.append(
+      .appShortcut(
+        id: CommandPaletteItemID.globalTogglePinWorktree,
+        title: pinTitle,
+        category: .worktree,
+        kind: .togglePinWorktree(worktreeID, isCurrentlyPinned: row.isPinned),
+        keywords: pinKeywords
+      )
+    )
+    if let repositoryID = repositories.repositoryID(containing: worktreeID) {
+      items.append(
+        CommandPaletteItem(
+          id: CommandPaletteItemID.globalDeleteWorktree,
+          title: "Delete Worktree",
+          subtitle: row.name,
+          kind: .deleteWorktree(worktreeID, repositoryID),
+          category: .worktree,
+          defaultSuggestion: false,
+          keywords: ["delete", "remove", "destroy"]
+        )
+      )
+    }
+  }
+  return items
+}
+
+private func customCommandItems(_ commands: [UserCustomCommand]) -> [CommandPaletteItem] {
+  commands.enumerated().compactMap { index, command in
+    guard command.hasRunnableCommand else { return nil }
+    return CommandPaletteItem(
+      id: CommandPaletteItemID.customCommand(command.id),
+      title: command.resolvedTitle,
+      subtitle: command.execution.title,
+      kind: .runCustomCommand(
+        index: index,
+        commandID: command.id,
+        systemImage: command.resolvedSystemImage
+      ),
+      category: .worktree,
+      defaultSuggestion: false,
+      keywords: ["custom", "command", "script"]
+    )
+  }
 }
 
 private func worktreeNavigationCommandItems() -> [CommandPaletteItem] {
@@ -686,6 +778,14 @@ private enum CommandPaletteItemID {
   static let globalRevealInFinder = "global.reveal-in-finder"
   static let globalCopyPath = "global.copy-path"
   static let globalRevealInSidebar = "global.reveal-in-sidebar"
+  static let globalRunScript = "global.run-script"
+  static let globalStopRunScript = "global.stop-run-script"
+  static let globalTogglePinWorktree = "global.toggle-pin-worktree"
+  static let globalDeleteWorktree = "global.delete-worktree"
+
+  static func customCommand(_ commandID: String) -> CommandPaletteItem.ID {
+    "custom-command.\(commandID)"
+  }
 
   static var globalIDs: [CommandPaletteItem.ID] {
     [
@@ -705,6 +805,10 @@ private enum CommandPaletteItemID {
       globalRevealInFinder,
       globalCopyPath,
       globalRevealInSidebar,
+      globalRunScript,
+      globalStopRunScript,
+      globalTogglePinWorktree,
+      globalDeleteWorktree,
     ]
   }
 
@@ -785,7 +889,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
   switch kind {
   case .worktreeSelect(let id):
     return .selectWorktree(id)
-  case .removeWorktree(let worktreeID, let repositoryID):
+  case .removeWorktree(let worktreeID, let repositoryID),
+    .deleteWorktree(let worktreeID, let repositoryID):
     return .removeWorktree(worktreeID, repositoryID)
   case .archiveWorktree(let worktreeID, let repositoryID):
     return .archiveWorktree(worktreeID, repositoryID)
@@ -793,6 +898,10 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .ghosttyCommand(action)
   case .changeFocusedTabIcon(let worktreeID):
     return .changeFocusedTabIcon(worktreeID)
+  case .togglePinWorktree(let worktreeID, let isCurrentlyPinned):
+    return .togglePinWorktree(worktreeID, isCurrentlyPinned: isCurrentlyPinned)
+  case .runCustomCommand(let index, _, _):
+    return .runCustomCommand(index)
   case .openPullRequest,
     .openRepositoryOnCodeHost,
     .markPullRequestReady,
@@ -824,13 +933,18 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     .showDiff,
     .revealInFinder,
     .copyPath,
-    .revealInSidebar:
+    .revealInSidebar,
+    .runScript,
+    .stopRunScript:
     fatalError("appDelegateAction should handle app-level command palette actions")
   }
 }
 
 private func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate? {
   if let delegate = navigationDelegateAction(for: kind) {
+    return delegate
+  }
+  if let delegate = viewDelegateAction(for: kind) {
     return delegate
   }
   switch kind {
@@ -850,16 +964,10 @@ private func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPale
     return .jumpToLatestUnread
   case .installCLI:
     return .installCLI
-  case .toggleLeftSidebar:
-    return .toggleLeftSidebar
-  case .toggleActiveAgentsPanel:
-    return .toggleActiveAgentsPanel
-  case .toggleCanvas:
-    return .toggleCanvas
-  case .toggleShelf:
-    return .toggleShelf
-  case .showDiff:
-    return .showDiff
+  case .runScript:
+    return .runScript
+  case .stopRunScript:
+    return .stopRunScript
   default:
     return nil
   }
@@ -873,6 +981,23 @@ private func navigationDelegateAction(for kind: CommandPaletteItem.Kind) -> Comm
     return .copyPath
   case .revealInSidebar:
     return .revealInSidebar
+  default:
+    return nil
+  }
+}
+
+private func viewDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate? {
+  switch kind {
+  case .toggleLeftSidebar:
+    return .toggleLeftSidebar
+  case .toggleActiveAgentsPanel:
+    return .toggleActiveAgentsPanel
+  case .toggleCanvas:
+    return .toggleCanvas
+  case .toggleShelf:
+    return .toggleShelf
+  case .showDiff:
+    return .showDiff
   default:
     return nil
   }
@@ -919,7 +1044,12 @@ private func pullRequestDelegateAction(
     .showDiff,
     .revealInFinder,
     .copyPath,
-    .revealInSidebar:
+    .revealInSidebar,
+    .runScript,
+    .stopRunScript,
+    .togglePinWorktree,
+    .deleteWorktree,
+    .runCustomCommand:
     return nil
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound:

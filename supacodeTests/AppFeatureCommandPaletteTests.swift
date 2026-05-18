@@ -493,6 +493,60 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func runScriptDelegateDispatchesAppAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.runScript)))
+    await store.receive(\.runScript)
+  }
+
+  @Test(.dependencies) func stopRunScriptDelegateDispatchesAppAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.stopRunScript)))
+    await store.receive(\.stopRunScript)
+  }
+
+  @Test(.dependencies) func togglePinWorktreeWhenNotPinnedDispatchesPin() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .commandPalette(.delegate(.togglePinWorktree("/tmp/repo/wt-1", isCurrentlyPinned: false)))
+    )
+    await store.receive(\.repositories.worktreeOrdering.pinWorktree)
+  }
+
+  @Test(.dependencies) func togglePinWorktreeWhenPinnedDispatchesUnpin() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .commandPalette(.delegate(.togglePinWorktree("/tmp/repo/wt-1", isCurrentlyPinned: true)))
+    )
+    await store.receive(\.repositories.worktreeOrdering.unpinWorktree)
+  }
+
+  @Test(.dependencies) func runCustomCommandDelegateDispatchesAppAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.runCustomCommand(3))))
+    await store.receive(\.runCustomCommand)
+  }
+
   @Test(.dependencies) func closePullRequestDispatchesAction() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()

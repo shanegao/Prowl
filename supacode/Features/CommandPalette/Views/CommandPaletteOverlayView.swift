@@ -540,12 +540,15 @@ private struct CommandPaletteRowView: View {
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon,
       .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .toggleShelf, .showDiff,
-      .revealInFinder, .copyPath, .revealInSidebar:
+      .revealInFinder, .copyPath, .revealInSidebar,
+      .runScript, .stopRunScript, .togglePinWorktree, .runCustomCommand:
       return nil
     case .removeWorktree:
       return "Remove"
     case .archiveWorktree:
       return "Archive"
+    case .deleteWorktree:
+      return "Delete"
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound:
         return "Debug"
@@ -613,6 +616,16 @@ private struct CommandPaletteRowView: View {
       return "doc.on.clipboard"
     case .revealInSidebar:
       return "sidebar.left.badge.dot"
+    case .runScript:
+      return "play.circle"
+    case .stopRunScript:
+      return "stop.circle"
+    case .togglePinWorktree(_, let isCurrentlyPinned):
+      return isCurrentlyPinned ? "pin.slash" : "pin"
+    case .deleteWorktree:
+      return "trash"
+    case .runCustomCommand(_, _, let systemImage):
+      return systemImage
     #if DEBUG
       case .debugTestToast:
         return "ladybug"
@@ -631,7 +644,8 @@ private struct CommandPaletteRowView: View {
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .changeFocusedTabIcon,
       .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .toggleShelf, .showDiff,
-      .revealInFinder, .copyPath, .revealInSidebar:
+      .revealInFinder, .copyPath, .revealInSidebar,
+      .runScript, .stopRunScript, .togglePinWorktree, .deleteWorktree, .runCustomCommand:
       return true
     case .worktreeSelect, .removeWorktree, .archiveWorktree:
       return false
@@ -767,6 +781,16 @@ private struct CommandPaletteRowView: View {
       base = "Copy Path"
     case .revealInSidebar:
       base = "Reveal in Sidebar"
+    case .runScript:
+      base = "Run Script"
+    case .stopRunScript:
+      base = "Stop Script"
+    case .togglePinWorktree(_, let isCurrentlyPinned):
+      base = isCurrentlyPinned ? "Unpin Worktree" : "Pin Worktree"
+    case .deleteWorktree:
+      base = "Delete \(row.title)"
+    case .runCustomCommand:
+      base = "Run Custom Command: \(row.title)"
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound:
         base = row.title

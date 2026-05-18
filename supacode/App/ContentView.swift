@@ -87,6 +87,8 @@ struct ContentView: View {
         store: store.scope(state: \.commandPalette, action: \.commandPalette),
         items: CommandPaletteFeature.commandPaletteItems(
           from: store.repositories,
+          customCommands: store.selectedCustomCommands,
+          runScriptStatusByWorktreeID: store.runScriptStatusByWorktreeID,
           ghosttyCommands: ghosttyShortcuts.commandPaletteEntries
         ),
         resolvedKeybindings: store.resolvedKeybindings

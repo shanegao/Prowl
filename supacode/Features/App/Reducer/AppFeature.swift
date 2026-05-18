@@ -376,7 +376,10 @@ struct AppFeature {
       case .repositories(.delegate(.repositoriesChanged(let repositories))):
         let archivedIDs = state.repositories.archivedWorktreeIDSet
         let ids = state.repositories.terminalStateIDs.subtracting(archivedIDs)
-        let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(from: repositories)
+        let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(
+          from: repositories,
+          customCommands: state.selectedCustomCommands
+        )
         let worktrees = state.repositories.worktreesForInfoWatcher()
         let shouldRestoreLayout =
           state.launchRestoreMode == .restoreLayout
@@ -1093,6 +1096,21 @@ struct AppFeature {
           .send(.showLeftSidebar),
           .send(.repositories(.revealSelectedWorktreeInSidebar))
         )
+
+      case .commandPalette(.delegate(.runScript)):
+        return .send(.runScript)
+
+      case .commandPalette(.delegate(.stopRunScript)):
+        return .send(.stopRunScript)
+
+      case .commandPalette(.delegate(.togglePinWorktree(let worktreeID, let isCurrentlyPinned))):
+        if isCurrentlyPinned {
+          return .send(.repositories(.worktreeOrdering(.unpinWorktree(worktreeID))))
+        }
+        return .send(.repositories(.worktreeOrdering(.pinWorktree(worktreeID))))
+
+      case .commandPalette(.delegate(.runCustomCommand(let index))):
+        return .send(.runCustomCommand(index))
 
       case .commandPalette(.delegate(.ghosttyCommand(let action))):
         guard let worktree = state.repositories.selectedTerminalWorktree else {
