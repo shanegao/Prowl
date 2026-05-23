@@ -77,60 +77,40 @@ struct ActiveAgentRow: View {
   }
 }
 
+/// Bagua trigram spinner: ping-pongs through the eight trigram glyphs as a
+/// single `Text`. Deliberately driven by a coarse `.periodic` timeline
+/// (~8 fps) that swaps one glyph per tick — far cheaper than redrawing a
+/// per-dot grid on the display-linked `.animation` schedule, which rebuilt
+/// nine shapes every refresh (60/120 fps) and ran continuously per working
+/// agent. With several agents working at once the periodic glyph swap keeps
+/// the panel idle between ticks.
 struct BaguaWorkingIndicator: View {
-  static let cycleDuration: Double = 1.0
-
-  static let perimeter: [(row: Int, col: Int)] = [
-    (0, 0), (0, 1), (0, 2),
-    (1, 2),
-    (2, 2), (2, 1), (2, 0),
-    (1, 0),
-  ]
+  static let frames = ["☰", "☱", "☲", "☳", "☴", "☵", "☶", "☷"]
+  static let frameDuration = 0.12
 
   var body: some View {
-    TimelineView(.animation) { context in
-      let elapsed = context.date.timeIntervalSinceReferenceDate
-      let phase =
-        (elapsed / Self.cycleDuration).truncatingRemainder(dividingBy: 1)
-        * Double(Self.perimeter.count)
+    TimelineView(.periodic(from: .now, by: Self.frameDuration)) { context in
+      frameText(Self.frame(at: context.date))
+    }
+  }
 
-      VStack(spacing: 2) {
-        ForEach(0..<3, id: \.self) { row in
-          HStack(spacing: 2) {
-            ForEach(0..<3, id: \.self) { col in
-              dot(opacity: Self.opacity(row: row, col: col, phase: phase))
-            }
-          }
-        }
-      }
+  static func frame(at date: Date) -> String {
+    frames[frameIndex(at: date)]
+  }
+
+  static func frameIndex(at date: Date) -> Int {
+    let tick = Int(date.timeIntervalSinceReferenceDate / frameDuration)
+    let cycleLength = (frames.count * 2) - 2
+    let cycleIndex = ((tick % cycleLength) + cycleLength) % cycleLength
+    return cycleIndex < frames.count ? cycleIndex : cycleLength - cycleIndex
+  }
+
+  private func frameText(_ frame: String) -> some View {
+    Text(frame)
+      .font(.system(size: 17, weight: .bold, design: .monospaced))
+      .lineLimit(1)
       .frame(width: 20, height: 18)
       .accessibilityHidden(true)
-    }
-  }
-
-  // Dimmest opacity for off-pulse dots (and the always-static center).
-  static let baseOpacity: Double = 0.18
-
-  static func opacity(row: Int, col: Int, phase: Double) -> Double {
-    if row == 1 && col == 1 { return baseOpacity }
-    guard
-      let index = perimeter.firstIndex(where: { $0.row == row && $0.col == col })
-    else {
-      return baseOpacity
-    }
-    let count = Double(perimeter.count)
-    let raw = abs(Double(index) - phase)
-    // Wrap the distance so the pulse stays continuous across the seam.
-    let distance = min(raw, count - raw)
-    let intensity = max(0, 1 - distance / 3)
-    return baseOpacity + intensity * (1 - baseOpacity)
-  }
-
-  private func dot(opacity: Double) -> some View {
-    Circle()
-      .fill(.foreground)
-      .frame(width: 4, height: 4)
-      .opacity(opacity)
   }
 }
 
