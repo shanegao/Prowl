@@ -16,12 +16,6 @@ struct TerminalTabBackground: View {
         TerminalTabBarColors.inactiveTabBackground
       }
 
-      if isActive {
-        Rectangle()
-          .fill(Color.accentColor)
-          .frame(height: TerminalTabBarMetrics.activeIndicatorHeight)
-      }
-
       if !isActive {
         VStack(spacing: 0) {
           Spacer(minLength: 0)

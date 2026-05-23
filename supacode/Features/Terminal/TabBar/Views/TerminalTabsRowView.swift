@@ -78,7 +78,12 @@ struct TerminalTabsRowView: View {
             .id(id)
 
             if index < openedTabs.count - 1 {
-              TerminalTabDivider()
+              // Hide the dividers flanking the selected tab so it reads as
+              // floating rather than boxed in by separators.
+              let selectedId = manager.selectedTabId
+              if openedTabs[index] != selectedId && openedTabs[index + 1] != selectedId {
+                TerminalTabDivider()
+              }
             }
           }
         }

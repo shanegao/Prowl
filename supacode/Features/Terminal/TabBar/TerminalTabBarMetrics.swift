@@ -2,18 +2,18 @@ import CoreGraphics
 
 enum TerminalTabBarMetrics {
   static let barHeight: CGFloat = 33
-  static let barPadding: CGFloat = 0
+  static let barPadding: CGFloat = 4
   static let tabHeight: CGFloat = 32
   static let tabMinWidth: CGFloat = 140
-  static let tabMaxWidth: CGFloat = 220
   static let tabCornerRadius: CGFloat = 0
   static let tabSpacing: CGFloat = 0
+  // Top/bottom inset applied to the inter-tab divider so it does not run the
+  // full bar height; the shorter line is centered by the row's HStack.
+  static let tabDividerVerticalInset: CGFloat = 6
   static let tabHorizontalPadding: CGFloat = 12
   static let contentSpacing: CGFloat = 6
   static let contentTrailingSpacing: CGFloat = 4
   static let activeIndicatorHeight: CGFloat = 2
-  static let activeTabOffset: CGFloat = 0.5
-  static let activeTabBottomPadding: CGFloat = 1
   static let closeButtonSize: CGFloat = 16
   static let dirtyIndicatorSize: CGFloat = 8
   static let overflowShadowWidth: CGFloat = 24

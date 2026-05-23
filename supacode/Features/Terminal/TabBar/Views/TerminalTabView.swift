@@ -41,7 +41,7 @@ struct TerminalTabView: View {
       .buttonStyle(TerminalTabButtonStyle(isPressing: $isPressing))
       .frame(
         minWidth: TerminalTabBarMetrics.tabMinWidth,
-        maxWidth: TerminalTabBarMetrics.tabMaxWidth,
+        maxWidth: .infinity,
         minHeight: TerminalTabBarMetrics.tabHeight,
         maxHeight: TerminalTabBarMetrics.tabHeight
       )
@@ -117,10 +117,8 @@ struct TerminalTabView: View {
       )
       .animation(.easeInOut(duration: TerminalTabBarMetrics.hoverAnimationDuration), value: isHovering)
     }
-    .padding(.bottom, isActive ? TerminalTabBarMetrics.activeTabBottomPadding : 0)
-    .offset(y: isActive ? TerminalTabBarMetrics.activeTabOffset : 0)
-    .clipShape(.rect(cornerRadius: TerminalTabBarMetrics.tabCornerRadius))
-    .contentShape(.rect)
+    .clipShape(.capsule)
+    .contentShape(.capsule)
     .onHover { hovering in
       isHovering = hovering
     }

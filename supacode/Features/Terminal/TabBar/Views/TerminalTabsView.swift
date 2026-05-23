@@ -107,10 +107,15 @@ struct TerminalTabsView: View {
   private var effectiveTabWidth: CGFloat? {
     let count = manager.tabs.count
     guard containerWidth > 0, count > 0 else { return nil }
-    let perTab = containerWidth / CGFloat(count)
-    return min(
-      TerminalTabBarMetrics.tabMaxWidth,
-      max(TerminalTabBarMetrics.tabMinWidth, perTab)
-    )
+    // Tabs split the bar equally and fill it (no max cap). Once the equal share
+    // would dip below the minimum (too many tabs), pin to the minimum so the
+    // row overflows and scrolls instead. Account for the row's horizontal
+    // padding and inter-tab spacing so a filled row does not spuriously overflow.
+    let available =
+      containerWidth
+      - TerminalTabBarMetrics.barPadding * 2
+      - TerminalTabBarMetrics.tabSpacing * CGFloat(count - 1)
+    let perTab = available / CGFloat(count)
+    return max(TerminalTabBarMetrics.tabMinWidth, perTab)
   }
 }
