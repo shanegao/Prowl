@@ -33,6 +33,8 @@ struct ActiveAgentsPanel: View {
         Text("New agents will appear here")
           .font(.callout)
           .foregroundStyle(.secondary)
+          // Nudge up slightly off dead-center for better visual balance.
+          .offset(y: -8)
         Spacer(minLength: 0)
       } else {
         ScrollView {

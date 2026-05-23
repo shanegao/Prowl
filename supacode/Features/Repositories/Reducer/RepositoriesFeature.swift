@@ -1706,7 +1706,13 @@ extension RepositoriesFeature.State {
   }
 
   var isShowingShelf: Bool {
-    isShelfActive
+    // Shelf needs at least one repository to render. Guarding here (not just
+    // on entry) also covers the launch race where the repository snapshot
+    // briefly repopulates books and flips `isShelfActive` on before the empty
+    // entries file reconciles repos back to zero — without this a zero-repo
+    // launch with "Default View = Shelf" would stick on an empty Shelf instead
+    // of falling back to Normal.
+    isShelfActive && !repositories.isEmpty
   }
 
   var topSegment: TopSegment {

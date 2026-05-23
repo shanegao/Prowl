@@ -79,9 +79,10 @@ struct SidebarListView: View {
     ScrollViewReader { scrollProxy in
       ScrollView {
         LazyVStack(spacing: 0) {
-          if repositoryItems.isEmpty {
-            emptyRepositoryHint()
-          } else {
+          // When there are no repositories the sidebar stays empty — the
+          // detail pane's `EmptyStateView` ("Open a repository or folder")
+          // carries the prompt and the Add Repository button instead.
+          if !repositoryItems.isEmpty {
             repositoryListHeader(
               action: repositoryListHeaderAction,
               expandableRepositoryIDs: expandableRepositoryIDs
@@ -128,6 +129,18 @@ struct SidebarListView: View {
             sidebarFooterHeight = newHeight
           }
           .padding(.vertical, 4)
+      }
+      .overlay {
+        if repositoryItems.isEmpty {
+          Text("Repositories you add will appear here")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
+            // Sit above dead-center for better visual balance in the tall panel.
+            .offset(y: -40)
+            .accessibilityAddTraits(.isStaticText)
+        }
       }
       .overlay(alignment: .bottom) {
         ActiveAgentsPanel(
@@ -192,13 +205,15 @@ struct SidebarListView: View {
         .canvas,
         systemImage: "square.grid.2x2",
         title: "Canvas",
-        shortcutCommandID: AppShortcuts.CommandID.toggleCanvas
+        shortcutCommandID: AppShortcuts.CommandID.toggleCanvas,
+        requiresRepository: true
       )
       topSegmentButton(
         .shelf,
         systemImage: "distribute.horizontal.fill",
         title: "Shelf",
-        shortcutCommandID: AppShortcuts.CommandID.toggleShelf
+        shortcutCommandID: AppShortcuts.CommandID.toggleShelf,
+        requiresRepository: true
       )
     }
     .background(.thinMaterial, in: Capsule())
@@ -210,11 +225,17 @@ struct SidebarListView: View {
     _ segment: TopSegment,
     systemImage: String,
     title: String,
-    shortcutCommandID: String? = nil
+    shortcutCommandID: String? = nil,
+    requiresRepository: Bool = false
   ) -> some View {
     let isSelected = store.topSegment == segment
+    // Canvas and Shelf need at least one repository; with none, only Normal
+    // (Default) is available, so disable them.
+    let isDisabled = requiresRepository && store.repositories.isEmpty
     let helpText =
-      shortcutCommandID.map {
+      isDisabled
+      ? "\(title) — add a repository first"
+      : shortcutCommandID.map {
         AppShortcuts.helpText(title: title, commandID: $0, in: resolvedKeybindings)
       } ?? title
     return Button {
@@ -233,8 +254,10 @@ struct SidebarListView: View {
           }
         }
         .contentShape(.capsule)
+        .opacity(isDisabled ? 0.35 : 1)
     }
     .buttonStyle(.plain)
+    .disabled(isDisabled)
     .help(helpText)
     .accessibilityLabel(Text(title))
   }
@@ -288,24 +311,6 @@ struct SidebarListView: View {
     .padding(.trailing, 7)
     .padding(.top, 2)
     .padding(.bottom, 4)
-  }
-
-  private func emptyRepositoryHint() -> some View {
-    HStack(spacing: 6) {
-      Spacer(minLength: 0)
-      Text("Add your first repository")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      Image(systemName: "arrow.turn.right.up")
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .symbolEffect(.pulse, options: .repeating)
-        .accessibilityHidden(true)
-    }
-    .padding(.leading, 12)
-    .padding(.trailing, 14)
-    .padding(.top, 2)
-    .padding(.bottom, 6)
   }
 
   @ViewBuilder
