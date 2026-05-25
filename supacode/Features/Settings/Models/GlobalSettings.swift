@@ -232,6 +232,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case automaticallyArchiveMergedWorktrees
   }
 
+  // swiftlint:disable:next function_body_length
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     appearanceMode = try container.decode(AppearanceMode.self, forKey: .appearanceMode)
