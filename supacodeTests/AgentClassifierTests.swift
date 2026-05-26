@@ -8,6 +8,8 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "claude") == .claude)
     #expect(identifyAgent(processName: "claude-code") == .claude)
     #expect(identifyAgent(processName: "codex") == .codex)
+    #expect(identifyAgent(processName: "omx") == .codex)
+    #expect(identifyAgent(processName: "oh-my-codex") == .codex)
     #expect(identifyAgent(processName: "gemini") == .gemini)
     #expect(identifyAgent(processName: "cursor") == .cursor)
     #expect(identifyAgent(processName: "cursor-agent") == .cursor)
@@ -102,6 +104,24 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .codex)
     #expect(result.name == "codex")
+  }
+
+  @Test func identifiesOmxAsCodexWrapper() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "node",
+          argv0: "node",
+          cmdline: "node /opt/homebrew/bin/omx --madmax --high"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .codex)
+    #expect(result.name == "omx")
   }
 
   @Test func prefersDirectAgentProcessOverWrapper() throws {

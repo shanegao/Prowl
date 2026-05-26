@@ -6,7 +6,7 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .pi
   case "claude", "claude-code":
     return .claude
-  case "codex":
+  case "codex", "omx", "oh-my-codex":
     return .codex
   case "gemini":
     return .gemini
