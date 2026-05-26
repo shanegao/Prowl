@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026.5.26](https://github.com/onevcat/Prowl/releases/tag/v2026.5.26)
+
+### Fixed
+
+- The active agent indicator now correctly reflects agent state even when you have scrolled up in the terminal, instead of reading only the visible viewport.
+- Prowl's main window now reliably reopens when relaunching the app after all windows have been closed.
+- Using an explicit `light:X,dark:X` theme (same name on both sides, as an opt-out of the automatic fallback) is now respected; previously Ghostty's config normalization caused it to be overridden. The no-theme default also now adapts to system appearance, so a Light-mode app no longer stays stuck on a dark terminal.
+- `omx` and `oh-my-codex` process names are now recognized as the Codex agent type, so the active agent panel correctly identifies sessions running through the OMX wrapper.
+
 ## [2026.5.25](https://github.com/onevcat/Prowl/releases/tag/v2026.5.25)
 
 This release focuses on reliability improvements and a handful of UX polish items.
