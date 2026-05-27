@@ -126,6 +126,19 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.systemNotificationsEnabled == true)
   }
 
+  @Test(.dependencies) func refreshDockBadgeAuthorizationStoresSystemState() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.systemNotificationClient.dockBadgeAuthorization = { .badgeDisabled }
+    }
+
+    await store.send(.refreshDockBadgeAuthorization)
+    await store.receive(\.dockBadgeAuthorizationResponse) {
+      $0.dockBadgeAuthorization = .badgeDisabled
+    }
+  }
+
   @Test(.dependencies) func selectionDoesNotMutateRepositorySettings() async {
     let selection = SettingsSection.repository("repo-id")
     let store = TestStore(initialState: SettingsFeature.State()) {

@@ -120,6 +120,7 @@ struct AppFeature {
   @Dependency(AppLifecycleClient.self) private var appLifecycleClient
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
+  @Dependency(DockClient.self) private var dockClient
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) private var customShortcutRegistryClient
@@ -255,9 +256,7 @@ struct AppFeature {
             await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
           },
           .run { _ in
-            await MainActor.run {
-              NSApplication.shared.dockTile.badgeLabel = nil
-            }
+            await dockClient.setNotificationBadge(0)
           },
           .run { send in
             for await event in await terminalClient.events() {
@@ -518,6 +517,7 @@ struct AppFeature {
           settings: state.settings,
           customCommands: state.selectedCustomCommands
         )
+        let badgeCount = settings.showNotificationDotOnDock ? state.notificationIndicatorCount : 0
         return .merge(
           .send(.repositories(.githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
           .send(
@@ -589,6 +589,9 @@ struct AppFeature {
             case .denied:
               await send(.systemNotificationsPermissionFailed(errorMessage: "Authorization status is denied."))
             }
+          },
+          .run { _ in
+            await dockClient.setNotificationBadge(badgeCount)
           }
         )
 
@@ -1212,6 +1215,9 @@ struct AppFeature {
 
         case .commandPalette(.delegate(.debugSimulateUpdateFound)):
           return .send(.updates(.debugSimulateUpdateFound))
+
+        case .commandPalette(.delegate(.debugLightDockNotificationDot)):
+          return .run { _ in await dockClient.setNotificationBadge(1) }
       #endif
 
       case .commandPalette:
@@ -1239,14 +1245,21 @@ struct AppFeature {
             }
           )
         }
+        let bounceMode = state.settings.dockBounceMode
+        if bounceMode != .off {
+          effects.append(
+            .run { _ in
+              await dockClient.bounce(bounceMode)
+            }
+          )
+        }
         return .merge(effects)
 
       case .terminalEvent(.notificationIndicatorChanged(let count)):
         state.notificationIndicatorCount = count
+        let badgeCount = state.settings.showNotificationDotOnDock ? count : 0
         return .run { _ in
-          await MainActor.run {
-            NSApplication.shared.dockTile.badgeLabel = nil
-          }
+          await dockClient.setNotificationBadge(badgeCount)
         }
 
       case .terminalEvent(.runScriptStatusChanged(let worktreeID, let isRunning)):

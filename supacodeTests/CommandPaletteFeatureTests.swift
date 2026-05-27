@@ -29,6 +29,7 @@ struct CommandPaletteFeatureTests {
         "debug.toast.inProgress",
         "debug.toast.success",
         "debug.update.simulate-found",
+        "debug.dock.notification-dot",
       ])
     #endif
     expectNoDifference(items.map(\.id), expectedIDs)
@@ -1672,7 +1673,7 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
   case .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .toggleShelf, .showDiff:
     return .view
   #if DEBUG
-    case .debugTestToast, .debugSimulateUpdateFound:
+    case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
       return .debug
   #endif
   }
@@ -1694,7 +1695,7 @@ private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
     .deleteWorktree, .runCustomCommand:
     return false
   #if DEBUG
-    case .debugTestToast, .debugSimulateUpdateFound:
+    case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
       return true
   #endif
   }

@@ -79,6 +79,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
+      case debugLightDockNotificationDot
     #endif
   }
 
@@ -150,7 +151,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .runCustomCommand:
       return nil
     #if DEBUG
-      case .debugTestToast, .debugSimulateUpdateFound:
+      case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
         return nil
     #endif
     }

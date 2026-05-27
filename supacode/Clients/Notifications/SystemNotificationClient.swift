@@ -64,7 +64,20 @@ struct SystemNotificationClient {
     case notDetermined
   }
 
+  /// Whether macOS will actually render the app's Dock badge. The Dock badge
+  /// is gated by the system notification permission plus the per-app "Badge
+  /// app icon" switch — it does not depend on Prowl's own banner toggle.
+  enum DockBadgeAuthorization: Equatable {
+    /// Notifications are allowed and "Badge app icon" is on.
+    case available
+    /// macOS is not allowing notifications for Prowl (denied or not yet asked).
+    case notificationsDenied
+    /// Notifications are allowed, but "Badge app icon" is turned off.
+    case badgeDisabled
+  }
+
   var authorizationStatus: @MainActor @Sendable () async -> AuthorizationStatus
+  var dockBadgeAuthorization: @MainActor @Sendable () async -> DockBadgeAuthorization
   var requestAuthorization: @MainActor @Sendable () async -> AuthorizationRequestResult
   var send:
     @MainActor @Sendable (_ title: String, _ body: String, _ worktreeID: Worktree.ID?, _ surfaceID: UUID?) async -> Void
@@ -85,6 +98,16 @@ extension SystemNotificationClient: DependencyKey {
         return .notDetermined
       @unknown default:
         return .denied
+      }
+    },
+    dockBadgeAuthorization: {
+      let center = configuredNotificationCenter()
+      let settings = await center.notificationSettings()
+      switch settings.authorizationStatus {
+      case .authorized, .provisional:
+        return settings.badgeSetting == .enabled ? .available : .badgeDisabled
+      default:
+        return .notificationsDenied
       }
     },
     requestAuthorization: {
@@ -130,6 +153,7 @@ extension SystemNotificationClient: DependencyKey {
 
   static let testValue = SystemNotificationClient(
     authorizationStatus: { .notDetermined },
+    dockBadgeAuthorization: { .available },
     requestAuthorization: { AuthorizationRequestResult(granted: false, errorMessage: nil) },
     send: { _, _, _, _ in },
     openSettings: {}

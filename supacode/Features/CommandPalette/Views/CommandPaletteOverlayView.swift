@@ -534,7 +534,7 @@ private struct CommandPaletteRowView: View {
     case .deleteWorktree:
       return "Delete"
     #if DEBUG
-      case .debugTestToast, .debugSimulateUpdateFound:
+      case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
         return "Debug"
     #endif
     }
@@ -615,6 +615,8 @@ private struct CommandPaletteRowView: View {
         return "ladybug"
       case .debugSimulateUpdateFound:
         return "ladybug"
+      case .debugLightDockNotificationDot:
+        return "ladybug"
     #endif
     }
   }
@@ -636,7 +638,7 @@ private struct CommandPaletteRowView: View {
     case .worktreeSelect:
       return false
     #if DEBUG
-      case .debugTestToast, .debugSimulateUpdateFound:
+      case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
         return true
     #endif
     }
@@ -777,7 +779,7 @@ private struct CommandPaletteRowView: View {
     case .runCustomCommand:
       base = "Run Custom Command: \(row.title)"
     #if DEBUG
-      case .debugTestToast, .debugSimulateUpdateFound:
+      case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
         base = row.title
     #endif
     }

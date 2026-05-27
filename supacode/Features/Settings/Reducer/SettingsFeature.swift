@@ -37,12 +37,22 @@ struct SettingsFeature {
     var dimUnfocusedSplits: Bool
     var autoShowActiveAgentsPanel: Bool
     var windowTintMode: WindowTintMode
+    var shelfSpineTintFallback: ShelfSpineTintFallback
+    var shelfSpineTintFollowsRepositoryColor: Bool
     /// Mirrors `GlobalSettings.windowTintCustomColor` as a live `Color` so
     /// the `ColorPicker` can bind to it directly; converted back to the
     /// persistable `TintColor` at the `globalSettings` boundary.
     var windowTintCustomColor: Color
+    var showRunButtonInToolbar: Bool
+    var showDefaultEditorInToolbar: Bool
+    var dockBounceMode: DockBounceMode
+    var showNotificationDotOnDock: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
+    /// Whether macOS will render the Dock notification badge (notification
+    /// permission + the per-app "Badge app icon" switch). Refreshed when the
+    /// Notifications settings pane appears.
+    var dockBadgeAuthorization: SystemNotificationClient.DockBadgeAuthorization = .available
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
@@ -81,7 +91,13 @@ struct SettingsFeature {
       dimUnfocusedSplits = settings.dimUnfocusedSplits
       autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       windowTintMode = settings.windowTintMode
+      shelfSpineTintFallback = settings.shelfSpineTintFallback
+      shelfSpineTintFollowsRepositoryColor = settings.shelfSpineTintFollowsRepositoryColor
       windowTintCustomColor = settings.windowTintCustomColor.color
+      showRunButtonInToolbar = settings.showRunButtonInToolbar
+      showDefaultEditorInToolbar = settings.showDefaultEditorInToolbar
+      dockBounceMode = settings.dockBounceMode
+      showNotificationDotOnDock = settings.showNotificationDotOnDock
     }
 
     var globalSettings: GlobalSettings {
@@ -119,7 +135,13 @@ struct SettingsFeature {
         dimUnfocusedSplits: dimUnfocusedSplits,
         autoShowActiveAgentsPanel: autoShowActiveAgentsPanel,
         windowTintMode: windowTintMode,
-        windowTintCustomColor: TintColor(windowTintCustomColor)
+        windowTintCustomColor: TintColor(windowTintCustomColor),
+        showRunButtonInToolbar: showRunButtonInToolbar,
+        showDefaultEditorInToolbar: showDefaultEditorInToolbar,
+        dockBounceMode: dockBounceMode,
+        showNotificationDotOnDock: showNotificationDotOnDock,
+        shelfSpineTintFallback: shelfSpineTintFallback,
+        shelfSpineTintFollowsRepositoryColor: shelfSpineTintFollowsRepositoryColor
       )
     }
   }
@@ -136,6 +158,8 @@ struct SettingsFeature {
     case uninstallCLIButtonTapped
     case cliInstallCompleted(Result<String, CLIInstallError>)
     case refreshCLIInstallStatus
+    case refreshDockBadgeAuthorization
+    case dockBadgeAuthorizationResponse(SystemNotificationClient.DockBadgeAuthorization)
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
     case alert(PresentationAction<Alert>)
@@ -223,7 +247,13 @@ struct SettingsFeature {
         state.dimUnfocusedSplits = normalizedSettings.dimUnfocusedSplits
         state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.windowTintMode = normalizedSettings.windowTintMode
+        state.shelfSpineTintFallback = normalizedSettings.shelfSpineTintFallback
+        state.shelfSpineTintFollowsRepositoryColor = normalizedSettings.shelfSpineTintFollowsRepositoryColor
         state.windowTintCustomColor = normalizedSettings.windowTintCustomColor.color
+        state.showRunButtonInToolbar = normalizedSettings.showRunButtonInToolbar
+        state.showDefaultEditorInToolbar = normalizedSettings.showDefaultEditorInToolbar
+        state.dockBounceMode = normalizedSettings.dockBounceMode
+        state.showNotificationDotOnDock = normalizedSettings.showNotificationDotOnDock
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
@@ -328,17 +358,18 @@ struct SettingsFeature {
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
         return .none
 
-      case .showNotificationPermissionAlert(let errorMessage):
-        let message: String
-        if let errorMessage, !errorMessage.isEmpty {
-          message =
-            "Prowl cannot send system notifications.\n\n"
-            + "Error: \(errorMessage)"
-        } else {
-          message = "Prowl cannot send system notifications while permission is denied."
+      case .refreshDockBadgeAuthorization:
+        return .run { send in
+          await send(.dockBadgeAuthorizationResponse(systemNotificationClient.dockBadgeAuthorization()))
         }
+
+      case .dockBadgeAuthorizationResponse(let authorization):
+        state.dockBadgeAuthorization = authorization
+        return .none
+
+      case .showNotificationPermissionAlert:
         state.alert = AlertState {
-          TextState("Enable Notifications in System Settings")
+          TextState("Prowl cannot send system notifications")
         } actions: {
           ButtonState(action: .openSystemNotificationSettings) {
             TextState("Open System Settings")
@@ -347,7 +378,9 @@ struct SettingsFeature {
             TextState("Cancel")
           }
         } message: {
-          TextState(message)
+          TextState(
+            "Notification permission is turned off. Open System Settings to allow Prowl to send notifications."
+          )
         }
         return .none
 
