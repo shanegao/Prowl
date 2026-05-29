@@ -1,11 +1,13 @@
 import AppKit
 import Carbon
 import CoreText
+import Darwin
 import GhosttyKit
 import QuartzCore
 import SwiftUI
 
 private let surfaceLogger = SupaLogger("Surface")
+private let surfaceLifecycleLogger = SupaLogger("SurfaceLifecycle")
 
 final class GhosttySurfaceView: NSView, Identifiable {
   struct OcclusionState {
@@ -332,6 +334,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
   func closeSurface() {
     clearNotificationObservers()
     if let surface {
+      let childPID = ghostty_surface_pid(surface)
+      let foregroundProcessGroupID = ghostty_surface_foreground_process_group(surface)
+      let processExited = ghostty_surface_process_exited(surface)
+      logLifecycle(
+        "close begin childPID=\(childPID) foregroundPGID=\(foregroundProcessGroupID) processExited=\(processExited)")
       if let surfaceRef {
         runtime.unregisterSurface(surfaceRef)
         self.surfaceRef = nil
@@ -341,6 +348,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
       bridge.surface = nil
       occlusionState.reset()
       lastSurfaceFocus = nil
+      logLifecycle("close returned childPID=\(childPID)")
+      scheduleChildExitProbe(childPID: childPID)
+    } else {
+      logLifecycle("close skipped surface=nil")
     }
   }
 
@@ -1058,6 +1069,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
+    if let surface {
+      logLifecycle(
+        "created childPID=\(ghostty_surface_pid(surface)) "
+          + "foregroundPGID=\(ghostty_surface_foreground_process_group(surface)) "
+          + "processExited=\(ghostty_surface_process_exited(surface))")
+    } else {
+      logLifecycle("create failed")
+    }
     occlusionState.reset()
     lastSurfaceFocus = nil
     // A freshly created Ghostty surface defaults to focused (blinking cursor).
@@ -1082,6 +1101,38 @@ final class GhosttySurfaceView: NSView, Identifiable {
       return screen.backingScaleFactor
     }
     return 2.0
+  }
+
+  private func logLifecycle(_ message: String) {
+    surfaceLifecycleLogger.info(
+      "surfaceID=\(id.uuidString) context=\(context.rawValue) \(message)")
+  }
+
+  private func scheduleChildExitProbe(childPID: Int32) {
+    guard childPID > 0 else { return }
+    let surfaceID = id.uuidString
+    let context = context.rawValue
+    Task { @MainActor in
+      try? await ContinuousClock().sleep(for: .milliseconds(500))
+      Self.logChildExitProbe(surfaceID: surfaceID, context: context, childPID: childPID, delay: "0.5s")
+      try? await ContinuousClock().sleep(for: .milliseconds(1500))
+      Self.logChildExitProbe(surfaceID: surfaceID, context: context, childPID: childPID, delay: "2.0s")
+    }
+  }
+
+  private static func logChildExitProbe(
+    surfaceID: String,
+    context: UInt32,
+    childPID: Int32,
+    delay: String
+  ) {
+    surfaceLifecycleLogger.info(
+      "surfaceID=\(surfaceID) context=\(context) close probe delay=\(delay) childPID=\(childPID) "
+        + "alive=\(isProcessAlive(pid: pid_t(childPID)))")
+  }
+
+  private static func isProcessAlive(pid: pid_t) -> Bool {
+    kill(pid, 0) == 0 || errno == EPERM
   }
 
   func setOcclusion(_ visible: Bool) {

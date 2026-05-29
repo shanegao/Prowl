@@ -6,6 +6,7 @@ import Observation
 import Sharing
 
 private let terminalStateLogger = SupaLogger("TerminalState")
+private let terminalLifecycleLogger = SupaLogger("TerminalLifecycle")
 private let activeAgentDetectionInterval: Duration = .milliseconds(300)
 private let idleAgentDetectionInterval: Duration = .seconds(2)
 
@@ -668,6 +669,11 @@ final class WorktreeTerminalState {
       workingDirectoryOverride: workingDirectoryOverride,
       context: context
     )
+    terminalLifecycleLogger.info(
+      "created surfaceID=\(surface.id.uuidString) tabID=\(tabId) worktreeID=\(worktree.id) "
+        + "context=\(context.rawValue) inheritedFrom=\(inheritingFromSurfaceId?.uuidString ?? "nil") "
+        + "workingDirectory=\((workingDirectoryOverride ?? worktree.workingDirectory).path(percentEncoded: false)) "
+        + "hasInitialInput=\(initialInput != nil)")
     let tree = SplitTree(view: surface)
     trees[tabId] = tree
     focusedSurfaceIdByTab[tabId] = surface.id
@@ -1999,6 +2005,8 @@ final class WorktreeTerminalState {
 
   private func removeTree(for tabId: TerminalTabID) {
     guard let tree = trees.removeValue(forKey: tabId) else { return }
+    terminalLifecycleLogger.info(
+      "removeTree tabID=\(tabId) surfaceIDs=\(tree.leaves().map { $0.id.uuidString })")
     for surface in tree.leaves() {
       surface.closeSurface()
       forgetSurface(surface.id)
@@ -2152,6 +2160,9 @@ final class WorktreeTerminalState {
   }
 
   private func handleCloseRequest(for view: GhosttySurfaceView, processAlive: Bool) {
+    terminalLifecycleLogger.info(
+      "handleCloseRequest surfaceID=\(view.id.uuidString) processAlive=\(processAlive) "
+        + "tracked=\(surfaces[view.id] != nil)")
     guard surfaces[view.id] != nil else { return }
     if processAlive {
       guard confirmCloseIfNeeded(surfaceIDs: [view.id], mode: .prompt(.pane)) else { return }
