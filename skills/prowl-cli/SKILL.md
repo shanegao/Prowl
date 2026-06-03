@@ -9,27 +9,34 @@ Use `prowl` when the user explicitly wants to inspect or control Prowl: reading 
 
 Do not use it just because the current shell happens to be inside a Prowl repository. It is a remote-control interface for the running Prowl GUI app.
 
-## ⚠️ You are probably running *inside* one of these panes
+## ⚠️ Resolve the target by UUID — and know which pane is *you*
 
-If your own session was launched from a Prowl terminal, then **one of the panes `prowl list` returns is you.** `prowl list` does not exclude the caller. Acting on your own pane is self-harm: `prowl key --pane <self> esc` (or `ctrl-c`) interrupts or kills *your own* current request, and `send` injects into your own prompt.
+Targeting is the #1 source of mistakes. Two rules apply to **every** command:
 
-**Worse: omitting `--target`/`--pane` makes `send`/`key` default to the _focused_ pane — which is usually you.** A bare `prowl send 'x'` types into your own prompt; a bare `prowl key ctrl-c` aborts your own request. Always pass an explicit `--pane`.
+**1. Resolve the target from `prowl list --json` by UUID — never from the tab title.**
+A pane's tab *title* is free-form and will lie: a tab titled "UniWebView" can actually have `cwd` `/some/other/repo`. Decide the target from `pane.id` (UUID), `worktree.path`, `cwd`, and the `focused` flag — not the title — then pass the explicit `--pane <id>`.
 
-**Before any `send`, `key`, or `focus`, identify your own pane and never target it:**
+**2. Know which pane is yourself, because one of them usually is.**
+If your session was launched from a Prowl terminal, `prowl list` includes your own pane (it does not exclude the caller). Your own pane is the `focused` one, with `cwd` matching your `$PWD`:
 
 ```bash
-# Your own pane = the focused one (and its cwd matches your $PWD).
 echo "$PWD"
 prowl list --json | jq -r '.data.items[] | select(.pane.focused == true) | .pane.id'
 ```
 
-Danger signs that a pane you are reading **is yourself**: its content is your own conversation transcript, or it shows a prompt identical to the one you are currently executing. A pane's *tab title* can say anything (e.g. "UniWebView") while its real `cwd` is somewhere else — trust `cwd` and the focused flag, not the title.
+Operating on yourself is **not forbidden** — plenty of self-actions are legitimate: `read` (grab your own scrollback), `focus` (raise the window when a long job finishes), `key cmd-k` (clear), or `send --no-enter` (pre-fill a command for the user to review). What you must avoid is *accidentally* hitting yourself with an **interrupting** action:
 
-To run an agent "over in project X", do **not** reuse a same-looking existing pane. Open a fresh one and confirm its id differs from your own:
+- `key esc` / `ctrl-c` on yourself aborts your own current request.
+- `send` *with* a trailing Enter on yourself submits a prompt to yourself — this is how runaway self-recursion starts.
+- **Omitting `--target`/`--pane` defaults to the focused pane — usually you.** So a bare `prowl send 'x'` or `prowl key ctrl-c` lands on yourself. Always pass an explicit `--pane`.
+
+Danger signs that a pane you're reading **is yourself**: its content is your own transcript, or a prompt identical to the one you're currently running.
+
+To run an agent "over in project X", don't reuse a same-looking existing pane — open a fresh one and confirm its id differs from your own:
 
 ```bash
 prowl open /path/to/project-X --json   # returns a brand-new pane id
-# verify: the returned .data.target.pane.id != your own focused pane id
+# verify: .data.target.pane.id != your own focused pane id
 ```
 
 ## Core Workflow
