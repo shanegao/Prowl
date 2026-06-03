@@ -145,6 +145,7 @@ enum WindowLifecycleDiagnostics {
     scheduleWindowlessReminder()
   }
 
+  /// Marks the app as windowless when there is no *visible* `WindowID.main` window.
   static func noteWindowlessIfNoMainWindow(_ context: String) {
     guard !MainWindowSurface.hasVisibleMainWindow(in: NSApplication.shared.windows) else {
       noteMainWindowAppeared()
