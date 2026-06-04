@@ -14,7 +14,7 @@ Do not use it just because the current shell happens to be inside a Prowl reposi
 Targeting is the #1 source of mistakes. Two rules apply to **every** command:
 
 **1. Resolve the target from `prowl list --json` by UUID — never from the tab title.**
-A pane's tab *title* is free-form and will lie: a tab titled "UniWebView" can actually have `cwd` `/some/other/repo`. Decide the target from `pane.id` (UUID), `worktree.path`, `cwd`, and the `focused` flag — not the title — then pass the explicit `--pane <id>`.
+A pane's tab *title* is free-form and will lie: a tab titled "MyGreateProject" can actually have `cwd` `/some/other/repo`. Decide the target from `pane.id` (UUID), `worktree.path`, `cwd`, and the `focused` flag — not only the title — then pass the explicit `--pane <id>`.
 
 **2. Know which pane is yourself, because one of them usually is.**
 If your session was launched from a Prowl terminal, `prowl list` includes your own pane (it does not exclude the caller). Your own pane is the `focused` one, with `cwd` matching your `$PWD`:
