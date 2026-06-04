@@ -227,6 +227,9 @@ final class ReadCommandHandler: CommandHandler {
     }
 
     guard let screenText else {
+      // The full screen+scrollback buffer could not be read, so we only have the visible
+      // viewport. If it holds fewer lines than requested, older history may exist beyond our
+      // reach — the result may be incomplete, which is exactly what `truncated` should signal.
       return ReadCapture(
         text: joinLines(viewportLines.suffix(min(requestedLineCount, viewportLines.count))),
         source: .mixed,
@@ -236,6 +239,9 @@ final class ReadCommandHandler: CommandHandler {
 
     let screenLines = splitLines(screenText)
     if screenLines.count < viewportLines.count {
+      // The full-buffer read returned fewer lines than the viewport itself — an unreliable
+      // capture. We fall back to the viewport and, as above, cannot vouch for completeness
+      // when it is shorter than requested.
       return ReadCapture(
         text: joinLines(viewportLines.suffix(min(requestedLineCount, viewportLines.count))),
         source: .mixed,
@@ -246,10 +252,15 @@ final class ReadCommandHandler: CommandHandler {
     let source: ReadSource = screenLines.count > viewportLines.count ? .scrollback : .screen
     let text = joinLines(screenLines.suffix(min(requestedLineCount, screenLines.count)))
 
+    // The full screen+scrollback buffer was retrievable, so `text` already holds every line
+    // the pane retains. Returning fewer lines than `--last` requested here only means the
+    // pane has less history than asked for — not that content was lost — so it is complete,
+    // not truncated. `truncated` stays reserved for cases where content may be unreachable
+    // (see the viewport-only fallbacks above).
     return ReadCapture(
       text: text,
       source: source,
-      truncated: screenLines.count < requestedLineCount
+      truncated: false
     )
   }
 

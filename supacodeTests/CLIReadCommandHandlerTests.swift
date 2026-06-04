@@ -124,7 +124,7 @@ struct CLIReadCommandHandlerTests {
     #expect(payload.text == "b\nc\nd")
   }
 
-  @Test func lastMarksTruncatedWhenScreenInsufficient() async throws {
+  @Test func lastReturnsFullBufferWithoutTruncationWhenHistoryShorterThanRequest() async throws {
     let handler = ReadCommandHandler(
       resolveProvider: { _ in .success(Self.makeTarget()) },
       captureProvider: { _ in
@@ -140,7 +140,10 @@ struct CLIReadCommandHandlerTests {
     #expect(response.ok)
     let payload = try #require(try response.data?.decode(as: ReadCommandPayload.self))
     #expect(payload.source == .scrollback)
-    #expect(payload.truncated == true)
+    // The full screen+scrollback buffer was retrievable and holds only 4 lines, so the
+    // response contains everything the pane retains. Fewer lines than `--last 10` requested
+    // does not mean content was lost, so it must not be flagged truncated.
+    #expect(payload.truncated == false)
     #expect(payload.lineCount == 4)
     #expect(payload.text == "one\ntwo\nthree\nfour")
   }
