@@ -13,13 +13,20 @@ import Foundation
 final class CLISocketServer {
   private let router: CLICommandRouter
   private let socketPath: String
+  private let lockPath: String
   private var serverFD: Int32 = -1
+  private var lockFD: Int32 = -1
+  private var ownsSocket = false
   private var isRunning = false
-  private let acceptQueue = DispatchQueue(label: "com.onevcat.prowl.cli-accept", qos: .userInitiated)
+  private let acceptQueue = DispatchQueue(
+    label: "com.onevcat.prowl.cli-accept", qos: .userInitiated)
 
-  init(router: CLICommandRouter, socketPath: String = ProwlSocket.defaultPath) {
+  init(
+    router: CLICommandRouter, socketPath: String = ProwlSocket.defaultPath, lockPath: String? = nil
+  ) {
     self.router = router
     self.socketPath = socketPath
+    self.lockPath = lockPath ?? "\(socketPath).lock"
   }
 
   /// Start listening for CLI connections.
@@ -31,28 +38,31 @@ final class CLISocketServer {
       withIntermediateDirectories: true
     )
 
-    // Clean up stale socket file
+    var addr = try Self.socketAddress(for: socketPath)
+
+    try acquireSocketLock()
+    do {
+      // A reachable socket belongs to an already-running app, including older
+      // builds that do not hold the lock. Never unlink a live owner.
+      guard !Self.canConnect(to: socketPath) else {
+        throw CLIServiceError.socketAlreadyOwned
+      }
+    } catch {
+      releaseSocketLock()
+      throw error
+    }
+
+    // Clean up stale socket files only while holding the lock.
     unlink(socketPath)
 
     // Create socket
     serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
     guard serverFD >= 0 else {
+      releaseSocketLock()
       throw CLIServiceError.socketCreationFailed
     }
 
     // Bind
-    var addr = sockaddr_un()
-    addr.sun_family = sa_family_t(AF_UNIX)
-    let pathBytes = Array(socketPath.utf8)
-    let maxLen = MemoryLayout.size(ofValue: addr.sun_path) - 1
-    let copyLen = min(pathBytes.count, maxLen)
-    withUnsafeMutableBytes(of: &addr.sun_path) { sunPathPtr in
-      for idx in 0..<copyLen {
-        sunPathPtr[idx] = pathBytes[idx]
-      }
-      sunPathPtr[copyLen] = 0
-    }
-
     let bindResult = withUnsafePointer(to: &addr) { ptr in
       ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
         bind(serverFD, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
@@ -61,16 +71,22 @@ final class CLISocketServer {
 
     guard bindResult == 0 else {
       close(serverFD)
+      serverFD = -1
+      releaseSocketLock()
       throw CLIServiceError.bindFailed
     }
 
     // Listen
     guard listen(serverFD, 5) == 0 else {
       close(serverFD)
+      serverFD = -1
+      unlink(socketPath)
+      releaseSocketLock()
       throw CLIServiceError.listenFailed
     }
 
     isRunning = true
+    ownsSocket = true
 
     // Run the blocking accept loop on a dedicated dispatch queue so it does
     // not occupy a Swift cooperative-thread-pool thread (which would starve
@@ -88,7 +104,30 @@ final class CLISocketServer {
       close(serverFD)
       serverFD = -1
     }
-    unlink(socketPath)
+    if ownsSocket {
+      unlink(socketPath)
+      ownsSocket = false
+    }
+    releaseSocketLock()
+  }
+
+  private func acquireSocketLock() throws {
+    guard lockFD < 0 else { return }
+    lockFD = open(lockPath, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+    guard lockFD >= 0 else {
+      throw CLIServiceError.lockFailed
+    }
+    guard flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
+      releaseSocketLock()
+      throw CLIServiceError.socketAlreadyOwned
+    }
+  }
+
+  private func releaseSocketLock() {
+    guard lockFD >= 0 else { return }
+    flock(lockFD, LOCK_UN)
+    close(lockFD)
+    lockFD = -1
   }
 
   // MARK: - Accept loop (runs on acceptQueue, NOT in Swift concurrency)
@@ -166,20 +205,56 @@ final class CLISocketServer {
   private static func fdWrite(fildes: Int32, buffer: UnsafeRawBufferPointer) throws {
     var offset = 0
     while offset < buffer.count {
-      let written = Darwin.write(fildes, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+      let written = Darwin.write(
+        fildes, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
       guard written > 0 else {
         throw CLIServiceError.writeFailed
       }
       offset += written
     }
   }
+
+  private static func canConnect(to socketPath: String) -> Bool {
+    let socketFD = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard socketFD >= 0 else { return false }
+    defer { close(socketFD) }
+
+    guard let addr = try? socketAddress(for: socketPath) else {
+      return false
+    }
+    let result = withUnsafePointer(to: addr) { ptr in
+      ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+        connect(socketFD, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+      }
+    }
+    return result == 0
+  }
+
+  private static func socketAddress(for socketPath: String) throws -> sockaddr_un {
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    let pathBytes = Array(socketPath.utf8)
+    let maxLen = MemoryLayout.size(ofValue: addr.sun_path) - 1
+    guard pathBytes.count <= maxLen else {
+      throw CLIServiceError.socketPathTooLong
+    }
+    withUnsafeMutableBytes(of: &addr.sun_path) { sunPathPtr in
+      for idx in 0..<pathBytes.count {
+        sunPathPtr[idx] = pathBytes[idx]
+      }
+      sunPathPtr[pathBytes.count] = 0
+    }
+    return addr
+  }
 }
 
 // MARK: - Errors
 
-enum CLIServiceError: Error {
+enum CLIServiceError: Error, Equatable {
   case socketCreationFailed
   case socketPathTooLong
+  case socketAlreadyOwned
+  case lockFailed
   case bindFailed
   case listenFailed
   case readFailed
