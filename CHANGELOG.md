@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.6.6](https://github.com/onevcat/Prowl/releases/tag/v2026.6.6)
+
+This release focuses on Canvas mode: keyboard shortcuts, smoother focus navigation, and consistent behavior across sidebar, command palette, and new-tab actions.
+
+### New
+
+- Added keyboard shortcuts for Canvas layout actions: press `⌘⌥R` to rearrange cards preserving their sizes, or `⌘⌥G` to organize them into a uniform grid. Both shortcuts can be rebound in Settings → Shortcuts.
+
+### Improved
+
+- Clicking a repository, worktree, or Active Agents entry in the sidebar while in Canvas mode now focuses the matching card and centers it, rather than switching away from Canvas.
+- Selecting a worktree or folder from the Command Palette in Canvas mode now focuses the corresponding card instead of leaving Canvas.
+- Sidebar worktree shortcut hints (visible when holding Cmd) no longer cause layout reflow; they toggle with opacity so row heights remain stable.
+
+### Fixed
+
+- Opening a new tab or terminal in Canvas mode now targets the focused card's worktree, rather than falling back to an unrelated worktree.
+
 ## [2026.6.5](https://github.com/onevcat/Prowl/releases/tag/v2026.6.5)
 
 This release focuses on CLI reliability for agent workflows and several startup and window-management fixes.
