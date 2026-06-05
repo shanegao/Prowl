@@ -172,12 +172,29 @@ struct AppShortcutsTests {
       idToDisplay["select_all_canvas_cards"],
       AppShortcuts.selectAllCanvasCards.display
     )
+    expectNoDifference(
+      idToDisplay["arrange_canvas_cards"],
+      AppShortcuts.arrangeCanvasCards.display
+    )
+    expectNoDifference(
+      idToDisplay["organize_canvas_cards"],
+      AppShortcuts.organizeCanvasCards.display
+    )
 
     #expect(idToScope["command_palette"] == .configurableAppAction)
     #expect(idToScope["toggle_active_agents_panel"] == .configurableAppAction)
     #expect(idToScope["quit_application"] == .systemFixedAppAction)
     #expect(idToScope["rename_branch"] == .localInteraction)
     #expect(idToScope["select_all_canvas_cards"] == .localInteraction)
+    #expect(idToScope["arrange_canvas_cards"] == .localInteraction)
+    #expect(idToScope["organize_canvas_cards"] == .localInteraction)
+  }
+
+  @Test func canvasLayoutShortcutsUseCommandOptionFamily() {
+    expectNoDifference(AppShortcuts.arrangeCanvasCards.display, "⌘⌥R")
+    expectNoDifference(AppShortcuts.organizeCanvasCards.display, "⌘⌥G")
+    #expect(AppShortcuts.arrangeCanvasCards.modifiers == [.command, .option])
+    #expect(AppShortcuts.organizeCanvasCards.modifiers == [.command, .option])
   }
 
   @Test func userOverrideConflictsDetectsReservedAppShortcuts() {

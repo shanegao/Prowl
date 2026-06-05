@@ -46,6 +46,14 @@ struct CanvasView: View {
       for: AppShortcuts.CommandID.selectAllCanvasCards,
       in: resolvedKeybindings
     )
+    let arrangeCanvasShortcut = AppShortcuts.resolvedShortcut(
+      for: AppShortcuts.CommandID.arrangeCanvasCards,
+      in: resolvedKeybindings
+    )
+    let organizeCanvasShortcut = AppShortcuts.resolvedShortcut(
+      for: AppShortcuts.CommandID.organizeCanvasCards,
+      in: resolvedKeybindings
+    )
     let _ = configReloadCounter
     CanvasScrollContainer(
       offset: $canvasOffset,
@@ -133,6 +141,24 @@ struct CanvasView: View {
       let shortcutModifiers = selectAllCanvasShortcut?.modifiers ?? AppShortcuts.selectAllCanvasCards.modifiers
       guard keyPress.modifiers == shortcutModifiers else { return .ignored }
       selectAllCards()
+      return .handled
+    }
+    .onKeyPress(
+      arrangeCanvasShortcut?.keyEquivalent ?? AppShortcuts.arrangeCanvasCards.keyEquivalent,
+      phases: .down
+    ) { keyPress in
+      let shortcutModifiers = arrangeCanvasShortcut?.modifiers ?? AppShortcuts.arrangeCanvasCards.modifiers
+      guard keyPress.modifiers == shortcutModifiers else { return .ignored }
+      arrangeCardsWithFit()
+      return .handled
+    }
+    .onKeyPress(
+      organizeCanvasShortcut?.keyEquivalent ?? AppShortcuts.organizeCanvasCards.keyEquivalent,
+      phases: .down
+    ) { keyPress in
+      let shortcutModifiers = organizeCanvasShortcut?.modifiers ?? AppShortcuts.organizeCanvasCards.modifiers
+      guard keyPress.modifiers == shortcutModifiers else { return .ignored }
+      organizeCardsWithFit()
       return .handled
     }
     .task { activateCanvas() }
@@ -434,6 +460,24 @@ struct CanvasView: View {
     layoutStore.setCardLayouts(result.layouts, zOrder: keys)
   }
 
+  /// Arrange cards (preserving sizes) and refit the viewport, animated.
+  /// Shared by the toolbar button and the keyboard shortcut.
+  private func arrangeCardsWithFit() {
+    withAnimation(.easeInOut(duration: 0.2)) {
+      arrangeCards()
+      fitToView(canvasSize: viewportSize)
+    }
+  }
+
+  /// Organize cards into a uniform grid and refit the viewport, animated.
+  /// Shared by the toolbar button and the keyboard shortcut.
+  private func organizeCardsWithFit() {
+    withAnimation(.easeInOut(duration: 0.2)) {
+      organizeCards()
+      fitToView(canvasSize: viewportSize)
+    }
+  }
+
   /// Adjust scale and offset so all cards fit within the viewport.
   private func fitToView(canvasSize: CGSize) {
     guard canvasSize.width > 0, canvasSize.height > 0 else { return }
@@ -566,30 +610,34 @@ struct CanvasView: View {
         ))
 
       Button {
-        withAnimation(.easeInOut(duration: 0.2)) {
-          arrangeCards()
-          fitToView(canvasSize: viewportSize)
-        }
+        arrangeCardsWithFit()
       } label: {
         Image(systemName: "rectangle.3.group")
           .font(.body)
           .accessibilityLabel("Arrange")
       }
       .buttonStyle(.bordered)
-      .help("Arrange cards preserving sizes")
+      .help(
+        AppShortcuts.helpText(
+          title: "Arrange cards preserving sizes",
+          commandID: AppShortcuts.CommandID.arrangeCanvasCards,
+          in: resolvedKeybindings
+        ))
 
       Button {
-        withAnimation(.easeInOut(duration: 0.2)) {
-          organizeCards()
-          fitToView(canvasSize: viewportSize)
-        }
+        organizeCardsWithFit()
       } label: {
         Image(systemName: "square.grid.2x2")
           .font(.body)
           .accessibilityLabel("Organize")
       }
       .buttonStyle(.bordered)
-      .help("Organize cards in a uniform grid")
+      .help(
+        AppShortcuts.helpText(
+          title: "Organize cards in a uniform grid",
+          commandID: AppShortcuts.CommandID.organizeCanvasCards,
+          in: resolvedKeybindings
+        ))
     }
     .padding()
   }
