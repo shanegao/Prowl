@@ -937,6 +937,8 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.selectShelfBook8,
       AppShortcuts.CommandID.selectShelfBook9,
       AppShortcuts.CommandID.selectAllCanvasCards,
+      AppShortcuts.CommandID.arrangeCanvasCards,
+      AppShortcuts.CommandID.organizeCanvasCards,
       AppShortcuts.CommandID.archivedWorktrees:
       return .scripts
 
