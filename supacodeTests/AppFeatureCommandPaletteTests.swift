@@ -256,6 +256,67 @@ struct AppFeatureCommandPaletteTests {
     #expect(!sent.value.contains(.focusSelectedTab(worktree)))
   }
 
+  @Test(.dependencies) func selectingWorktreeInCanvasFocusesCanvasCard() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-select-canvas/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-select-canvas"
+    )
+    let repository = makeRepository(id: "/tmp/repo-select-canvas", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.commandPalette(.delegate(.selectWorktree(worktree.id))))
+    await store.receive(\.repositories.focusCanvasWorktree) {
+      $0.repositories.nextCanvasFocusRequestID = 1
+      $0.repositories.pendingCanvasFocusRequest = CanvasFocusRequest(
+        id: 1,
+        target: .worktree(worktree.id)
+      )
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+    }
+  }
+
+  @Test(.dependencies) func selectingPlainFolderInCanvasFocusesCanvasCard() async {
+    let repository = Repository(
+      id: "/tmp/folder-select-canvas",
+      rootURL: URL(fileURLWithPath: "/tmp/folder-select-canvas"),
+      name: "folder-select-canvas",
+      kind: .plain,
+      worktrees: []
+    )
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.commandPalette(.delegate(.selectWorktree(repository.id))))
+    await store.receive(\.repositories.focusCanvasRepository) {
+      $0.repositories.nextCanvasFocusRequestID = 1
+      $0.repositories.pendingCanvasFocusRequest = CanvasFocusRequest(
+        id: 1,
+        target: .worktree(repository.id)
+      )
+      $0.repositories.openedWorktreeIDs = [repository.id]
+    }
+  }
+
   @Test(.dependencies) func openSettingsShowsWindow() async {
     let shown = LockIsolated(false)
     var state = AppFeature.State()

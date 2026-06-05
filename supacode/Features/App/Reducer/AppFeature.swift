@@ -1157,6 +1157,14 @@ struct AppFeature {
         return restoreCommandPaletteTerminalFocusEffect(repositories: state.repositories)
 
       case .commandPalette(.delegate(.selectWorktree(let worktreeID))):
+        if state.repositories.isShowingCanvas {
+          if state.repositories.worktree(for: worktreeID) == nil,
+            state.repositories.repositories[id: worktreeID]?.kind == .plain
+          {
+            return .send(.repositories(.focusCanvasRepository(worktreeID)))
+          }
+          return .send(.repositories(.focusCanvasWorktree(worktreeID)))
+        }
         return .send(.repositories(.selectWorktree(worktreeID)))
 
       case .commandPalette(.delegate(.checkForUpdates)):
