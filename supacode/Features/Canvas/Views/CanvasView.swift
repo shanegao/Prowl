@@ -291,6 +291,11 @@ struct CanvasView: View {
     let cardKey = tab.id.rawValue.uuidString
     let baseLayout = layoutStore.cardLayouts[cardKey] ?? CanvasCardLayout(position: .zero)
     let isCardExpanded = expandedTabID == tab.id
+    let expandHelp = AppShortcuts.helpText(
+      title: isCardExpanded ? "Restore card size" : "Expand card",
+      commandID: AppShortcuts.CommandID.expandCanvasCard,
+      in: resolvedKeybindings
+    )
     // The expanded card magic-moves between its in-canvas frame and the full
     // viewport. AnimatedExpandableCard drives every sub-value (size, center,
     // scale) from one animatable progress, so they advance frame by frame in
@@ -323,6 +328,7 @@ struct CanvasView: View {
         hasUnseenNotification: state.hasUnseenNotification(for: tab.id),
         cardSize: renderSize,
         isExpanded: isCardExpanded,
+        expandHelp: expandHelp,
         canvasScale: isCardExpanded ? 1 : canvasScale,
         showsSelectionShield: showsSelectionShield(for: tab.id),
         onTap: {
@@ -662,7 +668,11 @@ struct CanvasView: View {
   }
 
   private var canvasHelpContent: some View {
-    VStack(alignment: .leading, spacing: 14) {
+    let expandShortcut = AppShortcuts.display(
+      for: AppShortcuts.CommandID.expandCanvasCard,
+      in: resolvedKeybindings
+    )
+    return VStack(alignment: .leading, spacing: 14) {
       Text("Canvas Navigation")
         .font(.headline)
 
@@ -676,6 +686,12 @@ struct CanvasView: View {
           icon: "hand.draw",
           title: "Pan canvas",
           detail: "Drag empty area, middle-click drag, or two-finger swipe"
+        )
+        canvasHelpRow(
+          icon: "arrow.up.left.and.arrow.down.right",
+          title: "Expand / restore card",
+          detail: expandShortcut.map { "\($0), or the card's title-bar button" }
+            ?? "Use the card's title-bar button"
         )
       }
     }

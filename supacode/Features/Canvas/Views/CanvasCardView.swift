@@ -27,6 +27,9 @@ struct CanvasCardView: View {
   /// true the title-bar button restores instead of expands, resize handles and
   /// title-bar dragging are disabled, and the action buttons stay visible.
   let isExpanded: Bool
+  /// Tooltip for the expand/restore button, including the bound shortcut (the
+  /// parent resolves it since CanvasCardView has no keybindings context).
+  let expandHelp: String
   let canvasScale: CGFloat
   let showsSelectionShield: Bool
   let onTap: () -> Void
@@ -186,7 +189,7 @@ struct CanvasCardView: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
-      .help(isExpanded ? "Restore card size" : "Expand card")
+      .help(expandHelp)
       .accessibilityLabel(isExpanded ? "Restore card size" : "Expand card")
 
       Button {
