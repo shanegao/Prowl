@@ -39,6 +39,9 @@ struct WorktreeDetailView: View {
   /// Drive the chrome (nav + toolbar) tint for Normal and Canvas modes.
   @Shared(.repositoryAppearances) private var repositoryAppearances
   @Shared(.settingsFile) private var settingsFile
+  /// True while a Canvas card is expanded in place, so the otherwise-transparent
+  /// Canvas toolbar gets a matching material scrim instead of showing through.
+  @State private var isCanvasCardExpanded = false
 
   var body: some View {
     detailBody(state: store.state)
@@ -130,6 +133,9 @@ struct WorktreeDetailView: View {
       }
     }
     .windowToolbarChromeBackground(toolbarChromeFill(repositories: repositories))
+    .modifier(
+      CanvasExpandedToolbarScrim(isActive: repositories.isShowingCanvas && isCanvasCardExpanded)
+    )
     let actions = makeFocusedActions(
       repositories: repositories,
       hasActiveWorktree: hasActiveTerminalTarget,
@@ -398,6 +404,9 @@ struct WorktreeDetailView: View {
         },
         onFocusRequestConsumed: { requestID in
           store.send(.repositories(.consumeCanvasFocusRequest(requestID)))
+        },
+        onExpandedChange: { expanded in
+          isCanvasCardExpanded = expanded
         }
       )
       // Canvas tints the nav (leading) only; the toolbar is left untinted so
@@ -1283,6 +1292,25 @@ private struct CanvasToolbarPreview: View {
         }
     }
     .frame(width: 900, height: 300)
+  }
+}
+
+/// Gives the window toolbar a neutral material scrim while a Canvas card is
+/// expanded in place, so the otherwise-transparent Canvas toolbar doesn't show
+/// the (dimmed/blurred) background cards through it. `.bar` adapts to the app
+/// theme (light → pale grey, dark → dark grey).
+private struct CanvasExpandedToolbarScrim: ViewModifier {
+  let isActive: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isActive {
+      content
+        .toolbarBackground(.bar, for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+    } else {
+      content
+    }
   }
 }
 

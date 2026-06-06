@@ -15,6 +15,9 @@ struct CanvasView: View {
   var focusRequest: CanvasFocusRequest?
   var onFocusedWorktreeChanged: (Worktree.ID?) -> Void = { _ in }
   var onFocusRequestConsumed: (Int) -> Void = { _ in }
+  /// Reports whether a card is currently expanded in place, so the parent can
+  /// give the window toolbar a matching scrim (it can't be covered from here).
+  var onExpandedChange: (Bool) -> Void = { _ in }
   @State private var layoutStore = CanvasLayoutStore()
   @Shared(.repositoryAppearances) private var repositoryAppearances
 
@@ -199,6 +202,9 @@ struct CanvasView: View {
       organizeCardsWithFit()
       return .handled
     }
+    .onChange(of: expandedTabID) { _, newValue in
+      onExpandedChange(newValue != nil)
+    }
     .task { activateCanvas() }
     .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
       configReloadCounter &+= 1
@@ -236,11 +242,13 @@ struct CanvasView: View {
       // it — i.e. anywhere outside the expanded card, including the padding —
       // restores the layout.
       if expandedTabID != nil {
-        // Material gives a GPU-efficient backdrop blur (the background cards stay
-        // faintly visible / running); the black overlay adds the dim on top.
+        // Material gives a GPU-efficient backdrop blur; a small black overlay
+        // adds the dim. The whole scrim is kept partly transparent so the
+        // background cards stay clearly visible (still running) behind it.
         Rectangle()
           .fill(.ultraThinMaterial)
-          .overlay(Color.black.opacity(0.2))
+          .overlay(Color.black.opacity(0.1))
+          .opacity(0.7)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .contentShape(.rect)
           .accessibilityAddTraits(.isButton)
