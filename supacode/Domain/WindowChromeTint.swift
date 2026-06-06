@@ -215,8 +215,11 @@ extension View {
   /// behind full-bleed chrome, while the toolbar itself must also have an
   /// explicit background because macOS can stop sampling that content when
   /// a window is zoomed or fullscreen.
-  func windowToolbarChromeBackground(_ fill: WindowChromeTint.Fill?) -> some View {
-    modifier(WindowToolbarChromeBackgroundModifier(fill: fill))
+  func windowToolbarChromeBackground(
+    _ fill: WindowChromeTint.Fill?,
+    forceMaterialScrim: Bool = false
+  ) -> some View {
+    modifier(WindowToolbarChromeBackgroundModifier(fill: fill, forceMaterialScrim: forceMaterialScrim))
   }
 }
 
@@ -274,17 +277,27 @@ private struct WindowChromeTintModifier: ViewModifier {
 
 private struct WindowToolbarChromeBackgroundModifier: ViewModifier {
   let fill: WindowChromeTint.Fill?
+  /// When true (a Canvas card is expanded in place), forces a neutral material
+  /// scrim onto the otherwise-transparent Canvas toolbar so the background cards
+  /// don't show through above the expanded card. Crucially this stays the same
+  /// modifier (only its inputs change), so toggling it never re-creates the
+  /// detail content / Canvas view.
+  let forceMaterialScrim: Bool
   @Environment(\.colorScheme) private var colorScheme
   @State private var isFullScreen = false
 
   @ViewBuilder
   func body(content: Content) -> some View {
-    let background = WindowChromeTint.fullscreenToolbarBackgroundComponents(
+    let colorBackground = WindowChromeTint.fullscreenToolbarBackgroundComponents(
       fill: fill,
       colorScheme: colorScheme
     ).color
+    // `.bar` is a theme-adaptive material (light → pale grey, dark → dark grey).
+    let background: AnyShapeStyle =
+      forceMaterialScrim ? AnyShapeStyle(.bar) : AnyShapeStyle(colorBackground)
     let visibility: Visibility =
-      WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: isFullScreen) ? .visible : .hidden
+      forceMaterialScrim || WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: isFullScreen)
+      ? .visible : .hidden
 
     content
       .toolbarBackground(background, for: .windowToolbar)

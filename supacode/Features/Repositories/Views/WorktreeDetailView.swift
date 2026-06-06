@@ -132,9 +132,9 @@ struct WorktreeDetailView: View {
         )
       }
     }
-    .windowToolbarChromeBackground(toolbarChromeFill(repositories: repositories))
-    .modifier(
-      CanvasExpandedToolbarScrim(isActive: repositories.isShowingCanvas && isCanvasCardExpanded)
+    .windowToolbarChromeBackground(
+      toolbarChromeFill(repositories: repositories),
+      forceMaterialScrim: repositories.isShowingCanvas && isCanvasCardExpanded
     )
     let actions = makeFocusedActions(
       repositories: repositories,
@@ -1292,25 +1292,6 @@ private struct CanvasToolbarPreview: View {
         }
     }
     .frame(width: 900, height: 300)
-  }
-}
-
-/// Gives the window toolbar a neutral material scrim while a Canvas card is
-/// expanded in place, so the otherwise-transparent Canvas toolbar doesn't show
-/// the (dimmed/blurred) background cards through it. `.bar` adapts to the app
-/// theme (light → pale grey, dark → dark grey).
-private struct CanvasExpandedToolbarScrim: ViewModifier {
-  let isActive: Bool
-
-  @ViewBuilder
-  func body(content: Content) -> some View {
-    if isActive {
-      content
-        .toolbarBackground(.bar, for: .windowToolbar)
-        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
-    } else {
-      content
-    }
   }
 }
 
