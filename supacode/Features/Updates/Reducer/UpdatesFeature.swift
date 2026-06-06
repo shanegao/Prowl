@@ -48,16 +48,14 @@ struct UpdatesFeature {
 
       case .activateUpdateButton:
         if state.isUpdateReadyToInstall {
-          state.isUpdateAvailable = false
-          state.isUpdateReadyToInstall = false
-          state.availableVersion = nil
-          return .run { _ in
-            await updaterClient.installDownloadedUpdate()
-          }
+          return installDownloadedUpdate(&state)
         }
         return .send(.checkForUpdates)
 
       case .checkForUpdates:
+        if state.isUpdateReadyToInstall {
+          return installDownloadedUpdate(&state)
+        }
         analyticsClient.capture("update_checked", nil)
         // Clear the badge so a fresh user-initiated check drives the standard dialog.
         // If the update is still available, Sparkle re-triggers `showUpdateFound` and
@@ -89,6 +87,15 @@ struct UpdatesFeature {
           return .none
       #endif
       }
+    }
+  }
+
+  private func installDownloadedUpdate(_ state: inout State) -> Effect<Action> {
+    state.isUpdateAvailable = false
+    state.isUpdateReadyToInstall = false
+    state.availableVersion = nil
+    return .run { _ in
+      await updaterClient.installDownloadedUpdate()
     }
   }
 }
