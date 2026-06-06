@@ -341,6 +341,13 @@ struct CanvasView: View {
       x: screenCenter.x - renderSize.width / 2,
       y: screenCenter.y - cardTotalHeight / 2
     )
+    // Explicitly animate the expand/restore transition on this card. A plain
+    // withAnimation around expandedTabID doesn't reach here (the GeometryReader's
+    // value-scoped .animation intercepts the implicit transaction), so bind the
+    // animation directly to this card's expanded state. It drives size, center,
+    // scale, and the terminal refit together — a magic-move from the card's
+    // in-canvas frame. Only the toggled card sees the change, so the rest stay put.
+    .animation(expandAnimation, value: isCardExpanded)
     .zIndex(zIndex(for: tab.id, cardKey: cardKey))
   }
 
