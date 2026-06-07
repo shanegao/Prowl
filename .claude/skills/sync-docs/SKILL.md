@@ -118,8 +118,14 @@ The goal is to keep facts correct with **low churn**, not to perfect the prose.
 - **Standalone run:** stage and commit only `docs/**` (which includes
   `docs/.sync-meta.json`); never `git add .`. If anything in `docs/` changed and
   you're not on `main`, open a PR targeting `onevcat/Prowl`.
-- **As part of release prep:** leave the doc + `docs/.sync-meta.json` edits staged
-  so they ride along in the release commit (this is the intended integration
-  point — a docs freshness check before cutting a release).
+- **As part of release prep** (the `release` skill, on `main`): commit the doc +
+  `docs/.sync-meta.json` changes as **their own commit before the version bump and
+  tag** — e.g. `git commit -m "Sync docs for <VERSION>"`. Do **not** leave them
+  staged/uncommitted: `release.sh` aborts on a dirty working tree, and the doc
+  commit must already be on `main` so it becomes an ancestor of the tag and ships
+  inside the release. Bump/tag happen after, never before.
 - Always bump and commit `docs/.sync-meta.json` even when no doc edits were
-  needed, so the next run starts from a tight diff range.
+  needed, so the next run starts from a tight diff range. The baseline records the
+  commit the docs were verified against (the current HEAD at run time) — for a
+  release that is the code being shipped, captured before the later doc/bump/tag
+  commits, which is correct (those commits touch no implementation files).
