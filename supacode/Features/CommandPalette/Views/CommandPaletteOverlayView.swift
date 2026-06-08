@@ -203,10 +203,6 @@ private struct CommandPaletteCard: View {
     Color(nsColor: .windowBackgroundColor)
   }
 
-  private var colorScheme: ColorScheme {
-    NSColor.windowBackgroundColor.isLightColor ? .light : .dark
-  }
-
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       CommandPaletteQuery(query: $query, isTextFieldFocused: isQueryFocused) { event in
@@ -233,7 +229,6 @@ private struct CommandPaletteCard: View {
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14))
     .shadow(radius: 32, x: 0, y: 12)
     .padding(Self.padding)
-    .environment(\.colorScheme, colorScheme)
   }
 }
 
@@ -873,10 +868,4 @@ private func commandPaletteShortcutSymbols(for index: Int) -> [String] {
 
 private func commandPaletteShortcutLabel(for index: Int) -> String {
   "Cmd+\(index + 1)"
-}
-
-extension NSColor {
-  fileprivate var isLightColor: Bool {
-    luminance > 0.5
-  }
 }
