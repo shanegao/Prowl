@@ -5,11 +5,24 @@ struct ToolbarNotificationsPopoverView: View {
   let onSelectNotification: (Worktree.ID, WorktreeTerminalNotification) -> Void
   let onDismissAll: () -> Void
 
+  /// Non-destructive filter that hides already-read notifications from the
+  /// list. Replaces the prior "Clean Read" destructive action — toggle on
+  /// to focus, toggle off to see history. Persisted across popover opens
+  /// (defaults to `true`) so the last choice sticks.
+  @AppStorage("focusUnreadNotifications") private var focusUnread = true
+
+  /// Measured natural height of the popover content. Drives an explicit height
+  /// (capped, then scrolls) so the popover resizes to fit when toggling the
+  /// Unread filter changes how many rows are shown — a plain `maxHeight` lets
+  /// the greedy `ScrollView` hold one size regardless of content.
+  @State private var contentHeight: CGFloat = 0
+
   var body: some View {
     let notificationCount = groups.reduce(0) { count, repository in
       count + repository.notificationCount
     }
     let notificationLabel = notificationCount == 1 ? "notification" : "notifications"
+    let visibleGroups = focusUnread ? filterToUnread(groups) : groups
 
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
@@ -22,6 +35,9 @@ struct ToolbarNotificationsPopoverView: View {
               .foregroundStyle(.secondary)
           }
           Spacer()
+          Toggle("Unread", isOn: $focusUnread)
+            .toggleStyle(.button)
+            .help("Hide notifications you've already read. Toggle off to show all.")
           Button("Dismiss All") {
             onDismissAll()
           }
@@ -29,7 +45,7 @@ struct ToolbarNotificationsPopoverView: View {
           .help("Dismiss all notifications")
         }
 
-        ForEach(groups) { repository in
+        ForEach(visibleGroups) { repository in
           VStack(alignment: .leading, spacing: 8) {
             Divider()
             Text(repository.name)
@@ -75,7 +91,40 @@ struct ToolbarNotificationsPopoverView: View {
         }
       }
       .padding()
+      .onGeometryChange(for: CGFloat.self) { proxy in
+        proxy.size.height
+      } action: { newHeight in
+        contentHeight = newHeight
+      }
     }
-    .frame(minWidth: 320, maxWidth: 520, maxHeight: 440)
+    .frame(minWidth: 320, maxWidth: 520)
+    .frame(height: min(contentHeight, 440))
+  }
+
+  /// Drops read notifications row-by-row, then drops any worktree whose
+  /// notifications are entirely read, then any repository with no remaining
+  /// worktrees — so the list collapses naturally when the focus filter
+  /// removes everything in a section, instead of leaving empty headers.
+  private func filterToUnread(
+    _ groups: [ToolbarNotificationRepositoryGroup]
+  ) -> [ToolbarNotificationRepositoryGroup] {
+    groups.compactMap { repository in
+      let worktrees = repository.worktrees.compactMap { worktree -> ToolbarNotificationWorktreeGroup? in
+        let unread = worktree.notifications.filter { !$0.isRead }
+        guard !unread.isEmpty else { return nil }
+        return ToolbarNotificationWorktreeGroup(
+          id: worktree.id,
+          name: worktree.name,
+          notifications: unread,
+          hasUnseenNotifications: worktree.hasUnseenNotifications
+        )
+      }
+      guard !worktrees.isEmpty else { return nil }
+      return ToolbarNotificationRepositoryGroup(
+        id: repository.id,
+        name: repository.name,
+        worktrees: worktrees
+      )
+    }
   }
 }

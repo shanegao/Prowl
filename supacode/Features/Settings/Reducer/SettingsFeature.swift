@@ -60,6 +60,7 @@ struct SettingsFeature {
     var dockBadgeAuthorization: SystemNotificationClient.DockBadgeAuthorization = .available
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
+    var globalCommands = GlobalCommandsFeature.State()
     @Presents var alert: AlertState<Alert>?
 
     init(settings: GlobalSettings = .default) {
@@ -98,6 +99,7 @@ struct SettingsFeature {
       autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       showActiveAgentTabTitles = settings.showActiveAgentTabTitles
       showActiveAgentStatusInShelf = settings.showActiveAgentStatusInShelf
+      globalCommands = GlobalCommandsFeature.State(commands: settings.customCommands)
       windowTintMode = settings.windowTintMode
       shelfSpineTintFallback = settings.shelfSpineTintFallback
       shelfSpineTintFollowsRepositoryColor = settings.shelfSpineTintFollowsRepositoryColor
@@ -147,6 +149,7 @@ struct SettingsFeature {
         autoShowActiveAgentsPanel: autoShowActiveAgentsPanel,
         showActiveAgentTabTitles: showActiveAgentTabTitles,
         showActiveAgentStatusInShelf: showActiveAgentStatusInShelf,
+        customCommands: globalCommands.commands,
         windowTintMode: windowTintMode,
         windowTintCustomColor: TintColor(windowTintCustomColor),
         showRunButtonInToolbar: showRunButtonInToolbar,
@@ -178,6 +181,7 @@ struct SettingsFeature {
     case dockBadgeAuthorizationResponse(SystemNotificationClient.DockBadgeAuthorization)
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
+    case globalCommands(GlobalCommandsFeature.Action)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -264,6 +268,7 @@ struct SettingsFeature {
         state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.showActiveAgentTabTitles = normalizedSettings.showActiveAgentTabTitles
         state.showActiveAgentStatusInShelf = normalizedSettings.showActiveAgentStatusInShelf
+        state.globalCommands.commands = normalizedSettings.customCommands
         state.windowTintMode = normalizedSettings.windowTintMode
         state.shelfSpineTintFallback = normalizedSettings.shelfSpineTintFallback
         state.shelfSpineTintFollowsRepositoryColor = normalizedSettings.shelfSpineTintFollowsRepositoryColor
@@ -424,12 +429,23 @@ struct SettingsFeature {
       case .repositorySettings:
         return .none
 
+      case .globalCommands(.delegate(.commandsChanged)):
+        // SettingsFeature.persist() is the canonical single writer of @Shared(.settingsFile);
+        // it captures analytics and emits the settingsChanged delegate AppFeature consumes.
+        return persist(state)
+
+      case .globalCommands:
+        return .none
+
       case .delegate:
         return .none
       }
     }
     .ifLet(\.repositorySettings, action: \.repositorySettings) {
       RepositorySettingsFeature()
+    }
+    Scope(state: \.globalCommands, action: \.globalCommands) {
+      GlobalCommandsFeature()
     }
   }
 

@@ -543,7 +543,20 @@ final class GhosttySurfaceView: NSView, Identifiable {
       return
     }
     window.isOpaque = true
-    window.backgroundColor = runtime.backgroundColor().withAlphaComponent(1)
+    // An adaptive ghostty theme (`theme = light:…,dark:…`) can report a config
+    // `background` whose tone contradicts the window's resolved appearance — the
+    // light variant's color while the surface renders the dark theme. Painting
+    // that onto the window background makes the transparent-titlebar chrome
+    // (toolbar/titlebar) read light in dark mode (and vice versa). When the
+    // tones disagree, fall back to the appearance-matched window background.
+    let configBackground = runtime.backgroundColor()
+    // `scrollbarAppearanceName()` maps the config background's luminance to
+    // `.aqua` (light) / `.darkAqua` (dark); reuse it to detect the variant.
+    let configBackgroundIsDark = runtime.scrollbarAppearanceName() == .darkAqua
+    let windowIsDark = window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    let chromeBackground =
+      configBackgroundIsDark == windowIsDark ? configBackground : NSColor.windowBackgroundColor
+    window.backgroundColor = chromeBackground.withAlphaComponent(1)
   }
 
   func focusDidChange(_ focused: Bool) {

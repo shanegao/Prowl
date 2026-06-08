@@ -15,8 +15,9 @@ screenshot — so you can watch several agents work simultaneously, then click i
 any card to type. A card whose task just finished **lights up** so you can see at
 a glance who's done.
 
-**Toggle Canvas:** `⌘⌥↩` (`toggle_canvas`). Toggling has no effect if no worktrees
-are open.
+**Toggle Canvas:** `⌘⌥↩` (`toggle_canvas`), or the **Overall** canvas button in the
+window toolbar (alongside the worktree-, repository-, and active-agents-canvas
+toggles). Toggling has no effect if no worktrees are open.
 
 ## The signature feature: broadcast to every agent
 

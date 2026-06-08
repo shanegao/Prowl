@@ -61,6 +61,8 @@ struct CommandPaletteFeature {
     case tileCanvasCards
     case selectAllCanvasCards
     case toggleShelf
+    case toggleWorktreeCanvas(Worktree.ID)
+    case toggleRepositoryCanvas(Repository.ID)
     case showDiff
     case revealInFinder
     case copyPath
@@ -70,7 +72,15 @@ struct CommandPaletteFeature {
     case togglePinWorktree(Worktree.ID, isCurrentlyPinned: Bool)
     case renameBranch
     case openRepositorySettings(Repository.ID)
-    case runCustomCommand(Int)
+    /// Identity-based dispatch (the command's stable ID, not a positional
+    /// index) so that a re-ordered `selectedCustomCommands` list between
+    /// palette activation and reducer execution can't fire the wrong command.
+    case runCustomCommand(commandID: String)
+    case openBranchOnCodeHost(Worktree.ID)
+    case pinWorktree(Worktree.ID)
+    case unpinWorktree(Worktree.ID)
+    case copyWorktreePath(Worktree.ID)
+    case revealWorktreeInFinder(Worktree.ID)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -157,7 +167,9 @@ struct CommandPaletteFeature {
 
       case .pruneRecency(let ids):
         let idSet = Set(ids)
-        let pruned = state.recencyByItemID.filter { idSet.contains($0.key) }
+        let pruned = state.recencyByItemID.filter { key, _ in
+          idSet.contains(key) || key.hasPrefix(CommandPaletteItemID.customCommandPrefix)
+        }
         guard pruned != state.recencyByItemID else { return .none }
         state.recencyByItemID = pruned
         saveRecency(pruned)
@@ -229,14 +241,15 @@ struct CommandPaletteFeature {
     let showsNewWorktreeAction =
       repositories.repositories.isEmpty
       || repositories.repositories.contains { $0.capabilities.supportsWorktrees }
+    let hasWorktrees = !repositories.orderedWorktreeRows().isEmpty
     var items = globalCommandItems(
       showsNewWorktreeAction: showsNewWorktreeAction,
-      isShowingArchivedWorktrees: repositories.isShowingArchivedWorktrees
+      isShowingArchivedWorktrees: repositories.isShowingArchivedWorktrees,
+      hasWorktrees: hasWorktrees
     )
     if repositories.isShowingCanvas {
       items.append(contentsOf: canvasCommandItems())
     }
-    let worktreeActionTargetID = actionTargetWorktreeID ?? repositories.selectedWorktreeID
     if repositories.selectedWorktreeID != nil {
       items.append(
         .appShortcut(
@@ -251,15 +264,15 @@ struct CommandPaletteFeature {
       items.append(
         contentsOf: worktreeActionCommandItems(
           repositories: repositories,
-          worktreeID: worktreeActionTargetID,
+          worktreeID: actionTargetWorktreeID,
           runScriptStatusByWorktreeID: runScriptStatusByWorktreeID
         )
       )
-    } else if worktreeActionTargetID != nil {
+    } else if actionTargetWorktreeID != nil {
       items.append(
         contentsOf: worktreeActionCommandItems(
           repositories: repositories,
-          worktreeID: worktreeActionTargetID,
+          worktreeID: actionTargetWorktreeID,
           runScriptStatusByWorktreeID: runScriptStatusByWorktreeID,
           includeSelectionScopedItems: false
         )
@@ -277,8 +290,14 @@ struct CommandPaletteFeature {
           defaultSuggestion: false
         )
       )
+      items.append(
+        contentsOf: selectedWorktreeActionItems(
+          worktree: terminalWorktree,
+          repositories: repositories
+        )
+      )
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
-    } else if worktreeActionTargetID != nil {
+    } else if actionTargetWorktreeID != nil {
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
     }
     if let repository = activeRepository(in: repositories) {
@@ -297,7 +316,7 @@ struct CommandPaletteFeature {
     items.append(
       contentsOf: selectedCodeHostItems(
         from: repositories,
-        actionTargetWorktreeID: worktreeActionTargetID
+        actionTargetWorktreeID: actionTargetWorktreeID
       )
     )
     #if DEBUG
@@ -330,9 +349,15 @@ struct CommandPaletteFeature {
     for repository in repositories {
       ids.append(contentsOf: CommandPaletteItemID.pullRequestIDs(repositoryID: repository.id))
       ids.append(CommandPaletteItemID.openRepositorySettings(repository.id))
+      ids.append(CommandPaletteItemID.toggleRepositoryCanvas(repository.id))
       for worktree in repository.worktrees {
         ids.append(CommandPaletteItemID.worktreeSelect(worktree.id))
         ids.append(CommandPaletteItemID.changeFocusedTabIcon(worktree.id))
+        ids.append(CommandPaletteItemID.toggleWorktreeCanvas(worktree.id))
+        ids.append(CommandPaletteItemID.pinWorktree(worktree.id))
+        ids.append(CommandPaletteItemID.unpinWorktree(worktree.id))
+        ids.append(CommandPaletteItemID.copyWorktreePath(worktree.id))
+        ids.append(CommandPaletteItemID.revealWorktreeInFinder(worktree.id))
       }
     }
     return ids
@@ -341,7 +366,8 @@ struct CommandPaletteFeature {
 
 private func globalCommandItems(
   showsNewWorktreeAction: Bool,
-  isShowingArchivedWorktrees: Bool
+  isShowingArchivedWorktrees: Bool,
+  hasWorktrees: Bool
 ) -> [CommandPaletteItem] {
   var items: [CommandPaletteItem] = [
     .appShortcut(
@@ -422,7 +448,7 @@ private func globalCommandItems(
       keywords: ["cli", "command line", "terminal", "prowl"]
     )
   )
-  items.append(contentsOf: viewToggleCommandItems())
+  items.append(contentsOf: viewToggleCommandItems(hasWorktrees: hasWorktrees))
   return items
 }
 
@@ -576,8 +602,8 @@ private func worktreeNavigationCommandItems() -> [CommandPaletteItem] {
   ]
 }
 
-private func viewToggleCommandItems() -> [CommandPaletteItem] {
-  [
+private func viewToggleCommandItems(hasWorktrees: Bool) -> [CommandPaletteItem] {
+  var items: [CommandPaletteItem] = [
     .appShortcut(
       id: CommandPaletteItemID.globalToggleLeftSidebar,
       title: "Toggle Sidebar",
@@ -592,21 +618,29 @@ private func viewToggleCommandItems() -> [CommandPaletteItem] {
       kind: .toggleActiveAgentsPanel,
       keywords: ["agents", "panel"]
     ),
-    .appShortcut(
-      id: CommandPaletteItemID.globalToggleCanvas,
-      title: "Toggle Canvas",
-      category: .view,
-      kind: .toggleCanvas,
-      keywords: ["canvas", "overview", "grid"]
-    ),
-    .appShortcut(
-      id: CommandPaletteItemID.globalToggleShelf,
-      title: "Toggle Shelf",
-      category: .view,
-      kind: .toggleShelf,
-      keywords: ["shelf", "books"]
-    ),
   ]
+  // Canvas + Shelf both no-op when there are no open worktrees — filter them
+  // out of the palette in that state rather than presenting a dead command
+  // that silently does nothing when invoked.
+  if hasWorktrees {
+    items.append(contentsOf: [
+      .appShortcut(
+        id: CommandPaletteItemID.globalToggleCanvas,
+        title: "Toggle Canvas",
+        category: .view,
+        kind: .toggleCanvas,
+        keywords: ["canvas", "overview", "grid"]
+      ),
+      .appShortcut(
+        id: CommandPaletteItemID.globalToggleShelf,
+        title: "Toggle Shelf",
+        category: .view,
+        kind: .toggleShelf,
+        keywords: ["shelf", "books"]
+      ),
+    ])
+  }
+  return items
 }
 
 private func canvasCommandItems() -> [CommandPaletteItem] {
@@ -663,34 +697,126 @@ private func selectedCodeHostItems(
 
   let codeHost = repositories.codeHost(for: repositoryID)
   let pullRequest = repositories.worktreeInfo(for: worktreeID)?.pullRequest
+  var items: [CommandPaletteItem] = []
   if repository.capabilities.supportsPullRequests,
     let pullRequest,
     pullRequest.number > 0,
     pullRequest.state.uppercased() != "CLOSED"
   {
-    return pullRequestItems(
-      pullRequest: pullRequest,
-      worktreeID: worktreeID,
-      repositoryID: repositoryID,
-      codeHost: codeHost
+    items.append(
+      contentsOf: pullRequestItems(
+        pullRequest: pullRequest,
+        worktreeID: worktreeID,
+        repositoryID: repositoryID,
+        codeHost: codeHost
+      )
+    )
+  } else if repository.capabilities.supportsCodeHost {
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.pullRequestOpen(repositoryID),
+        title: "Open Repository on \(codeHost.displayName)",
+        subtitle: repository.name,
+        kind: .openRepositoryOnCodeHost(worktreeID),
+        category: .pullRequest,
+        defaultSuggestion: false,
+        priorityTier: 2
+      )
     )
   }
 
-  guard repository.capabilities.supportsCodeHost else {
-    return []
+  if repository.capabilities.supportsCodeHost {
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.pullRequestBranch(repositoryID),
+        title: "Open Branch on \(codeHost.displayName)",
+        subtitle: repository.name,
+        kind: .openBranchOnCodeHost(worktreeID),
+        category: .pullRequest,
+        defaultSuggestion: false,
+        priorityTier: 3
+      )
+    )
   }
 
-  return [
+  return items
+}
+
+private func selectedWorktreeActionItems(
+  worktree: Worktree,
+  repositories: RepositoriesFeature.State
+) -> [CommandPaletteItem] {
+  var items: [CommandPaletteItem] = []
+  items.append(
     CommandPaletteItem(
-      id: CommandPaletteItemID.pullRequestOpen(repositoryID),
-      title: "Open Repository on \(codeHost.displayName)",
-      subtitle: repository.name,
-      kind: .openRepositoryOnCodeHost(worktreeID),
-      category: .pullRequest,
-      defaultSuggestion: false,
-      priorityTier: 2
+      id: CommandPaletteItemID.toggleWorktreeCanvas(worktree.id),
+      title: "Toggle Worktree Canvas",
+      subtitle: worktree.name,
+      kind: .toggleWorktreeCanvas(worktree.id),
+      category: .view,
+      defaultSuggestion: true
     )
-  ]
+  )
+  if let repositoryID = repositories.repositoryID(containing: worktree.id) {
+    let repositoryName = repositories.repositoryName(for: repositoryID) ?? "Repository"
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.toggleRepositoryCanvas(repositoryID),
+        title: "Toggle Repo Canvas",
+        subtitle: repositoryName,
+        kind: .toggleRepositoryCanvas(repositoryID),
+        category: .view,
+        defaultSuggestion: true
+      )
+    )
+  }
+  if !worktree.isMain {
+    let row = repositories.orderedWorktreeRows().first { $0.id == worktree.id }
+    if row?.isPinned == true {
+      items.append(
+        CommandPaletteItem(
+          id: CommandPaletteItemID.unpinWorktree(worktree.id),
+          title: "Unpin Worktree",
+          subtitle: worktree.name,
+          kind: .unpinWorktree(worktree.id),
+          category: .worktree,
+          defaultSuggestion: false
+        )
+      )
+    } else {
+      items.append(
+        CommandPaletteItem(
+          id: CommandPaletteItemID.pinWorktree(worktree.id),
+          title: "Pin Worktree to Top",
+          subtitle: worktree.name,
+          kind: .pinWorktree(worktree.id),
+          category: .worktree,
+          defaultSuggestion: false
+        )
+      )
+    }
+  }
+  items.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.copyWorktreePath(worktree.id),
+      title: "Copy Worktree Path",
+      subtitle: worktree.workingDirectory.path,
+      kind: .copyWorktreePath(worktree.id),
+      category: .navigation,
+      defaultSuggestion: false
+    )
+  )
+  items.append(
+    CommandPaletteItem(
+      id: CommandPaletteItemID.revealWorktreeInFinder(worktree.id),
+      title: "Reveal Worktree in Finder",
+      subtitle: worktree.name,
+      kind: .revealWorktreeInFinder(worktree.id),
+      category: .navigation,
+      defaultSuggestion: false
+    )
+  )
+  return items
 }
 
 private func pullRequestItems(

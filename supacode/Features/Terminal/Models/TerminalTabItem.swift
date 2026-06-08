@@ -1,10 +1,14 @@
 import Foundation
 
 /// Who currently owns a tab's icon slot. The precedence chain runs
-/// `auto < script < user`: stronger owners block weaker writes.
+/// `auto < agent < script < user`: stronger owners block weaker writes.
 ///
 /// - `auto`: nobody has claimed the icon — `CommandIconMap` and other
 ///   auto-detection paths are free to overwrite it.
+/// - `agent`: a coding agent (Claude/Codex/…) detected in the tab's focused
+///   surface. Pins the agent's brand icon over command auto-detection so the
+///   header tab and canvas card show which agent owns the pane; released back
+///   to `.auto` when the agent leaves. Yields to `.script`/`.user`.
 /// - `script`: Run Script's `play.fill` or a Custom Command's configured
 ///   icon. Survives auto-detection so the glyph doesn't flash mid-run.
 /// - `user`: the icon picker. Wins over everything until cleared.
@@ -14,6 +18,7 @@ import Foundation
 /// the right-hand side as the optional sentinel rather than this case.
 enum TerminalTabIconLock: Equatable, Sendable {
   case auto
+  case agent
   case script
   case user
 }

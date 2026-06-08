@@ -28,9 +28,23 @@ struct AppFeature {
     var launchRestoreMode: LaunchRestoreMode
     var hasAppliedInitialViewMode = false
     var suppressLayoutSaveUntilRelaunch = false
+    /// `true` once the app has observed a `.active` scenePhase at least once
+    /// this session. Used to gate `.background`-triggered layout snapshot
+    /// saves so the launch-time `.background → .inactive → .active` SwiftUI
+    /// scene transition doesn't fire a save with zero active states (which
+    /// would then *delete* an existing on-disk snapshot via the "empty
+    /// payload → clear file" branch in `persistLayoutSnapshotSync`). Only
+    /// saves triggered AFTER first activation reflect a real backgrounding.
+    var hasObservedActivePhase = false
     var launchedAt: Date?
     var leftSidebarVisibility: NavigationSplitViewVisibility = .all
     @Presents var alert: AlertState<Alert>?
+    var quickSend: QuickSendFeature.State?
+    /// The agent the user last targeted in the quick-send panel, remembered for the
+    /// session so the ⌘⇧P hotkey re-selects it (when it's still an active agent)
+    /// instead of the focused pane. In-memory only — agent IDs are ephemeral per-pane
+    /// UUIDs, so persisting across launches would never match. Recorded on dismiss.
+    var lastSelectedQuickSendAgentID: ActiveAgentEntry.ID?
 
     init(
       repositories: RepositoriesFeature.State = .init(),
@@ -54,6 +68,15 @@ struct AppFeature {
     case commandPalette(CommandPaletteFeature.Action)
     case openActionSelectionChanged(OpenWorktreeAction)
     case openActionResetToAutomatic
+    /// Explicit-target variants for canvas focused-card mode where
+    /// `selectedTerminalWorktree` is nil. Mirror the unscoped variants but
+    /// take the focused canvas card's worktree ID as their target.
+    case openActionSelectionChangedForWorktree(OpenWorktreeAction, Worktree.ID)
+    case openWorktreeForWorktree(OpenWorktreeAction, Worktree.ID)
+    /// Scoped sibling of `openActionResetToAutomatic` for canvas focused-card
+    /// mode: pin the given worktree's repo back to automatic and reopen it,
+    /// without touching the sidebar-bound `openActionSelection`.
+    case openActionResetToAutomaticForWorktree(Worktree.ID)
     case worktreeSettingsLoaded(RepositorySettings, worktreeID: Worktree.ID)
     case worktreeUserSettingsLoaded(UserRepositorySettings, worktreeID: Worktree.ID)
     case openSelectedWorktree
@@ -68,6 +91,12 @@ struct AppFeature {
     case setLeftSidebarVisibility(NavigationSplitViewVisibility)
     case runScript
     case runCustomCommand(Int)
+    /// Explicit-target custom-command dispatch for canvas. Single-focus mode
+    /// passes a one-element set; broadcast mode passes 2+. Carries the
+    /// command value directly because the canvas command list is not
+    /// `state.selectedCustomCommands` (which is sidebar-derived) — it's
+    /// freshly resolved from the focused card's repo settings.
+    case runCustomCommandOnWorktrees(UserCustomCommand, Set<Worktree.ID>)
     case canvasFocusedWorktreeChanged(Worktree.ID?)
     case runScriptDraftChanged(String)
     case runScriptPromptPresented(Bool)
@@ -82,7 +111,24 @@ struct AppFeature {
     case endSearch
     case systemNotificationsPermissionFailed(errorMessage: String?)
     case systemNotificationTapped(worktreeID: Worktree.ID, surfaceID: UUID)
+    /// Inline reply typed into a notification banner — delivered straight to the
+    /// originating pane (no focus change), mirroring Slack's quick reply.
+    case systemNotificationReplied(worktreeID: Worktree.ID, surfaceID: UUID, text: String)
+    /// A quick-answer button on a permission notification — delivered to the
+    /// originating pane as a keypress (the digit the user would press), not text.
+    case systemNotificationAnswered(worktreeID: Worktree.ID, surfaceID: UUID, key: String)
     case alert(PresentationAction<Alert>)
+    case quickSend(QuickSendFeature.Action)
+    /// Open the quick-send composer. `defaultAgentID` pre-selects the agent
+    /// whose menubar submenu opened it; pass `nil` to default to the active
+    /// agent (used by the keyboard shortcut).
+    case presentQuickSend(defaultAgentID: ActiveAgentEntry.ID?)
+    /// Toggles the quick-send panel from the global ⌘⇧P hotkey: dismiss if it's
+    /// already visible, otherwise present it.
+    case toggleQuickSend
+    /// Result of a quick-send delivery attempt. On success the panel dismisses; on
+    /// failure it stays open with the typed text so the user can retry, not retype.
+    case quickSendDelivered(Bool)
     case terminalEvent(TerminalClient.Event)
   }
 
@@ -96,6 +142,7 @@ struct AppFeature {
   @Dependency(RepositoryPersistenceClient.self) var repositoryPersistence
   @Dependency(WorkspaceClient.self) var workspaceClient
   @Dependency(SettingsWindowClient.self) var settingsWindowClient
+  @Dependency(QuickSendPanelClient.self) var quickSendPanelClient
   @Dependency(AppLifecycleClient.self) var appLifecycleClient
   @Dependency(NotificationSoundClient.self) var notificationSoundClient
   @Dependency(SystemNotificationClient.self) var systemNotificationClient
@@ -136,6 +183,9 @@ struct AppFeature {
       case .scenePhaseChanged(let phase):
         switch phase {
         case .active:
+          // First-active-this-session gates the destructive save-on-background
+          // path below. See `hasObservedActivePhase` doc on State.
+          state.hasObservedActivePhase = true
           return .merge(
             .send(.repositories(.refreshWorktrees)),
             .run { _ in
@@ -152,7 +202,8 @@ struct AppFeature {
           )
         case .inactive, .background:
           var effects: [Effect<Action>] = [.cancel(id: CancelID.periodicRefresh)]
-          if state.settings.restoreTerminalLayoutOnLaunch,
+          if state.hasObservedActivePhase,
+            state.settings.restoreTerminalLayoutOnLaunch,
             !state.suppressLayoutSaveUntilRelaunch,
             state.launchRestoreMode != .restoreLayout
           {
@@ -381,7 +432,8 @@ struct AppFeature {
           repoSettingsState.globalCopyUntrackedOnWorktreeCreate = state.settings.copyUntrackedOnWorktreeCreate
           repoSettingsState.globalPullRequestMergeStrategy = state.settings.pullRequestMergeStrategy
           state.settings.repositorySettings = repoSettingsState
-        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github:
+        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github,
+          .commands:
           state.settings.repositorySettings = nil
         }
         return .none
@@ -392,9 +444,14 @@ struct AppFeature {
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
         state.settings.keybindingUserOverrides = settings.keybindingUserOverrides
         state.repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
+        // Capture the previous resolved command list so we only repush shortcuts to
+        // `customShortcutRegistryClient` when the merged (global + per-repo) list
+        // actually changes — avoids registry churn on every settings tweak.
+        let previousCustomCommands = state.selectedCustomCommands
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           let rootURL = selectedWorktree.repositoryRootURL
           @Shared(.repositorySettings(rootURL)) var repositorySettings
+          @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
           state.openActionSelection = OpenWorktreeAction.fromSettingsID(
             repositorySettings.openActionID,
             defaultEditorID: settings.defaultEditorID,
@@ -402,14 +459,39 @@ struct AppFeature {
           )
           state.openActionIsAutomatic =
             repositorySettings.openActionID == OpenWorktreeAction.automaticSettingsID
+
+          // Global commands may have changed via GlobalCommandsFeature; re-merge so the toolbar,
+          // keybinding registry, and runCustomCommand dispatcher see the updated union.
+          state.selectedCustomCommands = EffectiveCommandsResolver.resolve(
+            globalCommands: state.settings.globalCommands.commands,
+            perRepoCommands: userRepositorySettings.customCommands
+          )
+        } else {
+          // No active worktree: still resolve global commands so their keyboard
+          // shortcuts stay registered immediately rather than deferring until
+          // the next worktree selection.
+          state.selectedCustomCommands = EffectiveCommandsResolver.resolve(
+            globalCommands: state.settings.globalCommands.commands,
+            perRepoCommands: []
+          )
         }
         state.resolvedKeybindings = resolvedKeybindings(
           settings: state.settings,
           customCommands: state.selectedCustomCommands
         )
+        let customCommandsRefreshed = previousCustomCommands != state.selectedCustomCommands
+        let refreshedShortcuts: [UserCustomShortcut] =
+          customCommandsRefreshed
+          ? state.selectedCustomCommands.compactMap { command in
+            let commandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
+            return state.resolvedKeybindings.keybinding(for: commandID)?.userCustomShortcut
+          }
+          : []
         let badgeCount = settings.showNotificationDotOnDock ? state.notificationIndicatorCount : 0
         return .merge(
-          .send(.repositories(.githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
+          .send(
+            .repositories(
+              .githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
           .send(
             .repositories(
               .githubIntegration(
@@ -478,6 +560,8 @@ struct AppFeature {
           },
           .run { _ in
             await dockClient.setNotificationBadge(badgeCount)
+            guard customCommandsRefreshed else { return }
+            await customShortcutRegistryClient.setShortcuts(refreshedShortcuts)
           }
         )
 
@@ -542,7 +626,8 @@ struct AppFeature {
         return .send(.openSelectedWorktree)
 
       case .openSelectedWorktree:
-        return .send(.openWorktree(OpenWorktreeAction.availableSelection(state.openActionSelection)))
+        guard let context = actionTargetContext(state: state) else { return .none }
+        return .send(.openWorktreeForWorktree(context.openAction, context.worktree.id))
 
       case .showSelectedWorktreeDiff:
         return openSelectedWorktreeDiffEffect(state: state)
@@ -551,6 +636,58 @@ struct AppFeature {
         guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
+        analyticsClient.capture("worktree_opened", ["action": action.settingsID])
+        if action == .editor {
+          let shouldRunSetupScript =
+            state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+          return .run { _ in
+            await terminalClient.send(
+              .createTabWithInput(
+                worktree,
+                input: "$EDITOR",
+                runSetupScriptIfNew: shouldRunSetupScript,
+                autoCloseOnSuccess: false
+              )
+            )
+          }
+        }
+        return .run { send in
+          await workspaceClient.open(action, worktree) { error in
+            send(.openWorktreeFailed(error))
+          }
+        }
+
+      case .openActionSelectionChangedForWorktree(let action, let worktreeID):
+        guard let worktree = state.repositories.worktree(for: worktreeID) else { return .none }
+        // Don't mutate state.openActionSelection — that field is bound to the
+        // sidebar-selected worktree's repo. The canvas focused-card view reads
+        // its own openActionSelection from @Shared of the focused
+        // worktree's repository settings.
+        let rootURL = worktree.repositoryRootURL
+        let actionID = action.settingsID
+        @Shared(.repositorySettings(rootURL)) var repositorySettings
+        $repositorySettings.withLock { $0.openActionID = actionID }
+        return .none
+
+      case .openActionResetToAutomaticForWorktree(let worktreeID):
+        guard let worktree = state.repositories.worktree(for: worktreeID) else { return .none }
+        // Pin the focused card's repo to automatic and reopen it — mirrors
+        // `.openActionResetToAutomatic` ("the Automatic entry always opens"),
+        // but scoped to `worktreeID` and without mutating the sidebar-bound
+        // `state.openActionSelection` (the canvas card reads its own from @Shared).
+        let rootURL = worktree.repositoryRootURL
+        @Shared(.repositorySettings(rootURL)) var repositorySettings
+        $repositorySettings.withLock { $0.openActionID = OpenWorktreeAction.automaticSettingsID }
+        @Shared(.settingsFile) var settingsFile
+        let resolved = OpenWorktreeAction.fromSettingsID(
+          OpenWorktreeAction.automaticSettingsID,
+          defaultEditorID: settingsFile.global.defaultEditorID,
+          workingDirectory: worktree.workingDirectory
+        )
+        return .send(.openWorktreeForWorktree(resolved, worktreeID))
+
+      case .openWorktreeForWorktree(let action, let worktreeID):
+        guard let worktree = state.repositories.worktree(for: worktreeID) else { return .none }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
         if action == .editor {
           let shouldRunSetupScript =
@@ -647,32 +784,30 @@ struct AppFeature {
         return .none
 
       case .runScript:
-        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
-          return .none
-        }
-        let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let context = actionTargetContext(state: state) else { return .none }
+        let worktree = context.worktree
+        let script = context.runScript
+        let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
           if state.isRunScriptPromptPresented {
             return .none
           }
-          state.runScriptDraft = state.selectedRunScript
+          state.runScriptDraft = script
           state.isRunScriptPromptPresented = true
           return .none
         }
         analyticsClient.capture("script_run", nil)
-        let script = state.selectedRunScript
         return .run { _ in
           await terminalClient.send(.runScript(worktree, script: script))
         }
 
       case .runCustomCommand(let index):
-        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
+        guard let context = actionTargetContext(state: state) else { return .none }
+        let worktree = context.worktree
+        guard context.commands.indices.contains(index) else {
           return .none
         }
-        guard state.selectedCustomCommands.indices.contains(index) else {
-          return .none
-        }
-        let customCommand = state.selectedCustomCommands[index]
+        let customCommand = context.commands[index]
         guard customCommand.hasRunnableCommand else {
           return .none
         }
@@ -719,6 +854,75 @@ struct AppFeature {
         case .terminalInput:
           return .run { _ in
             await terminalClient.send(.insertText(worktree, text: command))
+          }
+        }
+
+      case .runCustomCommandOnWorktrees(let customCommand, let worktreeIDs):
+        guard customCommand.hasRunnableCommand else { return .none }
+        let worktrees = worktreeIDs.compactMap { state.repositories.worktree(for: $0) }
+        guard !worktrees.isEmpty else { return .none }
+        // Stale worktree IDs (e.g. archived between toolbar render and key press)
+        // are silently filtered by the compactMap above. Surface a warning so a
+        // broadcast dispatch that hits only a subset of the user-selected cards
+        // doesn't appear to "just work" — quiet partial fan-out has bitten us.
+        let requestedCount = worktreeIDs.count
+        let dispatchedCount = worktrees.count
+        let logPartialDrop: @Sendable () -> Void = {
+          guard dispatchedCount < requestedCount else { return }
+          SupaLogger("Commands").warning(
+            "runCustomCommandOnWorktrees: dispatched to \(dispatchedCount) of "
+              + "\(requestedCount) worktrees (\(requestedCount - dispatchedCount) "
+              + "stale IDs filtered)"
+          )
+        }
+        let command = customCommand.command
+        let closeOnSuccess = customCommand.closeOnSuccess
+        let commandName = customCommand.resolvedTitle
+        let commandIcon: String? = {
+          let trimmed = customCommand.systemImage.trimmingCharacters(in: .whitespacesAndNewlines)
+          guard !trimmed.isEmpty, trimmed != "terminal" else { return nil }
+          return trimmed
+        }()
+        let direction = customCommand.splitDirection
+        switch customCommand.execution {
+        case .shellScript:
+          return .run { _ in
+            logPartialDrop()
+            for worktree in worktrees {
+              await terminalClient.send(
+                .createTabWithInput(
+                  worktree,
+                  input: command,
+                  runSetupScriptIfNew: false,
+                  autoCloseOnSuccess: closeOnSuccess,
+                  customCommandName: commandName,
+                  customCommandIcon: commandIcon
+                )
+              )
+            }
+          }
+        case .split:
+          return .run { _ in
+            logPartialDrop()
+            for worktree in worktrees {
+              await terminalClient.send(
+                .createSplitWithInput(
+                  worktree,
+                  direction: direction,
+                  input: command,
+                  autoCloseOnSuccess: closeOnSuccess,
+                  customCommandName: commandName,
+                  customCommandIcon: commandIcon
+                )
+              )
+            }
+          }
+        case .terminalInput:
+          return .run { _ in
+            logPartialDrop()
+            for worktree in worktrees {
+              await terminalClient.send(.insertText(worktree, text: command))
+            }
           }
         }
 
@@ -791,66 +995,53 @@ struct AppFeature {
         return .send(.runScript)
 
       case .stopRunScript:
-        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
-          return .none
-        }
+        guard let context = actionTargetContext(state: state) else { return .none }
+        let worktree = context.worktree
         return .run { _ in
           await terminalClient.send(.stopRunScript(worktree))
         }
 
       case .closeTab:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
-          return .none
-        }
+        guard let context = actionTargetContext(state: state) else { return .none }
+        let worktree = context.worktree
         analyticsClient.capture("terminal_tab_closed", nil)
         return .run { _ in
           await terminalClient.send(.closeFocusedTab(worktree))
         }
 
       case .closeSurface:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
-          return .none
-        }
+        guard let context = actionTargetContext(state: state) else { return .none }
+        let worktree = context.worktree
         return .run { _ in
           await terminalClient.send(.closeFocusedSurface(worktree))
         }
 
       case .startSearch:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
-          return .none
-        }
+        guard let worktree = actionTargetContext(state: state)?.worktree else { return .none }
         return .run { _ in
           await terminalClient.send(.startSearch(worktree))
         }
 
       case .searchSelection:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
-          return .none
-        }
+        guard let worktree = actionTargetContext(state: state)?.worktree else { return .none }
         return .run { _ in
           await terminalClient.send(.searchSelection(worktree))
         }
 
       case .navigateSearchNext:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
-          return .none
-        }
+        guard let worktree = actionTargetContext(state: state)?.worktree else { return .none }
         return .run { _ in
           await terminalClient.send(.navigateSearchNext(worktree))
         }
 
       case .navigateSearchPrevious:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
-          return .none
-        }
+        guard let worktree = actionTargetContext(state: state)?.worktree else { return .none }
         return .run { _ in
           await terminalClient.send(.navigateSearchPrevious(worktree))
         }
 
       case .endSearch:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
-          return .none
-        }
+        guard let worktree = actionTargetContext(state: state)?.worktree else { return .none }
         return .run { _ in
           await terminalClient.send(.endSearch(worktree))
         }
@@ -913,6 +1104,42 @@ struct AppFeature {
           }
         )
 
+      case .systemNotificationReplied(let worktreeID, let surfaceID, let text):
+        // Slack-style quick reply: deliver the typed text to the originating pane
+        // without navigating to it. Empty/whitespace-only replies are ignored.
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .none }
+        guard let worktree = state.repositories.worktree(for: worktreeID) else {
+          notificationJumpLogger.warning("Replied notification worktree vanished: \(worktreeID)")
+          return .send(.repositories(.showToast(.warning("Reply not sent — that agent is no longer available"))))
+        }
+        return .run { send in
+          // `sendTextToSurface` returns false when the target pane closed between
+          // the banner appearing and the reply being sent; surface that rather
+          // than silently dropping the message.
+          let delivered = await terminalClient.sendTextToSurface(worktree, surfaceID, text, true)
+          if delivered {
+            await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
+          } else {
+            await send(.repositories(.showToast(.warning("Reply not sent — the agent pane is no longer open"))))
+          }
+        }
+
+      case .systemNotificationAnswered(let worktreeID, let surfaceID, let key):
+        // Deliver the chosen option as a real keypress (the option's digit) to the
+        // pane — pasted text wouldn't register in Claude's permission selector.
+        guard let worktree = state.repositories.worktree(for: worktreeID) else {
+          notificationJumpLogger.warning("Answered notification worktree vanished: \(worktreeID)")
+          return .send(.repositories(.showToast(.warning("Answer not sent — that agent is no longer available"))))
+        }
+        return .run { send in
+          let delivered = await terminalClient.sendKeyToken(worktree, surfaceID, key)
+          if delivered {
+            await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
+          } else {
+            await send(.repositories(.showToast(.warning("Answer not sent — the agent pane is no longer open"))))
+          }
+        }
+
       case .alert(.dismiss):
         state.alert = nil
         return .none
@@ -925,6 +1152,84 @@ struct AppFeature {
         }
 
       case .alert:
+        return .none
+
+      case .toggleQuickSend:
+        // ⌘⇧P toggles: dismiss when already visible (panel visibility tracks
+        // `state.quickSend`), otherwise present it.
+        guard state.quickSend != nil else {
+          return .send(.presentQuickSend(defaultAgentID: nil))
+        }
+        state.lastSelectedQuickSendAgentID = state.quickSend?.selectedAgentID
+        state.quickSend = nil
+        return .run { _ in await quickSendPanelClient.hide() }
+
+      case .presentQuickSend(let defaultAgentID):
+        let agents = state.repositories.activeAgents.entries
+        guard !agents.isEmpty else { return .none }
+        // Resolve per-agent repo/branch labels via the same SSOT the sidebar and
+        // menubar use, so the panel's rows match the Active Agents styling.
+        let metadata = SidebarListView.activeAgentWorktreeMetadata(
+          repositories: state.repositories.repositories,
+          customTitles: state.repositories.repositoryCustomTitles
+        )
+        let displays = SidebarListView.activeAgentRowDisplays(
+          entries: agents,
+          repositories: state.repositories.repositories,
+          metadata: metadata
+        )
+        // The shortcut passes nil → prefer the agent the user last targeted this
+        // session (when it's still active), else fall back to the focused agent.
+        let resolvedDefault =
+          defaultAgentID
+          ?? state.lastSelectedQuickSendAgentID.flatMap { id in
+            agents.contains(where: { $0.id == id }) ? id : nil
+          }
+          ?? state.repositories.activeAgents.focusedSurfaceID.flatMap { focused in
+            agents.first { $0.surfaceID == focused }?.id
+          }
+        state.quickSend = QuickSendFeature.State(
+          agents: agents, displays: displays, selectedAgentID: resolvedDefault
+        )
+        return .run { _ in await quickSendPanelClient.show() }
+
+      case .quickSend(.delegate(.send(let agent, let text))):
+        guard let worktree = state.repositories.worktree(for: agent.worktreeID) else {
+          // Worktree archived/removed mid-compose — can't deliver. Treat it as a
+          // failed send so the composer + text stay open (pick another agent).
+          return .send(.quickSendDelivered(false))
+        }
+        // Keep the composer (and the typed text) open until delivery is confirmed —
+        // a failed send must not discard what the user wrote.
+        return .run { send in
+          let delivered = await terminalClient.sendTextToSurface(worktree, agent.surfaceID, text, true)
+          await send(.quickSendDelivered(delivered))
+        }
+
+      case .quickSendDelivered(let delivered):
+        guard delivered else {
+          // Delivery failed (pane closed or worktree gone). Keep the composer + text
+          // open so the user can retry or pick another agent instead of retyping.
+          return .send(
+            .repositories(
+              .showToast(.warning("Message not sent — that agent is no longer available. Try again or pick another."))
+            )
+          )
+        }
+        // Keep the panel open for follow-up messages instead of dismissing: remember
+        // the target, clear the composer so the next message starts fresh (and a stray
+        // ⌘↩ can't re-send the same text), and confirm delivery with a toast since the
+        // panel no longer closes to signal success.
+        state.lastSelectedQuickSendAgentID = state.quickSend?.selectedAgentID
+        state.quickSend?.draft = ""
+        return .send(.repositories(.showToast(.success("Message sent"))))
+
+      // `.delegate(.cancelled)` / `.delegate(.focusAgent)` dismiss the panel by nil-ing
+      // `state.quickSend`. That nil-ing is deferred to a `Reduce` AFTER `.ifLet` (see the
+      // body composition below) so the child reducer still handles the delegate while its
+      // state is non-nil — otherwise `.ifLet` routes a child action to nil child state,
+      // which TCA flags as a runtime warning (benign in release, a `TestStore` failure).
+      case .quickSend:
         return .none
 
       case .repositories:
@@ -967,6 +1272,31 @@ struct AppFeature {
     }
     Scope(state: \.commandPalette, action: \.commandPalette) {
       CommandPaletteFeature()
+    }
+    .ifLet(\.quickSend, action: \.quickSend) {
+      QuickSendFeature()
+    }
+    Reduce<State, Action> { state, action in
+      // Dismiss the quick-send panel on the child's cancel/focus delegates. Runs AFTER
+      // `.ifLet` so the child reducer handles the delegate while `state.quickSend` is
+      // still non-nil; nil-ing it here avoids the "ifLet received a child action when
+      // child state was nil" runtime warning.
+      switch action {
+      case .quickSend(.delegate(.cancelled)):
+        state.lastSelectedQuickSendAgentID = state.quickSend?.selectedAgentID
+        state.quickSend = nil
+        return .run { _ in await quickSendPanelClient.hide() }
+      case .quickSend(.delegate(.focusAgent(let agent))):
+        state.lastSelectedQuickSendAgentID = state.quickSend?.selectedAgentID
+        state.quickSend = nil
+        return .merge(
+          .send(.repositories(.activeAgents(.entryTapped(agent.id)))),
+          .run { _ in await quickSendPanelClient.hide() },
+          .run { @MainActor _ in _ = appLifecycleClient.surfaceMainWindow() }
+        )
+      default:
+        return .none
+      }
     }
   }
 }

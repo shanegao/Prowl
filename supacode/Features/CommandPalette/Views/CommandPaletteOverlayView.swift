@@ -517,7 +517,8 @@ private struct CommandPaletteRowView: View {
     switch row.kind {
     case .checkForUpdates, .openRepository, .newWorkspace, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
-      .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
+      .openPullRequest, .openRepositoryOnCodeHost, .openBranchOnCodeHost, .markPullRequestReady,
+      .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon,
@@ -526,7 +527,9 @@ private struct CommandPaletteRowView: View {
       .toggleShelf, .showDiff,
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-      .openRepositorySettings, .runCustomCommand:
+      .openRepositorySettings, .runCustomCommand,
+      .toggleWorktreeCanvas, .toggleRepositoryCanvas,
+      .pinWorktree, .unpinWorktree, .copyWorktreePath, .revealWorktreeInFinder:
       return nil
     case .deleteWorktree:
       return "Delete"
@@ -559,6 +562,20 @@ private struct CommandPaletteRowView: View {
       return "terminal"
     case .openPullRequest, .openRepositoryOnCodeHost:
       return "arrow.up.right.square"
+    case .openBranchOnCodeHost:
+      return "arrow.triangle.branch"
+    case .toggleWorktreeCanvas:
+      return "rectangle.split.2x2"
+    case .toggleRepositoryCanvas:
+      return "square.grid.3x3"
+    case .pinWorktree:
+      return "pin"
+    case .unpinWorktree:
+      return "pin.slash"
+    case .copyWorktreePath:
+      return "doc.on.doc"
+    case .revealWorktreeInFinder:
+      return "folder"
     case .markPullRequestReady:
       return "checkmark.seal"
     case .mergePullRequest:
@@ -634,7 +651,8 @@ private struct CommandPaletteRowView: View {
     switch row.kind {
     case .checkForUpdates, .openRepository, .newWorkspace, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
-      .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
+      .openPullRequest, .openRepositoryOnCodeHost, .openBranchOnCodeHost, .markPullRequestReady,
+      .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .changeFocusedTabIcon,
@@ -644,7 +662,9 @@ private struct CommandPaletteRowView: View {
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
       .openRepositorySettings,
-      .deleteWorktree, .runCustomCommand:
+      .deleteWorktree, .runCustomCommand,
+      .toggleWorktreeCanvas, .toggleRepositoryCanvas,
+      .pinWorktree, .unpinWorktree, .copyWorktreePath, .revealWorktreeInFinder:
       return true
     case .worktreeSelect:
       return false
@@ -748,6 +768,20 @@ private struct CommandPaletteRowView: View {
       base = row.title
     case .openPullRequest, .openRepositoryOnCodeHost:
       base = row.title
+    case .openBranchOnCodeHost:
+      base = row.title
+    case .toggleWorktreeCanvas:
+      base = "Toggle Worktree Canvas"
+    case .toggleRepositoryCanvas:
+      base = "Toggle Repo Canvas"
+    case .pinWorktree:
+      base = "Pin Worktree to Top"
+    case .unpinWorktree:
+      base = "Unpin Worktree"
+    case .copyWorktreePath:
+      base = "Copy Worktree Path"
+    case .revealWorktreeInFinder:
+      base = "Reveal Worktree in Finder"
     case .markPullRequestReady:
       base = "Mark pull request ready for review"
     case .mergePullRequest:

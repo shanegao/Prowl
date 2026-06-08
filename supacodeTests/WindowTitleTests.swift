@@ -30,7 +30,7 @@ struct WindowTitleTests {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     var state = RepositoriesFeature.State()
 
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
     #expect(WindowTitle.compute(repositories: state, terminalManager: manager) == "Canvas")
 
     state.selection = .archivedWorktrees

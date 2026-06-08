@@ -431,30 +431,41 @@ struct AppFeatureCustomCommandTests {
   @Test(.dependencies) func customCommandUsesCanvasFocusedWorktree() async {
     let worktree = makeWorktree()
     let sent = LockIsolated<[TerminalClient.Command]>([])
-    var repositories = makeRepositoriesState(worktree: worktree)
-    repositories.selection = .canvas
-    var state = AppFeature.State(
-      repositories: repositories,
-      settings: SettingsFeature.State()
+    let canvasCommand = UserCustomCommand(
+      title: "Canvas Build",
+      systemImage: "hammer",
+      command: "make build",
+      execution: .shellScript,
+      shortcut: nil
     )
-    state.selectedCustomCommands = [
-      UserCustomCommand(
-        title: "Canvas Build",
-        systemImage: "hammer",
-        command: "make build",
-        execution: .shellScript,
-        shortcut: nil
-      )
-    ]
 
-    let store = TestStore(initialState: state) {
-      AppFeature()
-    } withDependencies: {
-      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
-      $0.terminalClient.send = { command in
-        sent.withValue { $0.append(command) }
+    // In canvas mode, `actionTargetContext` reads per-repo commands from
+    // `@Shared(.userRepositorySettings)` rather than `state.selectedCustomCommands`.
+    // Seed the shared storage so `.runCustomCommand(0)` resolves an entry.
+    let store = withDependencies {
+      $0.defaultFileStorage = .inMemory
+    } operation: {
+      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var userSettings
+      $userSettings.withLock { $0.customCommands = [canvasCommand] }
+
+      var repositories = makeRepositoriesState(worktree: worktree)
+      repositories.selection = .canvas(.overall)
+      var state = AppFeature.State(
+        repositories: repositories,
+        settings: SettingsFeature.State()
+      )
+      state.selectedCustomCommands = [canvasCommand]
+
+      return TestStore(initialState: state) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
+        $0.terminalClient.send = { command in
+          sent.withValue { $0.append(command) }
+        }
       }
     }
+    store.exhaustivity = .off
 
     await store.send(.runCustomCommand(0))
     await store.finish()
@@ -476,7 +487,7 @@ struct AppFeatureCustomCommandTests {
   @Test(.dependencies) func canvasFocusLoadsFocusedWorktreeCustomCommands() async {
     let worktree = makeWorktree()
     var repositories = makeRepositoriesState(worktree: worktree)
-    repositories.selection = .canvas
+    repositories.selection = .canvas(.overall)
     let settings = UserRepositorySettings(
       customCommands: [
         UserCustomCommand(
@@ -552,7 +563,7 @@ struct AppFeatureCustomCommandTests {
       $userRepositorySettingsB.withLock { $0.customCommands = [commandB] }
 
       var repositories = makeRepositoriesState(worktrees: [worktreeA, worktreeB])
-      repositories.selection = .canvas
+      repositories.selection = .canvas(.overall)
       var state = AppFeature.State(
         repositories: repositories,
         settings: SettingsFeature.State()

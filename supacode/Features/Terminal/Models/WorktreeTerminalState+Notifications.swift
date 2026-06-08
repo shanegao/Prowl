@@ -57,6 +57,15 @@ extension WorktreeTerminalState {
     emitNotificationIndicatorIfNeeded(previousHasUnseen: previousHasUnseen)
   }
 
+  /// Removes only notifications that have been marked read. Unread entries are
+  /// preserved (and their unseen-indicator state is unchanged), so the user can
+  /// purge their backlog without losing notifications they haven't acted on yet.
+  func dismissReadNotifications() {
+    let previousHasUnseen = hasUnseenNotification
+    notifications.removeAll { $0.isRead }
+    emitNotificationIndicatorIfNeeded(previousHasUnseen: previousHasUnseen)
+  }
+
   func recordKeyInput(forSurfaceID surfaceId: UUID) {
     lastKeyInputTimeBySurface[surfaceId] = .now
   }

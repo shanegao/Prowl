@@ -17,6 +17,27 @@ struct OpenWorktreeActionTests {
     #expect(settingsIDs.contains("pycharm"))
   }
 
+  /// `actionTargetContext` resolves a canvas-focused worktree's Open-In action via
+  /// `fromSettingsID(repoSettings.openActionID)`. If `.codex` didn't round-trip,
+  /// opening a Codex-configured worktree from the canvas would silently fall back
+  /// to the default editor.
+  @Test func codexSettingsIDRoundTrips() {
+    #expect(OpenWorktreeAction.codex.settingsID == "codex")
+    #expect(
+      OpenWorktreeAction.fromSettingsID("codex", defaultEditorID: nil).settingsID == "codex")
+  }
+
+  /// Every open action's `settingsID` must round-trip through `fromSettingsID`
+  /// (none collides with the reserved "auto" id). Guards future enum additions.
+  @Test func allOpenActionSettingsIDsRoundTrip() {
+    for action in OpenWorktreeAction.allCases {
+      let resolved = OpenWorktreeAction.fromSettingsID(action.settingsID, defaultEditorID: nil)
+      #expect(
+        resolved.settingsID == action.settingsID,
+        "settingsID did not round-trip: \(action.settingsID)")
+    }
+  }
+
   @Test func menuOrderIncludesAllCases() {
     #expect(Set(OpenWorktreeAction.menuOrder) == Set(OpenWorktreeAction.allCases))
     #expect(OpenWorktreeAction.menuOrder.count == OpenWorktreeAction.allCases.count)

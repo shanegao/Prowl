@@ -429,6 +429,14 @@ struct RepositoriesFeature {
     case selectShelfBook(Int)
     case markWorktreeOpened(Worktree.ID)
     case markWorktreeClosed(Worktree.ID)
+    case selectWorktreeCanvas(Worktree.ID)
+    case toggleWorktreeCanvas(Worktree.ID)
+    case selectRepositoryCanvas(Repository.ID)
+    case toggleRepositoryCanvas(Repository.ID)
+    case selectActiveAgentsCanvas
+    case toggleActiveAgentsCanvas
+    case exitCanvasToWorktree(Worktree.ID)
+    case exitCanvasToRepository(Repository.ID)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case openWorkspaceChild(String)
@@ -451,6 +459,7 @@ struct RepositoriesFeature {
     case worktreeInfoEvent(WorktreeInfoWatcherClient.Event)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, added: Int, removed: Int)
+    case worktreeBranchStateLoaded(worktreeID: Worktree.ID, aheadBehind: AheadBehind?, isPushed: Bool?)
     case workspaceChildrenInfoLoaded([WorkspaceChildInfoUpdate])
     case showToast(StatusToast)
     case dismissToast
@@ -507,6 +516,10 @@ struct RepositoriesFeature {
 
   enum PullRequestAction: Equatable {
     case openOnCodeHost
+    case openBranchOnCodeHost
+    /// Opens the branch page when the branch is on the remote, otherwise the
+    /// repository page. Backs the toolbar's no-PR code-host tap.
+    case openBranchOrRepoOnCodeHost
     case markReadyForReview
     case merge
     case close

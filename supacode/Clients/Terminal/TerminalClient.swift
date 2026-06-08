@@ -13,6 +13,23 @@ struct TerminalClient {
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var markNotificationsReadForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Void
+  /// Types `text` into the pane identified by `surfaceID` (regardless of current
+  /// focus) and presses Return when `trailingEnter` is true. Returns whether the
+  /// text was actually delivered — `false` when the worktree has no terminal
+  /// state or the target surface is gone (the agent pane closed between composing
+  /// and sending), so the caller can surface the failure instead of silently
+  /// dropping the user's message. Routes through `WorktreeTerminalState`'s
+  /// `insertCommittedText(_:in:)` + `submitLine(in:)` — the same surface-level
+  /// injection the `prowl send` CLI uses. Backs the quick-send-to-agent panel.
+  var sendTextToSurface: @MainActor @Sendable (Worktree, UUID, String, Bool) -> Bool
+  /// Sends a single key token (e.g. "1", "enter", "esc") to the pane identified by
+  /// `surfaceID` as a real keypress — the path that answers an agent's TUI prompt
+  /// (a Claude permission selection), where pasted text wouldn't register. Returns
+  /// whether it was delivered. Mirrors the `prowl key` CLI's key injection.
+  var sendKeyToken: @MainActor @Sendable (Worktree, UUID, String) -> Bool
+  /// Reads the pane's visible text and parses a Claude permission prompt from it,
+  /// or `nil` when none is found. Backs the actionable permission notification.
+  var readPermissionPrompt: @MainActor @Sendable (Worktree.ID, UUID) -> ClaudePermissionPrompt?
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
@@ -53,6 +70,12 @@ struct TerminalClient {
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
     case setCanvasMode(Bool)
     case setSelectedWorktreeID(Worktree.ID?)
+    /// Externally requested canvas focus. `WorktreeTerminalManager` writes the
+    /// value to `canvasFocusedWorktreeID`; `CanvasView` observes that field and
+    /// switches its primary card to the worktree's first tab when the request
+    /// diverges from the current primary. Used by repo-canvas sidebar taps to
+    /// move focus to the tapped worktree without exiting canvas.
+    case setCanvasFocusedWorktreeID(Worktree.ID?)
     case saveLayoutSnapshot
     case restoreLayoutSnapshot(worktrees: [Worktree])
     case presentTabIconPicker(Worktree)
@@ -86,7 +109,10 @@ extension TerminalClient: DependencyKey {
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
-    markNotificationsReadForSurface: { _, _ in }
+    markNotificationsReadForSurface: { _, _ in },
+    sendTextToSurface: { _, _, _, _ in false },
+    sendKeyToken: { _, _, _ in false },
+    readPermissionPrompt: { _, _ in nil }
   )
 
   static let testValue = TerminalClient(
@@ -97,7 +123,10 @@ extension TerminalClient: DependencyKey {
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
-    markNotificationsReadForSurface: { _, _ in }
+    markNotificationsReadForSurface: { _, _ in },
+    sendTextToSurface: { _, _, _, _ in true },
+    sendKeyToken: { _, _, _ in false },
+    readPermissionPrompt: { _, _ in nil }
   )
 }
 

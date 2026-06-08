@@ -609,6 +609,51 @@ struct GitClient {
     }
     return Self.prioritizedGithubRemoteInfos(candidates)
   }
+  /// Whether `branch` exists on the `origin` remote, using the local
+  /// remote-tracking ref (`refs/remotes/origin/<branch>`) — no network, so it's
+  /// instant and reflects the last fetch. Used to decide whether the toolbar's
+  /// code-host tap opens the branch page or falls back to the repository page
+  /// (a local/unpushed branch has no branch page yet) and to drive the no-PR
+  /// status item's "not pushed" indicator.
+  ///
+  /// Returns `true` when the ref is present, `false` on a confirmed absence, and
+  /// `nil` when the check could not be determined (a git failure). `for-each-ref`
+  /// exits 0 whether or not the pattern matches, so a thrown error here means a
+  /// genuine git failure — letting us distinguish "unknown" from "absent" rather
+  /// than collapsing both to `false` (as `show-ref`, which exits non-zero on
+  /// no-match, would force).
+  nonisolated func remoteBranchExists(for repositoryRoot: URL, branch: String) async -> Bool? {
+    guard !branch.isEmpty else { return false }
+    let path = repositoryRoot.path(percentEncoded: false)
+    let ref = "refs/remotes/origin/\(branch)"
+    guard
+      let output = try? await runGit(
+        operation: .remoteBranchExists,
+        arguments: ["-C", path, "for-each-ref", "--format=%(refname)", ref]
+      )
+    else { return nil }
+    return output.split(separator: "\n").contains { String($0) == ref }
+  }
+
+  /// Commits the worktree's `HEAD` is ahead of / behind the repo's base (the
+  /// default remote branch, e.g. `origin/main`). Computed locally from the
+  /// remote-tracking graph (no network) via
+  /// `git rev-list --left-right --count <base>...HEAD`, whose output is
+  /// "<behind>\t<ahead>". Returns `nil` when no base resolves or the counts
+  /// can't be parsed.
+  nonisolated func aheadBehind(for worktreeRoot: URL, repositoryRoot: URL) async -> (ahead: Int, behind: Int)? {
+    guard let base = (try? await defaultRemoteBranchRef(for: repositoryRoot)) ?? nil else { return nil }
+    let path = worktreeRoot.path(percentEncoded: false)
+    guard
+      let output = try? await runGit(
+        operation: .aheadBehind,
+        arguments: ["-C", path, "rev-list", "--left-right", "--count", "\(base)...HEAD"]
+      )
+    else { return nil }
+    let counts = output.split(whereSeparator: { $0 == "\t" || $0 == " " }).compactMap { Int($0) }
+    guard counts.count == 2 else { return nil }
+    return (ahead: counts[1], behind: counts[0])
+  }
 
   nonisolated func remoteInfo(for repositoryRoot: URL) async -> GithubRemoteInfo? {
     guard let remoteWebInfo = await remoteWebInfo(for: repositoryRoot) else {

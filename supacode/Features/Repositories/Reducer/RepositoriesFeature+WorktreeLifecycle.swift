@@ -217,9 +217,18 @@ extension RepositoriesFeature {
         }
         state.archivedWorktrees.append(ArchivedWorktree(id: worktreeID, archivedAt: now))
         if selectionWasRemoved {
-          let nextWorktreeID = nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
-          state.selection = nextWorktreeID.map(SidebarSelection.worktree)
-          state.selectedWorkspaceChildID = nil
+          // selectionWasRemoved only fires when state.selectedWorktreeID
+          // matched the archived worktree — including the per-worktree
+          // canvas case (.canvas(.worktree(id))). Stay in canvas and fall
+          // back to overall scope to mirror applyRepositories' recovery,
+          // rather than silently exiting canvas via .worktree(...).
+          if state.isShowingCanvas {
+            state.selection = .canvas(.overall)
+          } else {
+            let nextWorktreeID = nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
+            state.selection = nextWorktreeID.map(SidebarSelection.worktree)
+            state.selectedWorkspaceChildID = nil
+          }
         }
       }
       let archivedWorktrees = state.archivedWorktrees

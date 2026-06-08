@@ -374,8 +374,26 @@ struct CommandPaletteFuzzyScorer {
       return (0, [])
     }
 
-    let targetLower = Array(target.lowercased())
-    let queryLower = Array(query.normalizedLowercase)
+    let targetLowerString = target.lowercased()
+    let targetLower = Array(targetLowerString)
+    let queryLowerString = query.normalizedLowercase
+    let queryLower = Array(queryLowerString)
+    // Fast path: when the query occurs as a verbatim substring, prefer its best
+    // contiguous run over the scattered DP scorer — an exact substring should always
+    // outrank a fuzzy match, and the run gives tighter highlights. The grapheme-level
+    // `range(of:)` gate can occasionally disagree with the character-array compare
+    // (composed vs decomposed forms); if so `bestContiguousMatch` returns nil and we
+    // fall through to `doScoreFuzzy`.
+    if targetLowerString.range(of: queryLowerString) != nil {
+      if let contiguousMatch = bestContiguousMatch(
+        query: queryChars,
+        queryLower: queryLower,
+        target: targetChars,
+        targetLower: targetLower
+      ) {
+        return contiguousMatch
+      }
+    }
 
     return doScoreFuzzy(
       query: queryChars,
@@ -475,6 +493,54 @@ struct CommandPaletteFuzzyScorer {
     positions.reverse()
     let finalScore = mutableScores[queryLength * targetLength - 1]
     return (finalScore, positions)
+  }
+
+  /// The highest-scoring contiguous window where `query` matches `target` verbatim
+  /// (case-insensitive, with `/`≈`\` via `considerAsEqual`). Scans every start offset
+  /// the run fits, scores each window with `computeCharScore`, and keeps the best —
+  /// left-most on a tie (strict `>`). Returns the run's `(score, positions)`, or nil
+  /// when no contiguous run matches. Lets an exact substring outrank a scattered
+  /// fuzzy match (see the fast path in `scoreFuzzy`).
+  func bestContiguousMatch(
+    query: [Character],
+    queryLower: [Character],
+    target: [Character],
+    targetLower: [Character]
+  ) -> (Int, [Int])? {
+    guard query.count <= target.count else { return nil }
+
+    var bestScore = 0
+    var bestPositions: [Int]?
+    for start in 0...(target.count - query.count) {
+      var matches = true
+      for offset in 0..<query.count
+      where !considerAsEqual(queryLower[offset], targetLower[start + offset]) {
+        matches = false
+        break
+      }
+      guard matches else { continue }
+
+      var score = 0
+      for offset in 0..<query.count {
+        score += computeCharScore(
+          CharScoreContext(
+            queryChar: query[offset],
+            queryLowerChar: queryLower[offset],
+            target: target,
+            targetLower: targetLower,
+            targetIndex: start + offset,
+            matchesSequenceLength: offset
+          )
+        )
+      }
+      if score > bestScore {
+        bestScore = score
+        bestPositions = Array(start..<(start + query.count))
+      }
+    }
+
+    guard let bestPositions else { return nil }
+    return (bestScore, bestPositions)
   }
 
   struct CharScoreContext {

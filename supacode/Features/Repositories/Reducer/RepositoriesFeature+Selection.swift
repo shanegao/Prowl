@@ -125,8 +125,12 @@ func isSidebarSelectionValid(
     return isSelectionValid(id, state: state)
   case .repository(let id):
     return state.repositories[id: id] != nil
-  case .archivedWorktrees, .canvas:
+  case .archivedWorktrees, .canvas(.overall), .canvas(.activeAgents):
     return true
+  case .canvas(.worktree(let id)):
+    return isSelectionValid(id, state: state)
+  case .canvas(.repository(let id)):
+    return state.repositories[id: id] != nil
   case nil:
     return false
   }

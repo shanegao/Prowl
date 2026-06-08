@@ -9,6 +9,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   case alacritty
   case androidStudio
   case antigravity
+  case codex
   case clion
   case editor
   case finder
@@ -52,6 +53,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .alacritty: "Alacritty"
     case .androidStudio: "Android Studio"
     case .antigravity: "Antigravity"
+    case .codex: "Codex"
     case .clion: "CLion"
     case .cursor: "Cursor"
     case .githubDesktop: "GitHub Desktop"
@@ -90,7 +92,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder: "Finder"
     case .editor: "$EDITOR"
-    case .alacritty, .androidStudio, .antigravity, .clion, .cursor, .fork, .githubDesktop, .gitkraken,
+    case .alacritty, .androidStudio, .antigravity, .codex, .clion, .cursor, .fork, .githubDesktop, .gitkraken,
       .gitup, .ghostty, .goland, .intellij, .iterm2, .kitty, .phpstorm, .pycharm, .rider, .rubymine,
       .rustrover, .smartgit, .sourcetree, .sublimeMerge, .sublimeText, .terminal, .tower, .vscode,
       .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
@@ -144,7 +146,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder, .editor:
       return true
-    case .alacritty, .androidStudio, .antigravity, .clion, .cursor, .fork, .githubDesktop, .gitkraken,
+    case .alacritty, .androidStudio, .antigravity, .codex, .clion, .cursor, .fork, .githubDesktop, .gitkraken,
       .gitup, .ghostty, .goland, .intellij, .iterm2, .kitty, .phpstorm, .pycharm, .rider, .rubymine,
       .rustrover, .smartgit, .sourcetree, .sublimeMerge, .sublimeText, .terminal, .tower, .vscode,
       .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
@@ -159,6 +161,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .alacritty: "alacritty"
     case .androidStudio: "android-studio"
     case .antigravity: "antigravity"
+    case .codex: "codex"
     case .clion: "clion"
     case .cursor: "cursor"
     case .fork: "fork"
@@ -200,6 +203,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .alacritty: "org.alacritty"
     case .androidStudio: "com.google.android.studio"
     case .antigravity: "com.google.antigravity"
+    case .codex: "com.openai.codex"
     case .clion: "com.jetbrains.CLion"
     case .cursor: "com.todesktop.230313mzl4w4u92"
     case .fork: "com.DanPristupov.Fork"
@@ -238,6 +242,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
 
   static let editorPriority: [OpenWorktreeAction] = [
     .cursor,
+    .codex,
     .zed,
     .vscode,
     .windsurf,
@@ -342,6 +347,68 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .editor:
       return
+    case .codex:
+      let searchPaths = [
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex",
+        "\(NSHomeDirectory())/.local/bin/codex",
+      ]
+      guard let codexPath = searchPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+        onError(
+          OpenActionError(
+            title: "codex CLI not found",
+            message: "Install the Codex CLI to open this worktree."
+          )
+        )
+        return
+      }
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: codexPath)
+      process.arguments = ["app", worktree.workingDirectory.path]
+      // GUI-launched Prowl inherits a minimal PATH without Homebrew paths, which
+      // breaks `#!/usr/bin/env node` in the codex CLI shebang. Inject the common
+      // shebang-interpreter locations so the child can resolve node.
+      var env = ProcessInfo.processInfo.environment
+      let additions =
+        "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:\(NSHomeDirectory())/.local/bin"
+      let existing = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+      env["PATH"] = "\(additions):\(existing)"
+      process.environment = env
+      let stderrPipe = Pipe()
+      process.standardError = stderrPipe
+      process.terminationHandler = { proc in
+        let status = proc.terminationStatus
+        let reason = proc.terminationReason
+        // Clean exit: silent. Signal exit (Ctrl+C, window close): treat as user
+        // dismissal — surfacing an alert here trains users to ignore the dialog.
+        if reason == .exit, status == 0 { return }
+        if reason == .uncaughtSignal { return }
+        let stderrData = (try? stderrPipe.fileHandleForReading.readToEnd()) ?? Data()
+        let stderrText =
+          String(data: stderrData, encoding: .utf8)?
+          .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let truncated = stderrText.count > 600 ? String(stderrText.suffix(600)) : stderrText
+        let summary = "codex exited with status \(status)"
+        let message = truncated.isEmpty ? summary : "\(summary): \(truncated)"
+        Task { @MainActor in
+          onError(
+            OpenActionError(
+              title: "Unable to open in \(actionTitle)",
+              message: message
+            )
+          )
+        }
+      }
+      do {
+        try process.run()
+      } catch {
+        onError(
+          OpenActionError(
+            title: "Unable to open in \(actionTitle)",
+            message: error.localizedDescription
+          )
+        )
+      }
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
     // Apps that require CLI arguments instead of Apple Events to open directories.

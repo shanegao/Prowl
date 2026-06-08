@@ -80,6 +80,70 @@ extension AppFeature {
     return canvasFocusedTerminalWorktree(repositories: repositories)
   }
 
+  /// Resolved target for actions that operate on "the currently active worktree"
+  /// — `.openSelectedWorktree`, `.newTerminal`, `.runScript`, `.runCustomCommand`,
+  /// `.stopRunScript`, `.closeTab`, `.closeSurface`, the search family
+  /// (`.startSearch`, `.searchSelection`, `.navigateSearchNext`,
+  /// `.navigateSearchPrevious`, `.endSearch`), and the palette dispatches
+  /// `.commandPalette(.delegate(.runCustomCommand))` and
+  /// `.commandPalette(.delegate(.ghosttyCommand))`. Branches:
+  ///
+  /// - Canvas scope is `.canvas(.worktree(id))` (per-worktree canvas) → the
+  ///   scope itself names the target. Only one card is rendered; nothing for the
+  ///   action to mis-route to. We do NOT gate on `canvasFocusedWorktreeID` here
+  ///   because the user hasn't necessarily clicked into a pane yet — they just
+  ///   opened the canvas for this worktree.
+  /// - Canvas scope is `.canvas(.repository(_))`, `.canvas(.overall)`, or
+  ///   `.canvas(.activeAgents)` (multi-card canvas) → multiple worktree cards
+  ///   are visible. Require `canvasFocusedWorktreeID` to disambiguate; if no
+  ///   card has focus or the focused id no longer resolves, return `nil` so
+  ///   menu items become inert instead of silently picking an arbitrary card.
+  /// - Canvas is not showing → falls back to `selectedTerminalWorktree`.
+  ///
+  /// Returns `nil` whenever the active branch can't produce a target.
+  struct ActionTargetContext {
+    let worktree: Worktree
+    let runScript: String
+    let openAction: OpenWorktreeAction
+    let commands: [UserCustomCommand]
+  }
+
+  func actionTargetContext(state: State) -> ActionTargetContext? {
+    if state.repositories.isShowingCanvas {
+      let targetID: Worktree.ID?
+      if case .canvas(.worktree(let id)) = state.repositories.selection {
+        targetID = id
+      } else {
+        targetID = terminalClient.canvasFocusedWorktreeID()
+      }
+      guard let targetID,
+        let worktree = state.repositories.worktree(for: targetID)
+      else { return nil }
+      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repoSettings
+      @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var userSettings
+      return ActionTargetContext(
+        worktree: worktree,
+        runScript: repoSettings.runScript,
+        openAction: OpenWorktreeAction.fromSettingsID(
+          repoSettings.openActionID,
+          defaultEditorID: state.settings.defaultEditorID,
+          workingDirectory: worktree.workingDirectory
+        ),
+        commands: EffectiveCommandsResolver.resolve(
+          globalCommands: state.settings.globalCommands.commands,
+          perRepoCommands: userSettings.customCommands
+        )
+      )
+    }
+    guard let worktree = state.repositories.selectedTerminalWorktree else { return nil }
+    return ActionTargetContext(
+      worktree: worktree,
+      runScript: state.selectedRunScript,
+      openAction: OpenWorktreeAction.availableSelection(state.openActionSelection),
+      commands: state.selectedCustomCommands
+    )
+  }
+
   func canvasFocusedTerminalWorktree(repositories: RepositoriesFeature.State) -> Worktree? {
     guard repositories.isShowingCanvas,
       let worktreeID = terminalClient.canvasFocusedWorktreeID()
@@ -177,7 +241,15 @@ extension AppFeature {
     _ settings: UserRepositorySettings,
     into state: inout State
   ) -> Effect<Action> {
-    state.selectedCustomCommands = UserRepositorySettings.normalizedCommands(settings.customCommands)
+    // Merge with globals so global custom-command hotkeys stay registered when
+    // the canvas-focused card changes or per-worktree settings reload. Without
+    // this, `selectedCustomCommands` would drop every global the user defined,
+    // and the keybinding registry built from this list would silently omit
+    // their shortcuts. Mirrors the merge in `.settingsChanged`.
+    state.selectedCustomCommands = EffectiveCommandsResolver.resolve(
+      globalCommands: state.settings.globalCommands.commands,
+      perRepoCommands: settings.customCommands
+    )
     state.resolvedKeybindings = resolvedKeybindings(
       settings: state.settings,
       customCommands: state.selectedCustomCommands

@@ -285,7 +285,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.selectCanvas) {
       $0.repositories.preCanvasWorktreeID = worktree.id
       $0.repositories.preCanvasTerminalTargetID = worktree.id
-      $0.repositories.selection = .canvas
+      $0.repositories.selection = .canvas(.overall)
     }
     await store.finish()
 
@@ -328,7 +328,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.selectCanvas) {
       $0.repositories.preCanvasWorktreeID = worktree.id
       $0.repositories.preCanvasTerminalTargetID = worktree.id
-      $0.repositories.selection = .canvas
+      $0.repositories.selection = .canvas(.overall)
     }
     await store.finish()
 
@@ -364,7 +364,9 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.toggleShelf) {
       $0.repositories.isShelfActive = true
     }
-    await store.receive(\.repositories.selectWorktree) {
+    // toggleShelf's redirect leaves canvas via exitCanvasToWorktree (it bypasses
+    // selectWorktree's canvas-rebind path), landing on the last-focused worktree.
+    await store.receive(\.repositories.exitCanvasToWorktree) {
       $0.repositories.selection = .worktree(worktree.id)
       $0.repositories.openedWorktreeIDs = [worktree.id]
       $0.repositories.pendingTerminalFocusWorktreeIDs = [worktree.id]
@@ -412,7 +414,11 @@ struct AppFeatureTerminalLayoutRestoreTests {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var settings = SettingsFeature.State()
     settings.restoreTerminalLayoutOnLaunch = true
-    let store = TestStore(initialState: AppFeature.State(settings: settings)) {
+    var appState = AppFeature.State(settings: settings)
+    // The reducer only saves on .inactive after a real active phase (it skips
+    // the launch-time .background→.active transition), so establish that gate.
+    appState.hasObservedActivePhase = true
+    let store = TestStore(initialState: appState) {
       AppFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in

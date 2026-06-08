@@ -5,6 +5,7 @@ import SwiftUI
 struct SidebarView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
+  var showsHeaderChrome: Bool = true
   @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) private var collapsedRepositoryIDs: [Repository.ID] = []
   @State private var sidebarSelections: Set<SidebarSelection> = []
 
@@ -27,7 +28,8 @@ struct SidebarView: View {
       store: store,
       expandedRepoIDs: expandedRepoIDsBinding,
       sidebarSelections: $sidebarSelections,
-      terminalManager: terminalManager
+      terminalManager: terminalManager,
+      showsHeaderChrome: showsHeaderChrome
     )
     .focusedSceneValue(\.confirmWorktreeAction, confirmWorktreeAction)
     .focusedSceneValue(\.archiveWorktreeAction, archiveWorktreeAction)
@@ -99,7 +101,8 @@ struct SidebarView: View {
     guard !targets.isEmpty else { return nil }
     return FocusedAction(isEnabled: true, token: targets.map(\.worktreeID)) {
       if targets.count == 1, let target = targets.first {
-        store.send(.worktreeLifecycle(.requestArchiveWorktree(target.worktreeID, target.repositoryID)))
+        store.send(
+          .worktreeLifecycle(.requestArchiveWorktree(target.worktreeID, target.repositoryID)))
       } else {
         store.send(.worktreeLifecycle(.requestArchiveWorktrees(targets)))
       }
@@ -121,7 +124,8 @@ struct SidebarView: View {
     guard !targets.isEmpty else { return nil }
     return FocusedAction(isEnabled: true, token: targets.map(\.worktreeID)) {
       if targets.count == 1, let target = targets.first {
-        store.send(.worktreeLifecycle(.requestDeleteWorktree(target.worktreeID, target.repositoryID)))
+        store.send(
+          .worktreeLifecycle(.requestDeleteWorktree(target.worktreeID, target.repositoryID)))
       } else {
         store.send(.worktreeLifecycle(.requestDeleteWorktrees(targets)))
       }
@@ -143,8 +147,23 @@ struct SidebarView: View {
     state: RepositoriesFeature.State,
     visibleWorktreeIDs: Set<Worktree.ID>
   ) -> Set<SidebarSelection> {
-    if state.isShowingCanvas {
-      return [.canvas]
+    if case .canvas(.overall) = state.selection {
+      return [.canvas(.overall)]
+    }
+    if case .canvas(.worktree(let worktreeID)) = state.selection {
+      // Scoped canvas keeps the worktree row highlighted, not the "Canvas"
+      // sidebar item, so the user knows which worktree they're inspecting.
+      return [.worktree(worktreeID)]
+    }
+    if case .canvas(.repository(let repositoryID)) = state.selection {
+      // Per-repo canvas keeps the repo (or selected worktree within it)
+      // highlighted, not the "Canvas" sidebar item.
+      if let worktreeID = state.selectedWorktreeID,
+        state.repositoryID(containing: worktreeID) == repositoryID
+      {
+        return [.worktree(worktreeID)]
+      }
+      return [.repository(repositoryID)]
     }
     if state.isShowingArchivedWorktrees {
       return [.archivedWorktrees]

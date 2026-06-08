@@ -142,6 +142,19 @@ extension WorktreeTerminalState {
     focusedSurfaceIdByTab[tabId]
   }
 
+  /// Persistent focused surface ID for the given tab. Does not change when the
+  /// Prowl window loses key state — used by views that want to indicate the
+  /// "last focused" pane even while the app is inactive.
+  func focusedSurfaceId(for tabId: TerminalTabID) -> UUID? {
+    focusedSurfaceIdByTab[tabId]
+  }
+
+  /// Total terminal panes across all tabs for this worktree (sum of split-tree
+  /// leaves). Read-only — does not materialize missing trees.
+  var totalPaneCount: Int {
+    trees.values.reduce(0) { $0 + $1.leaves().count }
+  }
+
   func activeSurfaceID(for tabId: TerminalTabID) -> UUID? {
     focusedSurfaceIdByTab[tabId]
   }
@@ -654,7 +667,13 @@ extension WorktreeTerminalState {
     let now = Date()
     var isRunningNow = false
     for surface in tree.leaves() {
-      if isRunningProgressState(surface.bridge.state.progressState) {
+      // Ignore OSC 9;4 progress on agent panes: agents (e.g. Claude Code) leave a
+      // progress state set after finishing, which would pin the pane "running" even
+      // when idle/done. Agent panes report activity through the agent-busy signal
+      // (`tabAgentBusyById`); only non-agent panes drive running off raw progress.
+      if surfaceAgentStates[surface.id]?.detectedAgent == nil,
+        isRunningProgressState(surface.bridge.state.progressState)
+      {
         isRunningNow = true
         if surfaceRunningStartedAtById[surface.id] == nil {
           surfaceRunningStartedAtById[surface.id] = now

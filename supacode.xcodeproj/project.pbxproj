@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		32513D1E25BB4F418CABB2A8 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 8B2985744DB94333AE1B5878 /* Sentry */; };
 		886A649F771240E8A5AC792D /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8D787DCF45744283A83F226F /* Dependencies */; };
+		AD167561A3CBCDDA5AF5CFD4 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 6F8111797C3D1F4AB6F0C3B4 /* KeyboardShortcuts */; };
 		C8B33B9AFE69E738ABFA08BE /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 497B582F42253CBC8FBF101F /* ComposableArchitecture */; };
 		D1BB05892F5ACB5900553512 /* YiTong in Frameworks */ = {isa = PBXBuildFile; productRef = D1BB05882F5ACB5900553512 /* YiTong */; };
 		D63D00F72F2A5EEE00018D05 /* DependenciesTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D63D00F62F2A5EEE00018D05 /* DependenciesTestSupport */; };
@@ -19,8 +20,8 @@
 		D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */; };
 		D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB342F1F4AC2004FDABD /* Carbon.framework */; };
 		D6CLI0012F99000100000001 /* prowl-cli in Resources */ = {isa = PBXBuildFile; fileRef = D6CLI0022F99000100000001 /* prowl-cli */; };
-		D6DOC0012F99000300000001 /* docs in Resources */ = {isa = PBXBuildFile; fileRef = D6DOC0022F99000300000001 /* docs */; };
 		D6D054282F2E3EBF00D70ED5 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = D6D054272F2E3EBF00D70ED5 /* PostHog */; };
+		D6DOC0012F99000300000001 /* docs in Resources */ = {isa = PBXBuildFile; fileRef = D6DOC0022F99000300000001 /* docs */; };
 		DFE570C142184CC387C1BC78 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B5698573F7354B14B940EA60 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -42,7 +43,7 @@
 		D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
 		D6A1CB342F1F4AC2004FDABD /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
 		D6CLI0022F99000100000001 /* prowl-cli */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "prowl-cli"; path = "Resources/prowl-cli"; sourceTree = "<group>"; };
-		D6DOC0022F99000300000001 /* docs */ = {isa = PBXFileReference; lastKnownFileType = folder; name = docs; path = "Resources/docs"; sourceTree = "<group>"; };
+		D6DOC0022F99000300000001 /* docs */ = {isa = PBXFileReference; lastKnownFileType = folder; name = docs; path = Resources/docs; sourceTree = "<group>"; };
 		D6F821012F1FCBC1004B4174 /* supacodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = supacodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -67,6 +68,8 @@
 		};
 		D6F821022F1FCBC1004B4174 /* supacodeTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = supacodeTests;
 			sourceTree = "<group>";
 		};
@@ -86,6 +89,7 @@
 				D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */,
 				DFE570C142184CC387C1BC78 /* Sparkle in Frameworks */,
 				32513D1E25BB4F418CABB2A8 /* Sentry in Frameworks */,
+				AD167561A3CBCDDA5AF5CFD4 /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -162,6 +166,7 @@
 				8B2985744DB94333AE1B5878 /* Sentry */,
 				D6D054272F2E3EBF00D70ED5 /* PostHog */,
 				D1BB05882F5ACB5900553512 /* YiTong */,
+				6F8111797C3D1F4AB6F0C3B4 /* KeyboardShortcuts */,
 			);
 			productName = supacode;
 			productReference = D69CE04A2F1F378200584C57 /* Prowl.app */;
@@ -227,6 +232,7 @@
 				899A0B6B6B42424B92CD20C2 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				D6D054262F2E3EB300D70ED5 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 				D1BB05872F5ACB5900553512 /* XCRemoteSwiftPackageReference "YiTong" */,
+				E1B49A9283FEBCC9CF29D0FD /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D69CE04B2F1F378200584C57 /* Products */;
@@ -676,7 +682,7 @@
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
 			requirement = {
 				kind = exactVersion;
-				version = "2.9.2";
+				version = 2.9.2;
 			};
 		};
 		911B4AAD84AF4B34BE232133 /* XCRemoteSwiftPackageReference "swift-case-paths" */ = {
@@ -711,6 +717,14 @@
 				minimumVersion = 3.38.0;
 			};
 		};
+		E1B49A9283FEBCC9CF29D0FD /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -718,6 +732,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B43B9188E1D223E6F7344501 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
 			productName = ComposableArchitecture;
+		};
+		6F8111797C3D1F4AB6F0C3B4 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1B49A9283FEBCC9CF29D0FD /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
 		};
 		8B2985744DB94333AE1B5878 /* Sentry */ = {
 			isa = XCSwiftPackageProductDependency;

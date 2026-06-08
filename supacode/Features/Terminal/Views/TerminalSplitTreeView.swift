@@ -147,6 +147,7 @@ struct TerminalSplitTreeView: View {
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
     let hasNotification: Bool
     var pinnedSize: CGSize?
+    var isFocusedPane: Bool = false
     let action: (Operation) -> Void
 
     @State private var dropState: DropState = .idle
@@ -220,6 +221,13 @@ struct TerminalSplitTreeView: View {
           .overlay {
             if case .dropping(let zone) = dropState {
               DropOverlayView(zone: zone, size: geometry.size)
+                .allowsHitTesting(false)
+            }
+          }
+          .overlay {
+            if isSplit && isFocusedPane {
+              Rectangle()
+                .strokeBorder(Color.accentColor, lineWidth: 2)
                 .allowsHitTesting(false)
             }
           }

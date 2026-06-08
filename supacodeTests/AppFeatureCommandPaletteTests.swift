@@ -103,7 +103,7 @@ struct AppFeatureCommandPaletteTests {
     let repository = makeRepository(id: "/tmp/repo-canvas-focus", worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
+    repositoriesState.selection = .canvas(.overall)
     var state = AppFeature.State(
       repositories: repositoriesState,
       settings: SettingsFeature.State()
@@ -136,7 +136,7 @@ struct AppFeatureCommandPaletteTests {
     let repository = makeRepository(id: "/tmp/repo-canvas-passive", worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
+    repositoriesState.selection = .canvas(.overall)
     let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(
       initialState: AppFeature.State(
@@ -168,7 +168,7 @@ struct AppFeatureCommandPaletteTests {
     let repository = makeRepository(id: "/tmp/repo-canvas-ghostty", worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
+    repositoriesState.selection = .canvas(.overall)
     let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(
       initialState: AppFeature.State(
@@ -265,7 +265,7 @@ struct AppFeatureCommandPaletteTests {
     let repository = makeRepository(id: "/tmp/repo-select-canvas", worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
+    repositoriesState.selection = .canvas(.overall)
     let store = TestStore(
       initialState: AppFeature.State(
         repositories: repositoriesState,
@@ -276,7 +276,9 @@ struct AppFeatureCommandPaletteTests {
     }
 
     await store.send(.commandPalette(.delegate(.selectWorktree(worktree.id))))
-    await store.receive(\.repositories.focusCanvasWorktree) {
+    // Routes through the canvas-aware `selectWorktree`; the overall-canvas
+    // branch keeps the board open and requests focus on the target card.
+    await store.receive(\.repositories.selectWorktree) {
       $0.repositories.nextCanvasFocusRequestID = 1
       $0.repositories.pendingCanvasFocusRequest = CanvasFocusRequest(
         id: 1,
@@ -296,7 +298,7 @@ struct AppFeatureCommandPaletteTests {
     )
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
+    repositoriesState.selection = .canvas(.overall)
     let store = TestStore(
       initialState: AppFeature.State(
         repositories: repositoriesState,
@@ -315,6 +317,57 @@ struct AppFeatureCommandPaletteTests {
       )
       $0.repositories.openedWorktreeIDs = [repository.id]
     }
+  }
+
+  // Reproduction (bug #2): switching worktree from the command palette while in
+  // a SCOPED canvas (worktree or repo) must stay in canvas and rebind the scope
+  // per the user spec — not exit canvas or get stuck on the old scope. The
+  // existing canvas coverage only exercises `.canvas(.overall)`.
+  @Test(.dependencies) func selectingWorktreeInWorktreeCanvasFromPaletteRebindsScope() async {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas(.worktree(wt1.id))
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.selectWorktree(wt2.id))))
+    await store.finish()
+    await store.skipReceivedActions(strict: false)
+
+    #expect(store.state.repositories.selection == .canvas(.worktree(wt2.id)))
+  }
+
+  @Test(.dependencies) func selectingWorktreeInRepoCanvasFromPaletteOtherRepoRebinds() async {
+    let wtA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
+    let wtB = makeWorktree(id: "/tmp/repo-b/main", name: "main", repoRoot: "/tmp/repo-b")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [wtA])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [wtB])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repoA, repoB]
+    repositoriesState.selection = .canvas(.repository(repoA.id))
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.selectWorktree(wtB.id))))
+    await store.finish()
+    await store.skipReceivedActions(strict: false)
+
+    #expect(store.state.repositories.selection == .canvas(.repository(repoB.id)))
   }
 
   @Test(.dependencies) func openSettingsShowsWindow() async {
@@ -656,13 +709,17 @@ struct AppFeatureCommandPaletteTests {
     #expect(NSPasteboard.general.string(forType: .string) == worktree.workingDirectory.path)
   }
 
-  @Test(.dependencies) func copyPathWithoutSelectedWorktreeIsNoop() async {
+  @Test(.dependencies) func copyPathWithoutSelectedWorktreeAlerts() async {
+    // Production now surfaces a precise alert instead of silently no-op'ing
+    // when there's no worktree to copy the path from — better UX than the
+    // previous "click does nothing" silence.
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
+    store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.copyPath)))
-    await store.finish()
+    await store.receive(\.repositories.presentAlert)
   }
 
   @Test(.dependencies) func revealInSidebarShowsSidebarAndReveals() async {
@@ -731,6 +788,36 @@ struct AppFeatureCommandPaletteTests {
       .commandPalette(.delegate(.togglePinWorktree("/tmp/repo/wt-1", isCurrentlyPinned: false)))
     )
     await store.receive(\.repositories.worktreeOrdering.pinWorktree)
+  }
+
+  @Test(.dependencies) func toggleWorktreeCanvasDelegateDispatchesRepositoriesAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.toggleWorktreeCanvas("/tmp/repo/wt-1"))))
+    await store.receive(\.repositories.toggleWorktreeCanvas)
+  }
+
+  @Test(.dependencies) func toggleRepositoryCanvasDelegateDispatchesRepositoriesAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.toggleRepositoryCanvas("/tmp/repo"))))
+    await store.receive(\.repositories.toggleRepositoryCanvas)
+  }
+
+  @Test(.dependencies) func openBranchOnCodeHostDelegateDispatchesPullRequestAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.openBranchOnCodeHost("/tmp/repo/wt-1"))))
+    await store.receive(\.repositories.githubIntegration.pullRequestAction)
   }
 
   @Test(.dependencies) func togglePinWorktreeWhenPinnedDispatchesUnpin() async {
@@ -813,13 +900,34 @@ struct AppFeatureCommandPaletteTests {
   }
 
   @Test(.dependencies) func runCustomCommandDelegateDispatchesAppAction() async {
-    let store = TestStore(initialState: AppFeature.State()) {
+    // With an active worktree but no matching command in the resolved
+    // `actionTargetContext.commands`, the delegate alerts instead of silently
+    // no-op'ing — so a command removed between palette open and dispatch
+    // surfaces as user-visible feedback. Without an action target, the
+    // production handler returns .none silently (matches other action
+    // handlers' "no active worktree → silent no-op" stance).
+    let worktree = makeWorktree(
+      id: "/tmp/repo-cmd-alert/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-cmd-alert"
+    )
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [
+      makeRepository(id: "/tmp/repo-cmd-alert", worktrees: [worktree])
+    ]
+    repositoriesState.selection = .worktree(worktree.id)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
       AppFeature()
     }
     store.exhaustivity = .off
 
-    await store.send(.commandPalette(.delegate(.runCustomCommand(3))))
-    await store.receive(\.runCustomCommand)
+    await store.send(.commandPalette(.delegate(.runCustomCommand(commandID: "no-such-cmd"))))
+    await store.receive(\.repositories.presentAlert)
   }
 
   @Test(.dependencies) func showDiffDelegateUsesConfiguredExternalDiffTool() async {

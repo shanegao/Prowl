@@ -151,6 +151,11 @@ extension WorktreeTerminalState {
     guard next != previous else { return true }
     surfaceAgentStates[surfaceID] = next
     updateTabAgentBusyState(for: tabId)
+    refreshAgentIcon(forSurface: surfaceID, tabId: tabId)
+    // Re-evaluate the OSC-driven running flag now that this pane's agent presence
+    // changed, so a newly-detected agent's stale progress stops counting (and a
+    // released agent's pane can count progress again) without waiting on a tick.
+    updateRunningState(for: tabId)
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
     return true
   }
@@ -171,6 +176,8 @@ extension WorktreeTerminalState {
     onAgentEntryRemoved?(surfaceID)
     if let tabId = tabId(containing: surfaceID) {
       updateTabAgentBusyState(for: tabId)
+      refreshAgentIcon(forSurface: surfaceID, tabId: tabId)
+      updateRunningState(for: tabId)
     }
   }
 
@@ -186,6 +193,33 @@ extension WorktreeTerminalState {
     guard (tabAgentBusyById[tabId] ?? false) != isBusy else { return }
     tabAgentBusyById[tabId] = isBusy
     emitTaskStatusIfChanged()
+  }
+
+  /// The detected-agent icon for a tab's focused surface, or `nil` when that
+  /// surface has no detected agent. Resolved the same way the Active Agents
+  /// panel resolves its row icon (`CommandIconMap` on the agent's lookup token),
+  /// so every surface shows one consistent agent mark.
+  func focusedAgentIcon(forTab tabId: TerminalTabID) -> TabIconSource? {
+    guard let surfaceID = focusedSurfaceIdByTab[tabId],
+      let state = surfaceAgentStates[surfaceID],
+      let agent = state.detectedAgent
+    else { return nil }
+    let token = state.iconLookupToken ?? agent.iconLookupToken
+    return CommandIconMap.iconForFirstToken(token) ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken)
+  }
+
+  /// Drive the tab's icon from the focused surface's detected agent: pin the
+  /// agent's brand icon while one is present, release the `.agent` pin when it
+  /// leaves. Gated on the focused surface (single-headed, like
+  /// `applyResolvedIcon`) so a background split's agent can't hijack the icon
+  /// the user is looking at.
+  func refreshAgentIcon(forSurface surfaceID: UUID, tabId: TerminalTabID) {
+    guard focusedSurfaceIdByTab[tabId] == surfaceID else { return }
+    if let icon = focusedAgentIcon(forTab: tabId) {
+      tabManager.setAgentIcon(tabId, icon: icon.storageString)
+    } else {
+      tabManager.clearAgentIcon(tabId)
+    }
   }
 
   /// Re-emit Active Agents entries for every pane in `tabId` so the panel picks

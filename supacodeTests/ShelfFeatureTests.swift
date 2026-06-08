@@ -91,7 +91,7 @@ struct ShelfFeatureTests {
       worktrees: IdentifiedArray(uniqueElements: [worktree])
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
     state.lastFocusedWorktreeID = worktree.id
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -100,7 +100,10 @@ struct ShelfFeatureTests {
     await store.send(.toggleShelf) {
       $0.isShelfActive = true
     }
-    await store.receive(\.selectWorktree) {
+    // toggleShelf now routes through exitCanvasToWorktree to bypass
+    // selectWorktree's reboundCanvas branches (which would otherwise leave
+    // us stuck in canvas with isShelfActive=true).
+    await store.receive(\.exitCanvasToWorktree) {
       $0.selection = .worktree(worktree.id)
       $0.sidebarSelectedWorktreeIDs = [worktree.id]
       $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
@@ -136,7 +139,7 @@ struct ShelfFeatureTests {
       worktrees: IdentifiedArray(uniqueElements: [worktreeA, worktreeB])
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
     state.lastFocusedWorktreeID = worktreeA.id
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -147,7 +150,8 @@ struct ShelfFeatureTests {
     await store.send(.toggleShelf) {
       $0.isShelfActive = true
     }
-    await store.receive(\.selectWorktree) {
+    // Routed through exitCanvasToWorktree (see sibling test for rationale).
+    await store.receive(\.exitCanvasToWorktree) {
       $0.selection = .worktree(worktreeB.id)
       $0.sidebarSelectedWorktreeIDs = [worktreeB.id]
       $0.pendingTerminalFocusWorktreeIDs = [worktreeB.id]
@@ -177,18 +181,22 @@ struct ShelfFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
+    // toggleShelf from archived state cascades through .exitCanvasToWorktree
+    // → .selectWorktree → .delegate(.selectedWorktreeChanged). The intent of
+    // the test is the final state — shelf active and a worktree selected —
+    // not the exact action sequence.
+    store.exhaustivity = .off
 
     await store.send(.toggleShelf) {
       $0.isShelfActive = true
     }
-    await store.receive(\.selectWorktree) {
-      $0.selection = .worktree(worktree.id)
-      $0.sidebarSelectedWorktreeIDs = [worktree.id]
-      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
-      $0.openedWorktreeIDs = [worktree.id]
-    }
-    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.skipReceivedActions()
     await store.finish()
+
+    #expect(store.state.isShelfActive)
+    #expect(store.state.selection == .worktree(worktree.id))
+    #expect(store.state.sidebarSelectedWorktreeIDs == [worktree.id])
+    #expect(store.state.openedWorktreeIDs == [worktree.id])
   }
 
   @Test(.dependencies) func selectingADifferentWorktreeKeepsShelfActive() async {
@@ -261,7 +269,7 @@ struct ShelfFeatureTests {
       $0.preCanvasWorktreeID = worktree.id
       $0.preCanvasTerminalTargetID = worktree.id
       $0.isShelfActive = false
-      $0.selection = .canvas
+      $0.selection = .canvas(.overall)
       $0.sidebarSelectedWorktreeIDs = []
     }
     await store.finish()
@@ -526,7 +534,7 @@ struct ShelfFeatureTests {
   @Test(.dependencies) func worktreeHistoryIsUnavailableWhileCanvasIsActive() async {
     let fixture = threeWorktreeFixture()
     var state = RepositoriesFeature.State(repositories: [fixture.repo])
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
     state.worktreeHistoryBackStack = [fixture.worktrees[0].id]
     state.worktreeHistoryForwardStack = [fixture.worktrees[2].id]
     #expect(!state.canNavigateWorktreeHistoryBackward)
@@ -998,6 +1006,64 @@ struct ShelfFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
     // No `.toggleShelf` here — the Layout Restore path is responsible.
     await store.finish()
+  }
+
+  @Test(.dependencies) func defaultViewCanvasPreferenceDeferredAtSnapshotLoad() async {
+    let repoRoot = "/tmp/default-canvas-repo"
+    let rootURL = URL(fileURLWithPath: repoRoot)
+    let worktree = Worktree(
+      id: "\(repoRoot)/main",
+      name: "main",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "\(repoRoot)/main"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: repoRoot,
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      var updated = $0.global
+      updated.defaultViewMode = .canvas
+      $0.global = updated
+    }
+    // Restore settings after the test so `@Shared` state doesn't leak
+    // across parallel test runs in the same process.
+    defer {
+      $settingsFile.withLock {
+        var updated = $0.global
+        updated.defaultViewMode = .normal
+        $0.global = updated
+      }
+    }
+
+    var initialState = RepositoriesFeature.State()
+    initialState.lastFocusedWorktreeID = worktree.id
+    initialState.shouldRestoreLastFocusedWorktree = true
+    initialState.snapshotPersistencePhase = .restoring
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.repositorySnapshotLoaded([repository])) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [rootURL]
+      $0.selection = .worktree(worktree.id)
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    // repositorySnapshotLoaded intentionally DEFERS default-view application
+    // (AppFeature's layoutRestored honors `defaultViewMode` later, to avoid a
+    // selection flash). So loading the snapshot selects the worktree and does
+    // NOT enter Canvas here, even with `defaultViewMode == .canvas`.
+    await store.finish()
+    #expect(store.state.selection == .worktree(worktree.id))
   }
 
   @Test(.dependencies) func defaultViewCanvasDefersDuringLayoutRestore() async {

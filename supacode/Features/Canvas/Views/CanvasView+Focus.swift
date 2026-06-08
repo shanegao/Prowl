@@ -102,6 +102,30 @@ extension CanvasView {
     }
   }
 
+  /// True when the card for `tabID` is fully inside the visible viewport at the
+  /// current scale/offset (mirrors `focusViewport`'s coordinate model: card
+  /// `position` is the center; vertical space is reduced by the bottom toolbar).
+  func isCardFullyVisible(_ tabID: TerminalTabID) -> Bool {
+    guard viewportSize.width > 0, viewportSize.height > 0,
+      let layout = layoutStore.cardLayouts[tabID.rawValue.uuidString]
+    else { return true }
+    let halfWidth = layout.size.width * canvasScale / 2
+    let halfHeight = (layout.size.height + titleBarHeight) * canvasScale / 2
+    let centerX = layout.position.x * canvasScale + canvasOffset.width
+    let centerY = layout.position.y * canvasScale + canvasOffset.height
+    let visibleHeight = viewportSize.height - bottomToolbarReserve
+    return centerX - halfWidth >= 0 && centerX + halfWidth <= viewportSize.width
+      && centerY - halfHeight >= 0 && centerY + halfHeight <= visibleHeight
+  }
+
+  /// Centers a directly-tapped card if it isn't fully on screen (the user has
+  /// zoomed/panned in). Wired ONLY to the card-body tap — never the title-bar
+  /// tap, whose double-tap-to-exit needs the card to stay put between taps.
+  func recenterFocusedCardIfOffscreen(_ tabID: TerminalTabID) {
+    guard !isCardFullyVisible(tabID) else { return }
+    focusViewport(on: tabID)
+  }
+
   func handleSelectionShieldTap(
     _ tabID: TerminalTabID,
     surfaceState _: WorktreeTerminalState,
@@ -183,6 +207,10 @@ extension CanvasView {
   func syncBroadcastCallbacks(states: [WorktreeTerminalState]) {
     clearBroadcastCallbacks(states: states)
 
+    // Mirror selection to the manager BEFORE the broadcast guard below, so the
+    // toolbar's view of it also updates when selection drops below threshold.
+    mirrorCanvasSelectionToManager()
+
     guard selectionState.isBroadcasting,
       let primaryTabID = selectionState.primaryTabID,
       let primaryState = terminalManager.stateContaining(tabId: primaryTabID)
@@ -217,6 +245,15 @@ extension CanvasView {
           surface.onMirroredKey = nil
         }
       }
+    }
+  }
+
+  /// Mirrors the canvas multi-selection into the manager so the parent toolbar
+  /// (WorktreeDetailView) can observe broadcast transitions without owning the
+  /// selection state. The `!=` guard avoids redundant @Observable writes.
+  func mirrorCanvasSelectionToManager() {
+    if terminalManager.canvasSelectedTabIDs != selectionState.selectedTabIDs {
+      terminalManager.canvasSelectedTabIDs = selectionState.selectedTabIDs
     }
   }
 
@@ -268,6 +305,7 @@ extension CanvasView {
     }
     clearBroadcastCallbacks(states: activeStates)
     selectionState.clear()
+    terminalManager.canvasSelectedTabIDs = []
     // Don't occlude surfaces here. In SwiftUI's if/else view swap,
     // onAppear fires before onDisappear, so occluding here would undo
     // WorktreeTerminalTabsView.onAppear's syncFocus() and cause blank

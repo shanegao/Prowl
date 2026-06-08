@@ -26,6 +26,18 @@ struct WorktreeDetailView: View {
     let statusToast: RepositoriesFeature.StatusToast?
     let pullRequest: GithubPullRequest?
     let codeHost: CodeHost
+    /// Code-host status fields for `actionTargetWorktree`, mirroring the worktree
+    /// toolbar's `ToolbarStatusView` inputs so canvas mode shows the same no-PR
+    /// badge (diff size, ahead/behind, push state). `supportsCodeHost` gates the
+    /// badge; the metrics are nil/empty when no worktree is the action target.
+    let supportsCodeHost: Bool
+    let branchName: String
+    let repositoryName: String
+    let addedLines: Int?
+    let removedLines: Int?
+    let aheadCount: Int?
+    let behindCount: Int?
+    let isPushed: Bool?
     let notificationGroups: [ToolbarNotificationRepositoryGroup]
     let unseenNotificationWorktreeCount: Int
     let runScriptEnabled: Bool
@@ -37,14 +49,40 @@ struct WorktreeDetailView: View {
     let showRunButtonInToolbar: Bool
   }
 
-  private struct CanvasToolbarStateInput {
-    let appState: AppFeature.State
-    let actionTargetWorktree: Worktree?
-    let notificationGroups: [ToolbarNotificationRepositoryGroup]
-    let unseenNotificationWorktreeCount: Int
-    let runScriptEnabled: Bool
-    let runScriptIsRunning: Bool
-    let customCommands: [UserCustomCommand]
+  /// Resolved targets + visibility gates for the worktree- and repository-canvas
+  /// toolbar buttons. Both gates use a `> 1` threshold (single source of truth
+  /// here so call sites can't drift):
+  /// - `paneCount` counts panes in the target worktree; the `> 1` gate hides the
+  ///   worktree-canvas button when canvas would render the same single pane.
+  /// - `activeWorktreeCount` counts worktrees in the target repo with at least
+  ///   one open pane; the `> 1` gate hides the repo-canvas button when it would
+  ///   render the same single tab the worktree-canvas button does.
+  private struct CanvasButtonState {
+    let worktreeTarget: WorktreeTarget?
+    let repositoryTarget: RepositoryTarget?
+
+    /// `id`: the worktree the buttons will target. `paneCount`: total panes in
+    /// that worktree — drives the worktree-canvas visibility gate (`> 1`).
+    struct WorktreeTarget: Equatable {
+      let id: Worktree.ID
+      let paneCount: Int
+    }
+
+    /// `id`: the repository the repo-canvas button will target.
+    /// `activeWorktreeCount`: worktrees with ≥1 open pane — drives the
+    /// repo-canvas visibility gate (`> 1`).
+    struct RepositoryTarget: Equatable {
+      let id: Repository.ID
+      let activeWorktreeCount: Int
+    }
+
+    /// True when the worktree-canvas button should be visible. Single source of
+    /// truth for the `> 1` threshold so call sites can't drift.
+    var showsWorktreeCanvasButton: Bool { (worktreeTarget?.paneCount ?? 0) > 1 }
+
+    /// True when the repository-canvas button should be visible. Single source
+    /// of truth for the `> 1` threshold.
+    var showsRepositoryCanvasButton: Bool { (repositoryTarget?.activeWorktreeCount ?? 0) > 1 }
   }
 
   @Bindable var store: StoreOf<AppFeature>
@@ -99,22 +137,20 @@ struct WorktreeDetailView: View {
       selectedTerminalWorktree: selectedTerminalWorktree,
       selectedWorktreeSummaries: selectedWorktreeSummaries
     )
-    .navigationTitle(WindowTitle.compute(repositories: repositories, terminalManager: terminalManager))
+    .navigationTitle(detailNavigationTitle(repositories: repositories))
     .toolbar(removing: repositories.isShowingCanvas ? nil : .title)
     .toolbar {
       if repositories.isShowingCanvas {
-        canvasToolbarContent(
-          state: canvasToolbarState(
-            input: CanvasToolbarStateInput(
-              appState: state,
-              actionTargetWorktree: actionTargetWorktree,
-              notificationGroups: notificationGroups,
-              unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
-              runScriptEnabled: runScriptEnabled,
-              runScriptIsRunning: runScriptIsRunning,
-              customCommands: customCommands
-            )
-          )
+        canvasToolbar(
+          focusedWorktree: canvasFocusedTerminalWorktree,
+          state: state,
+          repositories: repositories,
+          actionTargetWorktree: actionTargetWorktree,
+          notificationGroups: notificationGroups,
+          unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
+          runScriptEnabled: runScriptEnabled,
+          runScriptIsRunning: runScriptIsRunning,
+          customCommands: customCommands
         )
       } else if hasActiveTerminalTarget,
         let toolbarState = toolbarState(
@@ -152,7 +188,7 @@ struct WorktreeDetailView: View {
     )
     let actions = makeFocusedActions(
       repositories: repositories,
-      hasActiveWorktree: hasActiveTerminalTarget,
+      hasActiveWorktree: hasActiveTerminalTarget && !isCanvasBroadcasting(),
       runScriptEnabled: runScriptEnabled,
       runScriptIsRunning: runScriptIsRunning
     )
@@ -172,6 +208,11 @@ struct WorktreeDetailView: View {
     actionTargetWorktree: Worktree?,
     notificationGroups: [ToolbarNotificationRepositoryGroup]
   ) -> some ToolbarContent {
+    canvasButtonGroup(
+      repositories: repositories,
+      actionTargetWorktree: actionTargetWorktree
+    )
+    popoverButtonsGroup()
     WorktreeToolbarContent(
       toolbarState: toolbarState,
       onRenameBranch: { newBranch in
@@ -206,45 +247,207 @@ struct WorktreeDetailView: View {
       onRunCustomCommand: { index in
         store.send(.runCustomCommand(index))
       },
-      onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) }
+      onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
+      onCodeHostAction: { action in
+        guard let selectedWorktree else { return }
+        store.send(.repositories(.githubIntegration(.pullRequestAction(selectedWorktree.id, action))))
+      },
+      onShowDiff: {
+        guard let selectedWorktree else { return }
+        store.send(.repositories(.delegate(.showDiff(selectedWorktree.id))))
+      }
     )
   }
 
-  private func canvasToolbarState(
-    input: CanvasToolbarStateInput
-  ) -> CanvasToolbarState {
-    CanvasToolbarState(
-      statusToast: input.appState.repositories.statusToast,
-      pullRequest: matchedPullRequest(
-        for: input.actionTargetWorktree,
-        repositories: input.appState.repositories
-      ),
-      codeHost: input.appState.repositories.codeHost(forWorktreeID: input.actionTargetWorktree?.id),
-      notificationGroups: input.notificationGroups,
-      unseenNotificationWorktreeCount: input.unseenNotificationWorktreeCount,
-      runScriptEnabled: input.runScriptEnabled,
-      runScriptIsRunning: input.runScriptIsRunning,
-      customCommands: input.customCommands,
-      isUpdateAvailable: input.appState.updates.isUpdateAvailable,
-      isUpdateReadyToInstall: input.appState.updates.isUpdateReadyToInstall,
-      availableUpdateVersion: input.appState.updates.availableVersion,
-      showRunButtonInToolbar: settingsFile.global.showRunButtonInToolbar
+  /// The worktree / repository / overall / active-agents canvas toggle buttons,
+  /// grouped in one trailing `ToolbarItemGroup`. Each button has its own visibility gate so
+  /// the group is emitted only when at least one button is shown. Toggle targets
+  /// are resolved at PRESS time from `store.state` (not toolbar-render time): the
+  /// `.keyboardShortcut` on each button routes through this closure even after
+  /// the sidebar selection has changed, so capturing a render-time ID would open
+  /// canvas for a stale worktree.
+  @ToolbarContentBuilder
+  private func canvasButtonGroup(
+    repositories: RepositoriesFeature.State,
+    actionTargetWorktree: Worktree?
+  ) -> some ToolbarContent {
+    let canvasButton = canvasButtonState(
+      repositories: repositories,
+      selectedTerminalWorktree: actionTargetWorktree
     )
+    let showsActiveAgentsCanvasButton =
+      !repositories.activeAgents.entries.isEmpty || repositories.isShowingActiveAgentsCanvas
+    // Overall canvas: available whenever there's at least one worktree to render
+    // (the same gate `toggleCanvas` uses to enter) or while it's already showing
+    // so the toggle can exit. Replaces the former sidebar "Canvas" segment.
+    let showsOverallCanvasButton =
+      !repositories.orderedWorktreeRows().isEmpty || repositories.isShowingGlobalCanvas
+    if canvasButton.showsWorktreeCanvasButton
+      || canvasButton.showsRepositoryCanvasButton
+      || showsOverallCanvasButton
+      || showsActiveAgentsCanvasButton
+    {
+      ToolbarItemGroup(placement: .primaryAction) {
+        if canvasButton.showsWorktreeCanvasButton {
+          WorktreeCanvasToolbarButton(
+            isActive: repositories.isShowingCanvas
+              && repositories.scopedCanvasWorktreeID == canvasButton.worktreeTarget?.id,
+            onToggle: {
+              guard let id = canvasButtonTargetWorktreeID() else { return }
+              store.send(.repositories(.toggleWorktreeCanvas(id)))
+            }
+          )
+        }
+        if canvasButton.showsRepositoryCanvasButton {
+          RepositoryCanvasToolbarButton(
+            isActive: repositories.isShowingCanvas
+              && repositories.scopedCanvasRepositoryID == canvasButton.repositoryTarget?.id,
+            onToggle: {
+              guard let worktreeID = canvasButtonTargetWorktreeID(),
+                let repoID = store.state.repositories.repositoryID(containing: worktreeID)
+              else { return }
+              store.send(.repositories(.toggleRepositoryCanvas(repoID)))
+            }
+          )
+        }
+        if showsOverallCanvasButton {
+          OverallCanvasToolbarButton(
+            isActive: repositories.isShowingGlobalCanvas,
+            onToggle: { store.send(.repositories(.toggleCanvas)) }
+          )
+        }
+        if showsActiveAgentsCanvasButton {
+          ActiveAgentsCanvasToolbarButton(
+            isActive: repositories.isShowingActiveAgentsCanvas,
+            onToggle: { store.send(.repositories(.toggleActiveAgentsCanvas)) }
+          )
+        }
+      }
+    }
+  }
+
+  /// Worktree the canvas toggle buttons act on: the focused card first (the
+  /// active-agents canvas has no sidebar selection), else the sidebar selection.
+  /// Press-time resolution (reads `store.state`), matching the buttons' contract.
+  private func canvasButtonTargetWorktreeID() -> Worktree.ID? {
+    terminalManager.canvasFocusedWorktreeID ?? store.state.repositories.selectedTerminalWorktree?.id
+  }
+
+  /// Resolves the worktree / repository targets and their pane counts that drive
+  /// the canvas button visibility gates and active-state checks. Mirrors the
+  /// canvas-seed resolution: in a scoped repo canvas the target worktree comes
+  /// from the focused card or the pre-canvas selection; in the active-agents
+  /// canvas it follows the focused card; otherwise it's the selected terminal
+  /// worktree.
+  private func canvasButtonState(
+    repositories: RepositoriesFeature.State,
+    selectedTerminalWorktree: Worktree?
+  ) -> CanvasButtonState {
+    let worktreeID: Worktree.ID? = {
+      if let scopedRepoID = repositories.scopedCanvasRepositoryID {
+        let scopedWorktreeIDs: Set<Worktree.ID> =
+          repositories.repositories[id: scopedRepoID]
+          .map { Set($0.worktrees.map(\.id)) } ?? []
+        return [
+          terminalManager.canvasFocusedWorktreeID,
+          repositories.preCanvasTerminalTargetID,
+          repositories.preCanvasWorktreeID,
+        ]
+        .compactMap { $0 }
+        .first(where: scopedWorktreeIDs.contains)
+          ?? repositories.repositories[id: scopedRepoID]?.worktrees.first?.id
+      }
+      if repositories.isShowingActiveAgentsCanvas {
+        return terminalManager.canvasFocusedWorktreeID
+      }
+      return selectedTerminalWorktree?.id
+    }()
+    let worktreeTarget: CanvasButtonState.WorktreeTarget? = worktreeID.map { id in
+      let paneCount =
+        terminalManager.activeWorktreeStates
+        .first(where: { $0.worktreeID == id })?
+        .totalPaneCount ?? 0
+      return CanvasButtonState.WorktreeTarget(id: id, paneCount: paneCount)
+    }
+    let repositoryID =
+      repositories.scopedCanvasRepositoryID
+      ?? worktreeID.flatMap(repositories.repositoryID(containing:))
+    let repositoryTarget: CanvasButtonState.RepositoryTarget? = repositoryID.flatMap {
+      repoID -> CanvasButtonState.RepositoryTarget? in
+      guard let worktreeIDs = repositories.repositories[id: repoID]?.worktrees.map(\.id)
+      else { return nil }
+      let worktreeIDSet = Set(worktreeIDs)
+      let activeCount = terminalManager.activeWorktreeStates
+        .filter { worktreeIDSet.contains($0.worktreeID) && $0.totalPaneCount > 0 }
+        .count
+      return CanvasButtonState.RepositoryTarget(id: repoID, activeWorktreeCount: activeCount)
+    }
+    return CanvasButtonState(worktreeTarget: worktreeTarget, repositoryTarget: repositoryTarget)
+  }
+
+  /// The PR matched to a worktree's branch, or nil when the worktree's PR head
+  /// ref doesn't match its branch. Ported from main so the canvas toolbar's status
+  /// view can show the same PR the worktree toolbar does.
+  private func matchedPullRequest(
+    for worktree: Worktree?,
+    repositories: RepositoriesFeature.State
+  ) -> GithubPullRequest? {
+    guard let worktree,
+      let pullRequest = repositories.worktreeInfo(for: worktree.id)?.pullRequest
+    else {
+      return nil
+    }
+    guard pullRequest.headRefName == nil || pullRequest.headRefName == worktree.name else {
+      return nil
+    }
+    return pullRequest
   }
 
   @ToolbarContentBuilder
   private func canvasToolbarContent(
-    state: CanvasToolbarState
+    state: CanvasToolbarState,
+    repositories: RepositoriesFeature.State,
+    actionTargetWorktree: Worktree?
   ) -> some ToolbarContent {
+    // Full status view (toast + PR + code-host badge) in the canvas toolbar's
+    // center, matching the worktree toolbar so canvas mode shows the same status —
+    // including app toasts like quick-send's "Message sent". The code-host
+    // actions target `actionTargetWorktree`; they no-op when there's no target
+    // (which is also when `supportsCodeHost` is false, so the button is hidden).
     ToolbarItem(placement: .principal) {
       ToolbarStatusView(
         toast: state.statusToast,
         pullRequest: state.pullRequest,
-        codeHost: state.codeHost
+        codeHost: state.codeHost,
+        supportsCodeHost: state.supportsCodeHost,
+        branchName: state.branchName,
+        repositoryName: state.repositoryName,
+        addedLines: state.addedLines,
+        removedLines: state.removedLines,
+        aheadCount: state.aheadCount,
+        behindCount: state.behindCount,
+        isPushed: state.isPushed,
+        onCodeHostAction: { action in
+          guard let id = actionTargetWorktree?.id else { return }
+          store.send(.repositories(.githubIntegration(.pullRequestAction(id, action))))
+        },
+        onShowDiff: {
+          guard let id = actionTargetWorktree?.id else { return }
+          store.send(.repositories(.delegate(.showDiff(id))))
+        }
       )
       .padding(.horizontal)
     }
-
+    // Keep the canvas toggles available while already in canvas so the user can
+    // switch between scopes (worktree ↔ repo ↔ active-agents) or exit back to a
+    // tab without leaving the board first.
+    canvasButtonGroup(
+      repositories: repositories,
+      actionTargetWorktree: actionTargetWorktree
+    )
+    popoverButtonsGroup()
+    let broadcastTargets = canvasSelectedWorktreeIDs()
+    let isBroadcasting = broadcastTargets.count > 1
     ToolbarItemGroup(placement: .primaryAction) {
       ToolbarNotificationsPopoverButton(
         groups: state.notificationGroups,
@@ -287,7 +490,7 @@ struct WorktreeDetailView: View {
     // so a command-count change is just an internal HStack relayout. Do NOT
     // "unify" this back into a `ToolbarItemGroup` to match Normal — that
     // reintroduces the jump.
-    if showRunButton || !state.customCommands.isEmpty {
+    if !isBroadcasting && (showRunButton || !state.customCommands.isEmpty) {
       ToolbarSpacer(.fixed)
       ToolbarItem(placement: .primaryAction) {
         // `spacing: 0` keeps the cluster as tight as the Normal toolbar's
@@ -345,6 +548,164 @@ struct WorktreeDetailView: View {
         }
       }
     }
+    if isBroadcasting {
+      broadcastCommandsToolbar(
+        globalCommands: settingsFile.global.customCommands,
+        targets: broadcastTargets
+      )
+    }
+  }
+
+  /// Routes the canvas toolbar: a single focused worktree (not broadcasting) gets
+  /// its full per-card toolbar; otherwise the slim / broadcast command cluster.
+  @ToolbarContentBuilder
+  private func canvasToolbar(
+    focusedWorktree: Worktree?,
+    state: AppFeature.State,
+    repositories: RepositoriesFeature.State,
+    actionTargetWorktree: Worktree?,
+    notificationGroups: [ToolbarNotificationRepositoryGroup],
+    unseenNotificationWorktreeCount: Int,
+    runScriptEnabled: Bool,
+    runScriptIsRunning: Bool,
+    customCommands: [UserCustomCommand]
+  ) -> some ToolbarContent {
+    if !isCanvasBroadcasting(), let focusedWorktree {
+      focusedCardCanvasToolbar(
+        focusedWorktree: focusedWorktree,
+        state: state,
+        repositories: repositories,
+        actionTargetWorktree: actionTargetWorktree,
+        notificationGroups: notificationGroups,
+        unseenNotificationWorktreeCount: unseenNotificationWorktreeCount
+      )
+    } else {
+      // Resolve the action-target worktree's code-host status fields, mirroring
+      // `toolbarState(input:)` so canvas mode's status view matches the worktree
+      // toolbar (nil/empty when no worktree is the action target).
+      let codeHostRepository = actionTargetWorktree.flatMap { worktree in
+        repositories.repositoryID(containing: worktree.id)
+          .flatMap { repositories.repositories[id: $0] }
+      }
+      let branchInfo = actionTargetWorktree.flatMap { repositories.worktreeInfo(for: $0.id) }
+      canvasToolbarContent(
+        state: CanvasToolbarState(
+          statusToast: repositories.statusToast,
+          pullRequest: matchedPullRequest(for: actionTargetWorktree, repositories: repositories),
+          codeHost: repositories.codeHost(forWorktreeID: actionTargetWorktree?.id),
+          supportsCodeHost: codeHostRepository?.capabilities.supportsCodeHost ?? false,
+          branchName: actionTargetWorktree?.name ?? "",
+          repositoryName: codeHostRepository?.name ?? "",
+          addedLines: branchInfo?.addedLines,
+          removedLines: branchInfo?.removedLines,
+          aheadCount: branchInfo?.aheadBehind?.ahead,
+          behindCount: branchInfo?.aheadBehind?.behind,
+          isPushed: branchInfo?.isPushed,
+          notificationGroups: notificationGroups,
+          unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
+          runScriptEnabled: runScriptEnabled,
+          runScriptIsRunning: runScriptIsRunning,
+          customCommands: customCommands,
+          isUpdateAvailable: state.updates.isUpdateAvailable,
+          isUpdateReadyToInstall: state.updates.isUpdateReadyToInstall,
+          availableUpdateVersion: state.updates.availableVersion,
+          showRunButtonInToolbar: settingsFile.global.showRunButtonInToolbar
+        ),
+        repositories: repositories,
+        actionTargetWorktree: actionTargetWorktree
+      )
+    }
+  }
+
+  /// Full per-card toolbar shown when a SINGLE card is focused in a repository or
+  /// active-agents canvas (not broadcasting). Renders `WorktreeToolbarContent`
+  /// synthesized from the focused card — its own repo's effective commands,
+  /// Open-In/editor-picker, branch rename, PR/code-host — routed through the
+  /// explicit-target action variants so it acts on the focused card, not the
+  /// (absent) sidebar selection. Mirrors `worktreeToolbarContent`'s structure
+  /// (canvas buttons + popovers + `WorktreeToolbarContent`).
+  @ToolbarContentBuilder
+  private func focusedCardCanvasToolbar(
+    focusedWorktree: Worktree,
+    state: AppFeature.State,
+    repositories: RepositoriesFeature.State,
+    actionTargetWorktree: Worktree?,
+    notificationGroups: [ToolbarNotificationRepositoryGroup],
+    unseenNotificationWorktreeCount: Int
+  ) -> some ToolbarContent {
+    canvasButtonGroup(repositories: repositories, actionTargetWorktree: actionTargetWorktree)
+    popoverButtonsGroup()
+    let rootURL = focusedWorktree.repositoryRootURL
+    @Shared(.repositorySettings(rootURL)) var focusedRepoSettings
+    @Shared(.userRepositorySettings(rootURL)) var focusedUserSettings
+    let focusedCommands = EffectiveCommandsResolver.resolve(
+      globalCommands: state.settings.globalCommands.commands,
+      perRepoCommands: focusedUserSettings.customCommands
+    )
+    let focusedOpenAction = OpenWorktreeAction.fromSettingsID(
+      focusedRepoSettings.openActionID,
+      defaultEditorID: state.settings.defaultEditorID
+    )
+    if let synthState = toolbarState(
+      input: ToolbarStateInput(
+        repositories: repositories,
+        selectedWorktree: focusedWorktree,
+        notificationGroups: notificationGroups,
+        unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
+        openActionSelection: focusedOpenAction,
+        openActionIsAutomatic: focusedRepoSettings.openActionID == OpenWorktreeAction.automaticSettingsID,
+        showExtras: commandKeyObserver.isPressed,
+        runScriptEnabled: true,
+        runScriptIsRunning: state.runScriptStatusByWorktreeID[focusedWorktree.id] == true,
+        customCommands: focusedCommands,
+        isUpdateAvailable: state.updates.isUpdateAvailable,
+        isUpdateReadyToInstall: state.updates.isUpdateReadyToInstall,
+        availableUpdateVersion: state.updates.availableVersion,
+        showRunButtonInToolbar: settingsFile.global.showRunButtonInToolbar,
+        showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
+      )
+    ) {
+      WorktreeToolbarContent(
+        toolbarState: synthState,
+        onRenameBranch: { newBranch in
+          store.send(.repositories(.requestRenameBranch(focusedWorktree.id, newBranch)))
+        },
+        externalRenamePrompt: repositories.pendingRenameBranchRequest.flatMap {
+          $0.worktreeID == focusedWorktree.id ? $0 : nil
+        },
+        onConsumeExternalRenamePrompt: { requestID in
+          store.send(.repositories(.consumePendingRenameBranchRequest(requestID)))
+        },
+        onOpenWorktree: { action in
+          store.send(.openWorktreeForWorktree(action, focusedWorktree.id))
+        },
+        onOpenActionSelectionChanged: { action in
+          store.send(.openActionSelectionChangedForWorktree(action, focusedWorktree.id))
+        },
+        onResetOpenActionToAutomatic: {
+          store.send(.openActionResetToAutomaticForWorktree(focusedWorktree.id))
+        },
+        onCopyPath: {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(focusedWorktree.workingDirectory.path, forType: .string)
+        },
+        onSelectNotification: selectToolbarNotification,
+        onDismissAllNotifications: { dismissAllToolbarNotifications(in: notificationGroups) },
+        onRunScript: { store.send(.runScript) },
+        onStopRunScript: { store.send(.stopRunScript) },
+        onRunCustomCommand: { index in
+          guard focusedCommands.indices.contains(index) else { return }
+          store.send(.runCustomCommandOnWorktrees(focusedCommands[index], [focusedWorktree.id]))
+        },
+        onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
+        onCodeHostAction: { action in
+          store.send(.repositories(.githubIntegration(.pullRequestAction(focusedWorktree.id, action))))
+        },
+        onShowDiff: {
+          store.send(.repositories(.delegate(.showDiff(focusedWorktree.id))))
+        }
+      )
+    }
   }
 
   private func toolbarState(input: ToolbarStateInput) -> WorktreeToolbarState? {
@@ -356,14 +717,31 @@ struct WorktreeDetailView: View {
     else {
       return nil
     }
+    let pullRequest = input.selectedWorktree.flatMap { input.repositories.worktreeInfo(for: $0.id)?.pullRequest }
+    let matchesBranch =
+      if let selectedWorktree = input.selectedWorktree, let pullRequest {
+        pullRequest.headRefName == nil || pullRequest.headRefName == selectedWorktree.name
+      } else {
+        false
+      }
+    let codeHostRepository = input.selectedWorktree.flatMap { worktree in
+      input.repositories.repositoryID(containing: worktree.id)
+        .flatMap { input.repositories.repositories[id: $0] }
+    }
+    let worktreeBranchInfo = input.selectedWorktree.flatMap { input.repositories.worktreeInfo(for: $0.id) }
     return WorktreeToolbarState(
       title: title,
       statusToast: input.repositories.statusToast,
-      pullRequest: matchedPullRequest(
-        for: input.selectedWorktree,
-        repositories: input.repositories
-      ),
+      pullRequest: matchesBranch ? pullRequest : nil,
       codeHost: input.repositories.codeHost(forWorktreeID: input.selectedWorktree?.id),
+      supportsCodeHost: codeHostRepository?.capabilities.supportsCodeHost ?? false,
+      branchName: input.selectedWorktree?.name ?? "",
+      repositoryName: codeHostRepository?.name ?? "",
+      addedLines: worktreeBranchInfo?.addedLines,
+      removedLines: worktreeBranchInfo?.removedLines,
+      aheadCount: worktreeBranchInfo?.aheadBehind?.ahead,
+      behindCount: worktreeBranchInfo?.aheadBehind?.behind,
+      isPushed: worktreeBranchInfo?.isPushed,
       notificationGroups: input.notificationGroups,
       unseenNotificationWorktreeCount: input.unseenNotificationWorktreeCount,
       openActionSelection: input.openActionSelection,
@@ -401,21 +779,6 @@ struct WorktreeDetailView: View {
         }
         return lhsRepository.localizedCaseInsensitiveCompare(rhsRepository) == .orderedAscending
       }
-  }
-
-  private func matchedPullRequest(
-    for worktree: Worktree?,
-    repositories: RepositoriesFeature.State
-  ) -> GithubPullRequest? {
-    guard let worktree,
-      let pullRequest = repositories.worktreeInfo(for: worktree.id)?.pullRequest
-    else {
-      return nil
-    }
-    guard pullRequest.headRefName == nil || pullRequest.headRefName == worktree.name else {
-      return nil
-    }
-    return pullRequest
   }
 
   private func shouldShowMultiSelectionSummary(
@@ -460,11 +823,45 @@ struct WorktreeDetailView: View {
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
     if repositories.isShowingCanvas {
+      let scopedWorktreeID = repositories.scopedCanvasWorktreeID
+      let scopedRepositoryID = repositories.scopedCanvasRepositoryID
+      let scopedRepoWorktreeIDs: Set<Worktree.ID>? = scopedRepositoryID.flatMap { repoID in
+        repositories.repositories[id: repoID].map { Set($0.worktrees.map(\.id)) }
+      }
+      // Active-agents canvas: restrict to the tabs that currently have a live
+      // agent (derived from the deduped agent-entry list). nil for every other
+      // canvas scope, leaving CanvasView's tab filter inert.
+      let scopedTabIDs: Set<TerminalTabID>? =
+        repositories.isShowingActiveAgentsCanvas
+        ? Set(repositories.activeAgents.entries.map(\.tabID))
+        : nil
       CanvasView(
         terminalManager: terminalManager,
+        scopedWorktreeID: scopedWorktreeID,
+        scopedWorktreeIDs: scopedRepoWorktreeIDs,
+        scopedTabIDs: scopedTabIDs,
+        sortKey: { state in
+          let repoID = repositories.repositoryID(containing: state.worktreeID)
+          let repoName = repoID.flatMap { repositories.repositoryName(for: $0) } ?? ""
+          return (repoName, state.worktreeName)
+        },
         repositoryCustomTitles: repositories.repositoryCustomTitles,
         focusRequest: repositories.pendingCanvasFocusRequest,
         commandRequest: repositories.pendingCanvasCommandRequest,
+        onExitToTab: { explicitWorktreeID in
+          if let explicitWorktreeID {
+            // Expand-to-pane: jump to the card's worktree, exit canvas.
+            store.send(.repositories(.exitCanvasToWorktree(explicitWorktreeID)))
+          } else if let scopedWorktreeID {
+            store.send(.repositories(.toggleWorktreeCanvas(scopedWorktreeID)))
+          } else if let scopedRepositoryID {
+            store.send(.repositories(.toggleRepositoryCanvas(scopedRepositoryID)))
+          } else if repositories.isShowingActiveAgentsCanvas {
+            store.send(.repositories(.toggleActiveAgentsCanvas))
+          } else {
+            store.send(.repositories(.toggleCanvas))
+          }
+        },
         onFocusedWorktreeChanged: { worktreeID in
           store.send(.canvasFocusedWorktreeChanged(worktreeID))
         },
@@ -739,7 +1136,7 @@ struct WorktreeDetailView: View {
       selectTerminalPaneBelow: terminalBindingAction("goto_split:down"),
       selectTerminalPaneLeft: terminalBindingAction("goto_split:left"),
       selectTerminalPaneRight: terminalBindingAction("goto_split:right"),
-      runScript: runScriptEnabled ? { store.send(.runScript) } : nil,
+      runScript: (runScriptEnabled && !isCanvasBroadcasting()) ? { store.send(.runScript) } : nil,
       stopRunScript: runScriptIsRunning ? { store.send(.stopRunScript) } : nil
     )
   }
@@ -805,6 +1202,14 @@ struct WorktreeDetailView: View {
     let statusToast: RepositoriesFeature.StatusToast?
     let pullRequest: GithubPullRequest?
     let codeHost: CodeHost
+    let supportsCodeHost: Bool
+    let branchName: String
+    let repositoryName: String
+    let addedLines: Int?
+    let removedLines: Int?
+    let aheadCount: Int?
+    let behindCount: Int?
+    let isPushed: Bool?
     let notificationGroups: [ToolbarNotificationRepositoryGroup]
     let unseenNotificationWorktreeCount: Int
     let openActionSelection: OpenWorktreeAction
@@ -835,6 +1240,10 @@ struct WorktreeDetailView: View {
     let onStopRunScript: () -> Void
     let onRunCustomCommand: (Int) -> Void
     let onActivateUpdateButton: () -> Void
+    let onCodeHostAction: (RepositoriesFeature.PullRequestAction) -> Void
+    /// Opens the diff view for the focused worktree — the toolbar `+/-` badge taps
+    /// to this, mirroring the sidebar's change badge.
+    let onShowDiff: () -> Void
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
@@ -851,7 +1260,17 @@ struct WorktreeDetailView: View {
         ToolbarStatusView(
           toast: toolbarState.statusToast,
           pullRequest: toolbarState.pullRequest,
-          codeHost: toolbarState.codeHost
+          codeHost: toolbarState.codeHost,
+          supportsCodeHost: toolbarState.supportsCodeHost,
+          branchName: toolbarState.branchName,
+          repositoryName: toolbarState.repositoryName,
+          addedLines: toolbarState.addedLines,
+          removedLines: toolbarState.removedLines,
+          aheadCount: toolbarState.aheadCount,
+          behindCount: toolbarState.behindCount,
+          isPushed: toolbarState.isPushed,
+          onCodeHostAction: onCodeHostAction,
+          onShowDiff: onShowDiff
         )
         .padding(.horizontal)
       }

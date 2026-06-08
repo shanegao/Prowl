@@ -95,6 +95,7 @@ enum AppShortcuts {
     static let toggleActiveAgentsPanel = "toggle_active_agents_panel"
     static let selectNextActiveAgent = "select_next_active_agent"
     static let selectPreviousActiveAgent = "select_previous_active_agent"
+    static let quickSendActiveAgent = "quick_send_active_agent"
     static let refreshWorktrees = "refresh_worktrees"
     static let jumpToLatestUnread = "jump_to_latest_unread"
     static let runScript = "run_script"
@@ -114,6 +115,8 @@ enum AppShortcuts {
     static let selectShelfBook7 = "select_shelf_book_7"
     static let selectShelfBook8 = "select_shelf_book_8"
     static let selectShelfBook9 = "select_shelf_book_9"
+    static let toggleWorktreeCanvas = "toggle_worktree_canvas"
+    static let toggleRepoCanvas = "toggle_repo_canvas"
     static let revealInSidebar = "reveal_in_sidebar"
     static let archivedWorktrees = "archived_worktrees"
     static let selectNextWorktree = "select_next_worktree"
@@ -198,6 +201,7 @@ enum AppShortcuts {
   static let selectPreviousActiveAgent = AppShortcut(
     keyEquivalent: .upArrow, ghosttyKeyName: "arrow_up", modifiers: [.control, .option]
   )
+  static let quickSendActiveAgent = AppShortcut(key: "p", modifiers: [.command, .shift])
   static let refreshWorktrees = AppShortcut(key: "r", modifiers: [.command, .shift])
   static let jumpToLatestUnread = AppShortcut(key: "u", modifiers: [.command, .option])
   static let runScript = AppShortcut(key: "r", modifiers: .command)
@@ -251,6 +255,13 @@ enum AppShortcuts {
     CommandID.selectShelfBook8,
     CommandID.selectShelfBook9,
   ]
+
+  static let toggleWorktreeCanvas = AppShortcut(
+    keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .control]
+  )
+  static let toggleRepoCanvas = AppShortcut(
+    keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .shift, .option]
+  )
   static let revealInSidebar = AppShortcut(key: "l", modifiers: [.command, .shift])
   static let archivedWorktrees = AppShortcut(key: "a", modifiers: [.command, .control])
   static let selectNextWorktree = AppShortcut(
@@ -358,6 +369,7 @@ enum AppShortcuts {
     .init(actionTitle: "Toggle Active Agents Panel", shortcut: toggleActiveAgentsPanel),
     .init(actionTitle: "Select Next Agent", shortcut: selectNextActiveAgent),
     .init(actionTitle: "Select Previous Agent", shortcut: selectPreviousActiveAgent),
+    .init(actionTitle: "Send to Active Agent", shortcut: quickSendActiveAgent),
     .init(actionTitle: "Jump to Latest Unread", shortcut: jumpToLatestUnread),
     .init(actionTitle: "Run Script", shortcut: runScript),
     .init(actionTitle: "Stop Script", shortcut: stopRunScript),
@@ -435,6 +447,12 @@ enum AppShortcuts {
       shortcut: selectNextActiveAgent
     ),
     .init(
+      id: CommandID.quickSendActiveAgent,
+      title: "Send to Active Agent…",
+      scope: .configurableAppAction,
+      shortcut: quickSendActiveAgent
+    ),
+    .init(
       id: CommandID.selectPreviousActiveAgent,
       title: "Select Previous Agent",
       scope: .configurableAppAction,
@@ -487,6 +505,18 @@ enum AppShortcuts {
       title: "Toggle Shelf",
       scope: .configurableAppAction,
       shortcut: toggleShelf
+    ),
+    .init(
+      id: CommandID.toggleWorktreeCanvas,
+      title: "Toggle Worktree Canvas",
+      scope: .configurableAppAction,
+      shortcut: toggleWorktreeCanvas
+    ),
+    .init(
+      id: CommandID.toggleRepoCanvas,
+      title: "Toggle Repository Canvas",
+      scope: .configurableAppAction,
+      shortcut: toggleRepoCanvas
     ),
     .init(
       id: CommandID.selectNextShelfBook,
@@ -983,6 +1013,8 @@ enum AppShortcuts {
     showDiff,
     toggleCanvas,
     toggleShelf,
+    toggleWorktreeCanvas,
+    toggleRepoCanvas,
     selectNextShelfBook,
     selectPreviousShelfBook,
     selectShelfBook1,

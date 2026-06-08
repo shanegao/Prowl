@@ -17,7 +17,8 @@ struct ActiveAgentsFeatureTests {
     let blocked = entry(id: UUID(1), state: .blocked, changedAt: old)
     let working = entry(id: UUID(2), state: .working, changedAt: new)
     let done = entry(id: UUID(3), state: .done, changedAt: new)
-    let updatedIdle = entry(id: UUID(0), state: .blocked, changedAt: Date(timeIntervalSince1970: 30))
+    let updatedIdle = entry(
+      id: UUID(0), state: .blocked, changedAt: Date(timeIntervalSince1970: 30))
 
     await store.send(.agentEntryChanged(idle, autoShowPanel: false)) {
       $0.entries = [idle]

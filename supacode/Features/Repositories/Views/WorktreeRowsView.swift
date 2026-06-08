@@ -283,10 +283,12 @@ struct WorktreeRowsView: View {
       return
     }
 
-    if store.state.isShowingCanvas {
-      store.send(.focusCanvasWorktree(worktreeID))
-    } else {
-      store.send(.selectWorktree(worktreeID, focusTerminal: true))
+    // Always route through the canvas-aware `selectWorktree` reducer: in canvas
+    // it keeps the board open and rebinds/focuses per scope (worktree/repo/
+    // overall); outside canvas it selects the worktree and we nudge terminal
+    // focus afterward.
+    store.send(.selectWorktree(worktreeID, focusTerminal: true))
+    if !store.state.isShowingCanvas {
       focusTerminalAfterSelection(worktreeID: worktreeID)
     }
   }

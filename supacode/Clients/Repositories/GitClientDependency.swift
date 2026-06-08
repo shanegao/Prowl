@@ -37,6 +37,8 @@ struct GitClientDependency: Sendable {
   var githubRemoteInfos: @Sendable (_ repositoryRoot: URL) async -> [GithubRemoteInfo]
   var remoteInfo: @Sendable (_ repositoryRoot: URL) async -> GithubRemoteInfo?
   var remoteNames: @Sendable (_ repoRoot: URL) async throws -> [String]
+  var remoteBranchExists: @Sendable (_ repositoryRoot: URL, _ branch: String) async -> Bool?
+  var aheadBehind: @Sendable (_ worktreeRoot: URL, _ repositoryRoot: URL) async -> (ahead: Int, behind: Int)?
   var fetchRemote: @Sendable (_ remote: String, _ repoRoot: URL) async throws -> Void
 }
 
@@ -93,6 +95,12 @@ extension GitClientDependency: DependencyKey {
     },
     remoteNames: { repoRoot in
       try await GitClient().remoteNames(for: repoRoot)
+    },
+    remoteBranchExists: { repositoryRoot, branch in
+      await GitClient().remoteBranchExists(for: repositoryRoot, branch: branch)
+    },
+    aheadBehind: { worktreeRoot, repositoryRoot in
+      await GitClient().aheadBehind(for: worktreeRoot, repositoryRoot: repositoryRoot)
     },
     fetchRemote: { remote, repoRoot in
       try await GitClient().fetchRemote(remote, for: repoRoot)

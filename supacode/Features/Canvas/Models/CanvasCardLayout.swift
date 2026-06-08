@@ -99,7 +99,8 @@ struct CanvasCardPacker {
 
     // Strategy 1: Waterfall — try all column counts.
     for cols in 1...cards.count {
-      let (boxW, boxH) = waterfallBoundingSize(cards: cards, columns: cols, columnWidth: columnWidth)
+      let (boxW, boxH) = waterfallBoundingSize(
+        cards: cards, columns: cols, columnWidth: columnWidth)
       let scale = min(targetRatio / boxW, 1.0 / boxH)
       let area = boxW * boxH
       if scale > bestScale || (scale == bestScale && area < bestArea) {
@@ -366,11 +367,7 @@ struct CanvasTileLayout {
 final class CanvasLayoutStore {
   private static let storageKey = "canvasCardLayouts"
 
-  /// Whether auto-arrange has run in this app session. Resets on app launch.
-  static var hasAutoArrangedInSession = false
-
   private let defaults: UserDefaults
-  private let initiallyLoadedCardKeys: Set<String>
 
   var cardLayouts: [String: CanvasCardLayout] {
     didSet { save() }
@@ -385,17 +382,34 @@ final class CanvasLayoutStore {
     let stored = Self.load(from: defaults)
     cardLayouts = stored.cardLayouts
     zOrder = stored.zOrder
-    initiallyLoadedCardKeys = Set(stored.cardLayouts.keys)
-  }
-
-  func shouldAutoArrangeOnInitialEntry(for cardKeys: [String]) -> Bool {
-    guard !cardKeys.isEmpty else { return false }
-    return !cardKeys.contains { initiallyLoadedCardKeys.contains($0) }
   }
 
   func setCardLayouts(_ layouts: [String: CanvasCardLayout], zOrder newZOrder: [String]? = nil) {
     cardLayouts = layouts
     zOrder = normalizedZOrder(newZOrder ?? zOrder, visibleKeys: Array(layouts.keys))
+  }
+
+  /// Merges `layouts` into the stored card layouts instead of replacing the whole
+  /// map. Cards outside `layouts` keep their stored position, size, and relative
+  /// stacking — essential for scoped canvases, which only build layouts for their
+  /// in-scope cards yet persist to the same store as the user-arranged overall
+  /// canvas. A wholesale `setCardLayouts` would erase every off-scope card's
+  /// position on entry to a scoped canvas. When `scopedZOrder` is given it orders
+  /// the in-scope cards while preserving the order of the off-scope ones.
+  func mergeCardLayouts(_ layouts: [String: CanvasCardLayout], zOrder scopedZOrder: [String]? = nil) {
+    var merged = cardLayouts
+    for (key, layout) in layouts {
+      merged[key] = layout
+    }
+    cardLayouts = merged
+    if let scopedZOrder {
+      let scopedKeys = Set(scopedZOrder)
+      var combined = zOrder.filter { !scopedKeys.contains($0) }
+      combined.append(contentsOf: scopedZOrder)
+      zOrder = normalizedZOrder(combined, visibleKeys: Array(merged.keys))
+    } else {
+      zOrder = normalizedZOrder(zOrder, visibleKeys: Array(merged.keys))
+    }
   }
 
   func ensureZOrder(for visibleKeys: [String]) {

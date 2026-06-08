@@ -45,15 +45,8 @@ struct ActiveAgentRow: View {
   }
 
   private var agentIcon: some View {
-    Group {
-      if let icon = entry.iconSource {
-        TabIconImage(rawName: icon.storageString, pointSize: 16)
-      } else {
-        Image(systemName: "sparkle")
-      }
-    }
-    .frame(width: 20, height: 20)
-    .accessibilityHidden(true)
+    AgentIconImage(entry: entry)
+      .frame(width: 20, height: 20)
   }
 
   private var statusPill: some View {
@@ -75,6 +68,29 @@ struct ActiveAgentRow: View {
     Text(entry.displayState.label)
       .font(.caption2.weight(.semibold))
       .lineLimit(1)
+  }
+}
+
+/// Branded icon for a detected agent (claude/codex/cursor…), resolved via
+/// `CommandIconMap`: prefers the asset logo, falls back to the `TabIconSource`
+/// SF Symbol, then `sparkle` when the command maps to no icon. Shared by the
+/// Active Agents panel row and the menubar dropdown so the two never drift.
+struct AgentIconImage: View {
+  let entry: ActiveAgentEntry
+  var pointSize: CGFloat = 16
+
+  var body: some View {
+    resolvedIcon
+      .accessibilityHidden(true)
+  }
+
+  @ViewBuilder
+  private var resolvedIcon: some View {
+    if let icon = entry.iconSource {
+      TabIconImage(rawName: icon.storageString, pointSize: 16)
+    } else {
+      Image(systemName: "sparkle")
+    }
   }
 }
 
@@ -116,19 +132,6 @@ struct BaguaWorkingIndicator: View {
 }
 
 extension AgentDisplayState {
-  var label: String {
-    switch self {
-    case .working:
-      return "Working"
-    case .blocked:
-      return "Blocked"
-    case .done:
-      return "Done"
-    case .idle:
-      return "Idle"
-    }
-  }
-
   var foregroundStyle: Color {
     switch self {
     case .working:

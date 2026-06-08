@@ -637,6 +637,137 @@ struct WorktreeTerminalManagerTests {
     #expect(state.taskStatus == .idle)
   }
 
+  // MARK: - Agent-pane running-state exclusion
+
+  @Test func runningStateCountsProgressOnNonAgentSurface() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+    let surface = try #require(state.surfaceView(for: surfaceId))
+
+    // No detected agent + raw OSC 9;4 progress → the pane drives the tab running.
+    surface.bridge.state.progressState = GHOSTTY_PROGRESS_STATE_SET
+    state.updateRunningState(for: tabId)
+
+    #expect(state.tabIsRunningById[tabId] == true)
+    #expect(state.surfaceRunningStartedAtById[surfaceId] != nil)
+
+    state.cleanupAllAgentDetectionState()
+  }
+
+  @Test func runningStateIgnoresStaleProgressOnAgentSurface() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+    let surface = try #require(state.surfaceView(for: surfaceId))
+
+    // Same raw progress, but a detected agent now owns the pane: agents leave a
+    // stale progress state behind, so the guard must exclude it from running.
+    surface.bridge.state.progressState = GHOSTTY_PROGRESS_STATE_SET
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: .claude, state: .idle)
+    state.updateRunningState(for: tabId)
+
+    #expect(state.tabIsRunningById[tabId] == false)
+    #expect(state.surfaceRunningStartedAtById[surfaceId] == nil)
+
+    state.cleanupAllAgentDetectionState()
+  }
+
+  @Test func runningStateResumesWhenAgentReleasesPaneWithProgress() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+    let surface = try #require(state.surfaceView(for: surfaceId))
+
+    surface.bridge.state.progressState = GHOSTTY_PROGRESS_STATE_SET
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: .claude, state: .idle)
+    state.updateRunningState(for: tabId)
+    #expect(state.tabIsRunningById[tabId] == false)
+
+    // Once the agent is gone, raw progress on the same pane counts again.
+    state.surfaceAgentStates.removeValue(forKey: surfaceId)
+    state.updateRunningState(for: tabId)
+
+    #expect(state.tabIsRunningById[tabId] == true)
+    #expect(state.surfaceRunningStartedAtById[surfaceId] != nil)
+
+    state.cleanupAllAgentDetectionState()
+  }
+
+  // MARK: - Agent-icon driving (focused-surface gate)
+
+  @Test func refreshAgentIconPinsBrandIconForFocusedSurface() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: .claude, state: .working)
+    state.refreshAgentIcon(forSurface: surfaceId, tabId: tabId)
+
+    let tab = try #require(state.tabManager.tabs.first)
+    // `.claude` resolves through CommandIconMap("claude") → ClaudeCode asset.
+    #expect(tab.icon == TabIconSource(systemSymbol: "sparkle", assetName: "ClaudeCode").storageString)
+    #expect(tab.iconLock == .agent)
+
+    state.cleanupAllAgentDetectionState()
+  }
+
+  @Test func refreshAgentIconDoesNotHijackIconForBackgroundSurface() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let focusedSurfaceId = try #require(state.focusedSurfaceId(in: tabId))
+    let originalIcon = state.tabManager.tabs.first?.icon
+
+    // A background split's surface carries the agent, but it is not the focused
+    // surface — the gate must leave the visible tab icon untouched.
+    let backgroundSurfaceId = UUID()
+    state.surfaceAgentStates[backgroundSurfaceId] = PaneAgentState(detectedAgent: .claude, state: .working)
+    state.refreshAgentIcon(forSurface: backgroundSurfaceId, tabId: tabId)
+
+    let tab = try #require(state.tabManager.tabs.first)
+    #expect(tab.icon == originalIcon)
+    #expect(tab.iconLock != .agent)
+    #expect(focusedSurfaceId != backgroundSurfaceId)
+
+    state.cleanupAllAgentDetectionState()
+  }
+
+  @Test func refreshAgentIconClearsPinWhenAgentReleased() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: .claude, state: .working)
+    state.refreshAgentIcon(forSurface: surfaceId, tabId: tabId)
+    #expect(state.tabManager.tabs.first?.iconLock == .agent)
+
+    // Releasing the agent clears the focused-surface state → icon pin drops to auto.
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: nil, state: .idle)
+    state.refreshAgentIcon(forSurface: surfaceId, tabId: tabId)
+
+    #expect(state.tabManager.tabs.first?.iconLock == .auto)
+
+    state.cleanupAllAgentDetectionState()
+  }
+
   private func nextEvent(
     _ stream: AsyncStream<TerminalClient.Event>,
     matching predicate: (TerminalClient.Event) -> Bool

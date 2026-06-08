@@ -313,6 +313,13 @@ extension GhosttySurfaceView {
         action: #selector(changeTitle(_:)),
         symbol: "pencil.line"
       ))
+    menu.addItem(.separator())
+    menu.addItem(
+      menuItem(
+        title: "Copy Pane ID",
+        action: #selector(copyPaneID(_:)),
+        symbol: "doc.on.doc"
+      ))
     return menu
   }
 
@@ -344,6 +351,11 @@ extension GhosttySurfaceView {
 
   @IBAction func changeTitle(_ sender: Any?) {
     performBindingAction("prompt_surface_title")
+  }
+
+  @IBAction func copyPaneID(_ sender: Any?) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(id.uuidString, forType: .string)
   }
 
   static func hasKeyEquivalentFocusOwnership(

@@ -3,6 +3,9 @@ import SwiftUI
 
 struct AdvancedSettingsView: View {
   @Bindable var store: StoreOf<SettingsFeature>
+  /// QuickSend skill-completion source directory. Stored directly in app storage
+  /// (read by `QuickSendView` via the same key), independent of the GlobalSettings file.
+  @AppStorage(QuickSendSkills.directorySettingKey) private var quickSendSkillsDirectory = ""
 
   var body: some View {
     VStack(alignment: .leading) {
@@ -107,6 +110,24 @@ struct AdvancedSettingsView: View {
             }
             .help("Remove the saved terminal tab and split layout from disk")
             .buttonStyle(.bordered)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        Section("Quick Send") {
+          VStack(alignment: .leading, spacing: 8) {
+            TextField(
+              "Skills directory",
+              text: $quickSendSkillsDirectory,
+              prompt: Text("Default: ~/.<agent>/skills")
+            )
+            .textFieldStyle(.roundedBorder)
+            Text(
+              "Folder whose subfolders are offered as /skill completions in the Quick Send composer. "
+                + "Leave empty to use the selected agent's default (~/.claude/skills, ~/.codex/skills, …)."
+            )
+            .foregroundStyle(.secondary)
+            .font(.callout)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
         }

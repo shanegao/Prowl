@@ -18,11 +18,16 @@ extension RepositoriesFeature {
     case .activeAgents(.entryTapped(let id)):
       guard let entry = state.activeAgents.entries[id: id] else { return .none }
       if state.isShowingCanvas {
+        // A scoped worktree/repo canvas may not contain the tapped agent — keep
+        // the canvas mode but rebind its scope to the target (no-op in the
+        // overall / active-agents board, which already shows every card).
+        rebindScopedCanvas(toWorktree: entry.worktreeID, state: &state)
         requestCanvasFocus(.tab(entry.tabID), openedWorktreeID: entry.worktreeID, state: &state)
         return .run { _ in
           _ = await terminalClient.focusSurface(entry.worktreeID, entry.surfaceID)
         }
       }
+
       let isPlainFolder =
         state.repositories[id: entry.worktreeID]?.kind == .plain
       if isPlainFolder {
@@ -375,7 +380,7 @@ extension RepositoriesFeature {
       state.preCanvasWorktreeID = state.selectedWorktreeID
       state.preCanvasTerminalTargetID = canvasSeedWorktree?.id
       state.isShelfActive = false
-      state.selection = .canvas
+      state.selection = .canvas(.overall)
       state.selectedWorkspaceChildID = nil
       state.sidebarSelectedWorktreeIDs = []
       // Canvas only renders cards for worktrees that already have a live
@@ -419,9 +424,11 @@ extension RepositoriesFeature {
       }
 
     case .toggleCanvas:
-      if state.isShowingCanvas {
+      if state.isShowingGlobalCanvas {
         // Exit canvas: prefer the card focused in canvas, then the worktree
-        // we came from, then the first available worktree.
+        // we came from, then the first available worktree. The worktree path
+        // uses exitCanvasToWorktree because selectWorktree stays in a global
+        // canvas scope (only nudging focus) and would otherwise leave us stuck.
         let targetID =
           terminalClient.canvasFocusedWorktreeID()
           ?? state.preCanvasTerminalTargetID
@@ -436,7 +443,7 @@ extension RepositoriesFeature {
           state.pendingTerminalFocusWorktreeIDs.insert(targetID)
           return .send(.selectRepository(targetID))
         }
-        return .send(.selectWorktree(targetID, focusTerminal: true))
+        return .send(.exitCanvasToWorktree(targetID))
       } else {
         // Enter canvas if there are any open worktrees.
         guard !state.orderedWorktreeRows().isEmpty else { return .none }
@@ -549,6 +556,143 @@ extension RepositoriesFeature {
       }
       return .send(.selectWorktree(targetID, focusTerminal: true))
 
+    case .selectWorktreeCanvas(let worktreeID):
+      state.preCanvasWorktreeID = state.selectedWorktreeID
+      state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
+      state.isShelfActive = false
+      state.selection = .canvas(.worktree(worktreeID))
+      state.sidebarSelectedWorktreeIDs = []
+      return .run { _ in
+        await terminalClient.send(.setCanvasMode(true))
+      }
+
+    case .toggleWorktreeCanvas(let worktreeID):
+      if case .canvas(.worktree) = state.selection {
+        // Exit scoped canvas: prefer the worktree of the focused canvas
+        // card (so the user lands on the pane they were just looking at)
+        // before falling back to the worktree we came from. Route through
+        // exitCanvasToWorktree to bypass selectWorktree's reboundCanvas
+        // branches, which would otherwise rebind canvas instead of exiting.
+        let targetID =
+          terminalClient.canvasFocusedWorktreeID()
+          ?? state.preCanvasTerminalTargetID
+          ?? state.preCanvasWorktreeID
+          ?? worktreeID
+        return .send(.exitCanvasToWorktree(targetID))
+      } else {
+        return .send(.selectWorktreeCanvas(worktreeID))
+      }
+
+    case .selectRepositoryCanvas(let repositoryID):
+      state.preCanvasWorktreeID = state.selectedWorktreeID
+      state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
+      state.isShelfActive = false
+      state.selection = .canvas(.repository(repositoryID))
+      state.sidebarSelectedWorktreeIDs = []
+      return .run { _ in
+        await terminalClient.send(.setCanvasMode(true))
+      }
+
+    case .toggleRepositoryCanvas(let repositoryID):
+      if case .canvas(.repository) = state.selection {
+        // Exit scoped canvas: prefer the worktree of the focused canvas
+        // card (filtered to the scoped repo so we never land outside it).
+        // ALL fallback candidates are filtered through the scoped repo's
+        // worktree set — otherwise a stale preCanvas pointer to a
+        // worktree from a different repo would land the user outside the
+        // repo they were canvasing. If the scoped repo itself is gone,
+        // exit to the global canvas instead of guessing.
+        // Scoped repo is gone: fall back to overall canvas. Intentionally
+        // does NOT exit canvas mode outright — the hotkey would feel broken
+        // if pressing it dropped the user back to no selection at all. The
+        // overall canvas gives them a view of everything so they can
+        // re-navigate. If you want strict "exit canvas" semantics here,
+        // replace this with explicit canvas-mode-off + selection clearing.
+        guard let repository = state.repositories[id: repositoryID] else {
+          return .send(.toggleCanvas)
+        }
+        let scopedWorktreeIDs = Set(repository.worktrees.map(\.id))
+        let inRepo: (Worktree.ID?) -> Worktree.ID? = { id in
+          id.flatMap { scopedWorktreeIDs.contains($0) ? $0 : nil }
+        }
+        let targetID =
+          inRepo(terminalClient.canvasFocusedWorktreeID())
+          ?? inRepo(state.preCanvasTerminalTargetID)
+          ?? inRepo(state.preCanvasWorktreeID)
+          ?? repository.worktrees.first?.id
+        // Empty scoped repo (no worktrees): same fallback rationale as
+        // "repo gone" above — drop to overall canvas, not to no selection.
+        guard let targetID else { return .send(.toggleCanvas) }
+        return .send(.exitCanvasToWorktree(targetID))
+      } else {
+        return .send(.selectRepositoryCanvas(repositoryID))
+      }
+
+    case .selectActiveAgentsCanvas:
+      // Global canvas filtered to agent tabs. Unlike `selectCanvas` we do
+      // NOT seed the current worktree's tab — the active-agents canvas
+      // should show only tabs with a live agent, so an empty board (no
+      // agents) is the correct state, and the toolbar button is gated on
+      // there being at least one agent anyway.
+      state.preCanvasWorktreeID = state.selectedWorktreeID
+      state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
+      state.isShelfActive = false
+      state.selection = .canvas(.activeAgents)
+      state.sidebarSelectedWorktreeIDs = []
+      return .run { _ in
+        await terminalClient.send(.setCanvasMode(true))
+      }
+
+    case .toggleActiveAgentsCanvas:
+      if case .canvas(.activeAgents) = state.selection {
+        // Exit: prefer the focused card's worktree, then where we came
+        // from, then any worktree. Route through exitCanvasToWorktree
+        // (which itself falls back to toggleCanvas if the target vanished)
+        // so we exit canvas mode rather than rebinding it.
+        let targetID =
+          terminalClient.canvasFocusedWorktreeID()
+          ?? state.preCanvasTerminalTargetID
+          ?? state.preCanvasWorktreeID
+          ?? state.lastFocusedWorktreeID
+          ?? state.orderedWorktreeRows().first?.id
+        guard let targetID else { return .none }
+        return .send(.exitCanvasToWorktree(targetID))
+      } else {
+        return .send(.selectActiveAgentsCanvas)
+      }
+
+    case .exitCanvasToWorktree(let worktreeID):
+      // Expand-to-pane: leave canvas and land on the card's worktree,
+      // bypassing selectWorktree's reboundCanvas paths so we exit canvas
+      // mode rather than rebinding it.
+      guard state.worktree(for: worktreeID) != nil else {
+        // Target gone (in-flight action sent before applyRepositories
+        // ran). Don't leave the user stuck in canvas with a no-op key
+        // press — exit to the global canvas via toggleCanvas.
+        return .send(.toggleCanvas)
+      }
+      setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: true)
+      state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
+      state.openedWorktreeIDs.insert(worktreeID)
+      let selectedWorktree = state.worktree(for: worktreeID)
+      return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
+
+    case .exitCanvasToRepository(let repositoryID):
+      // Mirror of exitCanvasToWorktree for plain-folder targets: bypass
+      // selectRepository's reboundCanvas branch so we leave canvas instead
+      // of rebinding to a per-repo canvas.
+      guard let repository = state.repositories[id: repositoryID] else {
+        return .send(.toggleCanvas)
+      }
+      recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
+      state.selection = .repository(repositoryID)
+      state.sidebarSelectedWorktreeIDs = []
+      if repository.kind == .plain {
+        state.openedWorktreeIDs.insert(repositoryID)
+        state.pendingTerminalFocusWorktreeIDs.insert(repositoryID)
+      }
+      return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
+
     case .setSidebarSelectedWorktreeIDs(let worktreeIDs):
       let validWorktreeIDs = Set(state.orderedWorktreeRows().map(\.id))
       var nextWorktreeIDs = worktreeIDs.intersection(validWorktreeIDs)
@@ -566,6 +710,18 @@ extension RepositoriesFeature {
       let selectRepoToken = repositoriesLogger.beginInterval("reducer.selectRepository")
       defer { repositoriesLogger.endInterval(selectRepoToken) }
       guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
+      if let rebound = state.selection?.reboundCanvas(toRepository: repositoryID) {
+        // Same-kind canvas rebind: stay in canvas, swap target. History is
+        // suppressed in canvas; the delegate is skipped because canvas mode
+        // has no single active worktree — subscribers should observe
+        // canvasScope instead.
+        state.selection = rebound
+        state.sidebarSelectedWorktreeIDs = []
+        if state.repositories[id: repositoryID]?.kind == .plain {
+          state.openedWorktreeIDs.insert(repositoryID)
+        }
+        return .none
+      }
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       state.selection = .repository(repositoryID)
       state.selectedWorkspaceChildID = nil
@@ -610,6 +766,68 @@ extension RepositoriesFeature {
     case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
       let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
       defer { repositoriesLogger.endInterval(selectWtToken) }
+      if let worktreeID, state.worktree(for: worktreeID) != nil {
+        if let rebound = state.selection?.reboundCanvas(toWorktree: worktreeID) {
+          // Same-kind canvas rebind: stay in canvas, swap target.
+          // setSingleWorktreeSelection would close canvas; history is
+          // suppressed in canvas; the delegate is skipped because canvas
+          // mode has no single active worktree to broadcast.
+          state.selection = rebound
+          state.sidebarSelectedWorktreeIDs = []
+          state.openedWorktreeIDs.insert(worktreeID)
+          return .none
+        }
+        if case .canvas(.repository) = state.selection,
+          let repoID = state.repositoryID(containing: worktreeID),
+          let rebound = state.selection?.reboundCanvas(toRepository: repoID)
+        {
+          // Tap from inside repo-canvas: swap the scope to the tapped
+          // worktree's repo (suppressed-delegate rationale as above).
+          state.selection = rebound
+          state.sidebarSelectedWorktreeIDs = []
+          state.openedWorktreeIDs.insert(worktreeID)
+          // Also nudge the canvas-focused card so the tap surfaces the
+          // tapped worktree's first card when it doesn't already own
+          // focus. CanvasView's `.onChange` guard skips when the request
+          // matches the current primary, so this is a safe no-op for
+          // "tap the same worktree's row" (matching the user spec).
+          return .run { [worktreeID] _ in
+            guard await terminalClient.canvasFocusedWorktreeID() != worktreeID else { return }
+            await terminalClient.send(.setCanvasFocusedWorktreeID(worktreeID))
+          }
+        }
+        // Global canvas scopes (`.overall` / `.activeAgents`) already render
+        // every worktree's cards in one board, so there's no scope to
+        // rebind — keep canvas open and just nudge focus to the tapped
+        // worktree's card. Without this branch the next
+        // `setSingleWorktreeSelection` would force `.selection` back to
+        // `.worktree(id)` and silently exit canvas mode (matters most for
+        // notification taps: returning to the app should land on the
+        // notification's pane, not drop the user out of canvas).
+        switch state.selection {
+        case .canvas(.overall):
+          // The overall board renders every worktree's card, so focus the
+          // target via a canvas focus request — NOT `setCanvasFocusedWorktreeID`.
+          // CanvasView only reacts to `canvasFocusedWorktreeID` in scoped
+          // modes (`isScopedMode`), so in the overall board the focus request
+          // (`pendingCanvasFocusRequest`) is the only mechanism that scrolls
+          // to the card. `requestCanvasFocus` also inserts `openedWorktreeIDs`.
+          state.sidebarSelectedWorktreeIDs = []
+          requestCanvasFocus(.worktree(worktreeID), openedWorktreeID: worktreeID, state: &state)
+          return .none
+        case .canvas(.activeAgents):
+          // Active-agents canvas IS scoped (`scopedTabIDs`), so the focus
+          // bit is honored by CanvasView's `onChange` — keep nudging it.
+          state.sidebarSelectedWorktreeIDs = []
+          state.openedWorktreeIDs.insert(worktreeID)
+          return .run { [worktreeID] _ in
+            guard await terminalClient.canvasFocusedWorktreeID() != worktreeID else { return }
+            await terminalClient.send(.setCanvasFocusedWorktreeID(worktreeID))
+          }
+        default:
+          break
+        }
+      }
       setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: recordHistory)
       if focusTerminal, let worktreeID {
         state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
@@ -897,6 +1115,8 @@ extension RepositoriesFeature {
           return .none
         }
         let worktreeURL = worktree.workingDirectory
+        let repoRoot = worktree.repositoryRootURL
+        let branchName = worktree.name
         let gitClient = gitClient
         let previousLineChanges = normalizedLineChanges(state.worktreeInfoByID[worktreeID])
         return .run { send in
@@ -914,6 +1134,17 @@ extension RepositoriesFeature {
               )
             )
           }
+          // Branch state (ahead/behind vs base + pushed) for the no-PR toolbar
+          // status item — computed locally (no network), independent of the diff.
+          let aheadBehind = await gitClient.aheadBehind(worktreeURL, repoRoot)
+          let isPushed = await gitClient.remoteBranchExists(repoRoot, branchName)
+          await send(
+            .worktreeBranchStateLoaded(
+              worktreeID: worktreeID,
+              aheadBehind: aheadBehind.map { AheadBehind(ahead: $0.ahead, behind: $0.behind) },
+              isPushed: isPushed
+            )
+          )
         }
       case .repositoryWorktreesChanged:
         return .send(.reloadRepositories(animated: true))
@@ -963,6 +1194,15 @@ extension RepositoriesFeature {
         worktreeID: worktreeID,
         added: added,
         removed: removed,
+        state: &state
+      )
+      return .none
+
+    case .worktreeBranchStateLoaded(let worktreeID, let aheadBehind, let isPushed):
+      updateWorktreeBranchState(
+        worktreeID: worktreeID,
+        aheadBehind: aheadBehind,
+        isPushed: isPushed,
         state: &state
       )
       return .none

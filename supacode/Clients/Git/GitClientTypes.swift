@@ -22,6 +22,8 @@ enum GitOperation: String {
   case showFile = "show_file"
   case remoteInfo = "remote_info"
   case remoteList = "remote_list"
+  case remoteBranchExists = "remote_branch_exists"
+  case aheadBehind = "ahead_behind"
   case fetchRemote = "fetch_remote"
   case remoteBranchRefs = "remote_branch_refs"
 }

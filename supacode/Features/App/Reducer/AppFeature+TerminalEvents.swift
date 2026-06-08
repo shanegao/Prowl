@@ -168,9 +168,20 @@ extension AppFeature {
       .send(.repositories(.worktreeOrdering(.worktreeNotificationReceived(worktreeID))))
     ]
     if state.settings.systemNotificationsEnabled {
+      // Enrich the banner with the source repo/worktree so it's clear which
+      // agent/pane sent it (macOS renders this as the notification subtitle).
+      let subtitle = state.repositories.worktreeContextLabel(for: worktreeID)
       effects.append(
         .run { _ in
-          await systemNotificationClient.send(title, body, worktreeID, surfaceID)
+          // If the pane is showing a Claude permission prompt, surface the real
+          // question (as the body) and a quick-answer button per option; otherwise
+          // send the plain banner the agent provided.
+          let prompt = await terminalClient.readPermissionPrompt(worktreeID, surfaceID)
+          let resolvedBody = prompt?.question ?? body
+          let options = (prompt?.options ?? []).map {
+            SystemNotificationReplyOption(label: $0.label, key: String($0.number))
+          }
+          await systemNotificationClient.send(title, subtitle, resolvedBody, worktreeID, surfaceID, options)
         }
       )
     }

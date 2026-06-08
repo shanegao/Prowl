@@ -13,7 +13,6 @@ private actor GithubIntegrationAvailabilityCache {
   private let ttl: Duration
   private let clock = ContinuousClock()
   private var cachedEntry: Entry?
-  private var inFlightTask: Task<Bool, Never>?
 
   init(ttl: Duration) {
     self.ttl = ttl
@@ -27,21 +26,17 @@ private actor GithubIntegrationAvailabilityCache {
       return cachedEntry.value
     }
 
-    if let inFlightTask {
-      return await inFlightTask.value
-    }
-
-    let task = Task { await fetch() }
-    inFlightTask = task
-    let value = await task.value
+    // Fetch directly on the actor — no detached `Task`. The actor already
+    // serializes access; storing this escaping closure in an unstructured
+    // `Task` over-released its captured `GithubCLIClient` on task completion,
+    // a heap-corrupting double-free that crashed the app at launch (the crash
+    // signature varied run-to-run, the hallmark of free-list corruption).
+    let value = await fetch()
     cachedEntry = Entry(value: value, fetchedAt: clock.now)
-    inFlightTask = nil
     return value
   }
 
   func clear() {
-    inFlightTask?.cancel()
-    inFlightTask = nil
     cachedEntry = nil
   }
 }
@@ -76,7 +71,11 @@ private func githubIntegrationIsAvailable() async -> Bool {
     await githubIntegrationAvailabilityCache.clear()
     return false
   }
+  // Capture a concrete resolved closure, not the `@Dependency`-wrapped
+  // `GithubCLIClient` struct (per `~/.claude/rules/ios.md`: no `@Dependency`
+  // inside escaping closures).
+  let isAvailable = githubCLI.isAvailable
   return await githubIntegrationAvailabilityCache.value {
-    await githubCLI.isAvailable()
+    await isAvailable()
   }
 }

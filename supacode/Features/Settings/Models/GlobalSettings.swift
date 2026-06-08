@@ -32,6 +32,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var autoShowActiveAgentsPanel: Bool
   var showActiveAgentTabTitles: Bool
   var showActiveAgentStatusInShelf: Bool
+  var customCommands: [UserCustomCommand]
   var windowTintMode: WindowTintMode
   var windowTintCustomColor: TintColor
   var showRunButtonInToolbar: Bool
@@ -77,6 +78,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel: false,
     showActiveAgentTabTitles: false,
     showActiveAgentStatusInShelf: true,
+    customCommands: [],
     windowTintMode: .repositoryColor,
     windowTintCustomColor: .default,
     showRunButtonInToolbar: true,
@@ -121,6 +123,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel: Bool = false,
     showActiveAgentTabTitles: Bool = false,
     showActiveAgentStatusInShelf: Bool = true,
+    customCommands: [UserCustomCommand] = [],
     windowTintMode: WindowTintMode = .repositoryColor,
     windowTintCustomColor: TintColor = .default,
     showRunButtonInToolbar: Bool = true,
@@ -163,6 +166,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.autoShowActiveAgentsPanel = autoShowActiveAgentsPanel
     self.showActiveAgentTabTitles = showActiveAgentTabTitles
     self.showActiveAgentStatusInShelf = showActiveAgentStatusInShelf
+    self.customCommands = UserRepositorySettings.normalizedCommands(customCommands)
     self.windowTintMode = windowTintMode
     self.windowTintCustomColor = windowTintCustomColor
     self.showRunButtonInToolbar = showRunButtonInToolbar
@@ -208,6 +212,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(autoShowActiveAgentsPanel, forKey: .autoShowActiveAgentsPanel)
     try container.encode(showActiveAgentTabTitles, forKey: .showActiveAgentTabTitles)
     try container.encode(showActiveAgentStatusInShelf, forKey: .showActiveAgentStatusInShelf)
+    try container.encode(customCommands, forKey: .customCommands)
     try container.encode(windowTintMode, forKey: .windowTintMode)
     try container.encode(windowTintCustomColor, forKey: .windowTintCustomColor)
     try container.encode(showRunButtonInToolbar, forKey: .showRunButtonInToolbar)
@@ -254,6 +259,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case autoShowActiveAgentsPanel
     case showActiveAgentTabTitles
     case showActiveAgentStatusInShelf
+    case customCommands
     case windowTintMode
     case windowTintCustomColor
     case showRunButtonInToolbar
@@ -358,6 +364,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showActiveAgentStatusInShelf =
       try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentStatusInShelf)
       ?? Self.default.showActiveAgentStatusInShelf
+    let decodedCommands =
+      try container.decodeIfPresent([UserCustomCommand].self, forKey: .customCommands) ?? []
+    customCommands = UserRepositorySettings.normalizedCommands(decodedCommands)
     (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
     (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) = try Self.decodeShelfSpineTint(from: container)
     (externalDiffToolID, externalDiffCustomCommand) = try Self.decodeExternalDiffSettings(from: container)

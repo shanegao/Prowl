@@ -338,6 +338,80 @@ extension RepositoriesFeature {
           await openURLClient.open(repositoryURL)
         }
       }
+      if case .openBranchOnCodeHost = action {
+        // Branch name resolution prefers `pullRequest.headRefName` over
+        // `worktree.name` because users sometimes rename branches after
+        // creating the worktree — the PR's headRefName is the authoritative
+        // current branch on the code host, while the worktree directory name
+        // is frozen at creation time.
+        let gitClient = gitClient
+        let openURLClient = openURLClient
+        let branchName = optionalPullRequest?.headRefName ?? worktree.name
+        guard !branchName.isEmpty else {
+          return .send(
+            .presentAlert(
+              title: "Branch name unavailable",
+              message: "Prowl could not determine the branch name for this worktree."
+            )
+          )
+        }
+        return .run { send in
+          guard let repositoryURL = await gitClient.repositoryWebURL(repoRoot) else {
+            await send(
+              .presentAlert(
+                title: "Repository URL not available",
+                message: "Prowl could not determine a code host URL for this repository."
+              )
+            )
+            return
+          }
+          // `.urlPathAllowed` only returns nil for invalid UTF-8, which Swift
+          // strings cannot contain. Force-unwrap is safe and surfaces the
+          // impossible-case as a crash rather than masking the bug.
+          let encoded = branchName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!
+          guard let branchURL = URL(string: "\(repositoryURL.absoluteString)/tree/\(encoded)") else {
+            await send(
+              .presentAlert(
+                title: "Branch URL not available",
+                message:
+                  "Prowl could not construct a code host URL for branch '\(branchName)'."
+              )
+            )
+            return
+          }
+          await openURLClient.open(branchURL)
+        }
+      }
+      if case .openBranchOrRepoOnCodeHost = action {
+        // No-PR toolbar tap: open the branch page when the branch is on the
+        // remote, otherwise the repository page (a local/unpushed branch has no
+        // branch page yet). Prefers the PR's headRefName when one exists.
+        let gitClient = gitClient
+        let openURLClient = openURLClient
+        let branchName = optionalPullRequest?.headRefName ?? worktree.name
+        return .run { send in
+          guard let repositoryURL = await gitClient.repositoryWebURL(repoRoot) else {
+            await send(
+              .presentAlert(
+                title: "Repository URL not available",
+                message: "Prowl could not determine a code host URL for this repository."
+              )
+            )
+            return
+          }
+          // Open the branch page only when the branch is confirmed on origin; a
+          // `nil` (git error) or `false` (absent) falls back to the repo page.
+          let isOnRemote = await gitClient.remoteBranchExists(repoRoot, branchName)
+          if isOnRemote == true,
+            let encoded = branchName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+            let branchURL = URL(string: "\(repositoryURL.absoluteString)/tree/\(encoded)")
+          {
+            await openURLClient.open(branchURL)
+          } else {
+            await openURLClient.open(repositoryURL)
+          }
+        }
+      }
       guard let pullRequest = optionalPullRequest else {
         return .send(
           .presentAlert(
@@ -355,7 +429,7 @@ extension RepositoriesFeature {
         $0.checkState == .failure && $0.detailsUrl != nil
       }?.detailsUrl
       switch action {
-      case .openOnCodeHost:
+      case .openOnCodeHost, .openBranchOnCodeHost, .openBranchOrRepoOnCodeHost:
         return .none
 
       case .copyFailingJobURL:

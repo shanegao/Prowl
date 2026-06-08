@@ -309,11 +309,17 @@ extension RepositoriesFeature {
       shouldPruneArchivedWorktrees
       ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state)
       : false
-    if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
+    if !state.isShowingArchivedWorktrees,
       !isSidebarSelectionValid(state.selection, state: state)
     {
-      state.selection = nil
-      state.selectedWorkspaceChildID = nil
+      if state.isShowingCanvas {
+        // Canvas-scoped target (worktree or repo) was removed: stay in canvas
+        // but fall back to overall so the user doesn't see a blank scope.
+        state.selection = .canvas(.overall)
+      } else {
+        state.selection = nil
+        state.selectedWorkspaceChildID = nil
+      }
     }
     if state.shouldRestoreLastFocusedWorktree {
       state.shouldRestoreLastFocusedWorktree = false

@@ -10,6 +10,9 @@ import Testing
 struct CommandPaletteFeatureTests {
   @Test func commandPaletteItems_onlyGlobalWhenEmpty() {
     let items = CommandPaletteFeature.commandPaletteItems(from: RepositoriesFeature.State())
+    // viewToggleCommandItems filters Canvas + Shelf out of the palette when no
+    // worktrees exist (they'd no-op), so an empty state's expected list ends at
+    // the sidebar/active-agents toggles.
     var expectedIDs = [
       "global.check-for-updates",
       "global.open-settings",
@@ -22,8 +25,6 @@ struct CommandPaletteFeatureTests {
       "global.install-cli",
       "global.toggle-left-sidebar",
       "global.toggle-active-agents-panel",
-      "global.toggle-canvas",
-      "global.toggle-shelf",
     ]
     #if DEBUG
       expectedIDs.append(contentsOf: [
@@ -49,7 +50,7 @@ struct CommandPaletteFeatureTests {
 
   @Test func commandPaletteItems_includesCanvasCommandsInCanvasMode() {
     var state = RepositoriesFeature.State()
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
 
     let ids = CommandPaletteFeature.commandPaletteItems(from: state).map(\.id)
     #expect(ids.contains("global.expand-canvas-card"))
@@ -100,7 +101,10 @@ struct CommandPaletteFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .worktree(worktree.id)
 
-    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
     let ids = Set(items.map(\.id))
     #expect(ids.contains("global.run-script"))
     #expect(!ids.contains("global.stop-run-script"))
@@ -111,7 +115,7 @@ struct CommandPaletteFeatureTests {
     let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
     let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
 
     let items = CommandPaletteFeature.commandPaletteItems(
       from: state,
@@ -132,7 +136,8 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(
       from: state,
-      runScriptStatusByWorktreeID: [worktree.id: true]
+      runScriptStatusByWorktreeID: [worktree.id: true],
+      actionTargetWorktreeID: worktree.id
     )
     let ids = Set(items.map(\.id))
     #expect(ids.contains("global.stop-run-script"))
@@ -146,7 +151,10 @@ struct CommandPaletteFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .worktree(worktree.id)
 
-    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
     let pinItem = items.first { $0.id == "global.toggle-pin-worktree" }
     #expect(pinItem?.title == "Pin Worktree")
     #expect(pinItem?.kind == .togglePinWorktree(worktree.id, isCurrentlyPinned: false))
@@ -160,7 +168,10 @@ struct CommandPaletteFeatureTests {
     state.selection = .worktree(worktree.id)
     state.pinnedWorktreeIDs = [worktree.id]
 
-    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
     let pinItem = items.first { $0.id == "global.toggle-pin-worktree" }
     #expect(pinItem?.title == "Unpin Worktree")
     #expect(pinItem?.kind == .togglePinWorktree(worktree.id, isCurrentlyPinned: true))
@@ -173,7 +184,10 @@ struct CommandPaletteFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .worktree(worktree.id)
 
-    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
     let renameItem = items.first { $0.id == "global.rename-branch" }
     #expect(renameItem?.title == "Rename Branch")
     #expect(renameItem?.kind == .renameBranch)
@@ -193,7 +207,10 @@ struct CommandPaletteFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .worktree(main.id)
 
-    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: main.id
+    )
     let ids = Set(items.map(\.id))
     #expect(!ids.contains("global.toggle-pin-worktree"))
     #expect(!ids.contains("global.delete-worktree"))
@@ -209,13 +226,16 @@ struct CommandPaletteFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .worktree(worktree.id)
 
-    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
     let deleteItem = items.first { $0.id == "global.delete-worktree" }
     #expect(deleteItem?.title == "Delete Worktree")
     #expect(deleteItem?.defaultSuggestion == false)
   }
 
-  @Test func commandPaletteItems_includesCustomCommands() {
+  @Test func commandPaletteItems_includesBuildableExcludesEmptyCustomCommands() {
     let buildCmd = UserCustomCommand(
       id: "cmd-build",
       title: "Build",
@@ -409,7 +429,7 @@ struct CommandPaletteFeatureTests {
     let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
     let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
 
     let items = CommandPaletteFeature.commandPaletteItems(
       from: state,
@@ -562,7 +582,7 @@ struct CommandPaletteFeatureTests {
     let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "feature/canvas", repoRoot: rootPath)
     let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
     state.codeHostByRepositoryID[repository.id] = .github
     state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
       pullRequest: makePullRequest()
@@ -634,7 +654,8 @@ struct CommandPaletteFeatureTests {
       kind: .worktreeSelect("wt-pref")
     )
 
-    let result = CommandPaletteFeature.filterItems(items: [openSettings, prefBranch], query: "preferences")
+    let result = CommandPaletteFeature.filterItems(
+      items: [openSettings, prefBranch], query: "preferences")
     #expect(result.first?.id == prefBranch.id)
   }
 
@@ -648,7 +669,8 @@ struct CommandPaletteFeatureTests {
       keywords: ["preferences"]
     )
 
-    let result = CommandPaletteFeature.filterItems(items: [openSettings], query: "preferences settings")
+    let result = CommandPaletteFeature.filterItems(
+      items: [openSettings], query: "preferences settings")
     expectNoDifference(result.map(\.id), [openSettings.id])
   }
 
@@ -1675,6 +1697,339 @@ struct CommandPaletteFeatureTests {
     }
     await store.receive(.delegate(.ghosttyCommand("goto_split:right")))
   }
+
+  @Test func commandPaletteItems_includesCustomCommands() {
+    let command = UserCustomCommand(
+      id: "cmd-1",
+      title: "Run Build",
+      systemImage: "hammer",
+      command: "npm run build",
+      execution: .shellScript,
+      shortcut: nil
+    )
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: RepositoriesFeature.State(),
+      customCommands: [command]
+    )
+    let customItem = items.first {
+      if case .runCustomCommand(let inner) = $0.kind {
+        return inner.commandID == command.id
+      }
+      return false
+    }
+    #expect(customItem?.title == "Run Build")
+    #expect(customItem?.id == "custom-command.cmd-1")
+    #expect(customItem?.section == .customCommands)
+  }
+
+  @Test func commandPaletteItems_omitsCustomCommandsWithEmptyBody() {
+    let blank = UserCustomCommand(
+      id: "cmd-blank",
+      title: "Empty",
+      systemImage: "hammer",
+      command: "   ",
+      execution: .shellScript,
+      shortcut: nil
+    )
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: RepositoriesFeature.State(),
+      customCommands: [blank]
+    )
+    #expect(
+      items.contains { item in
+        if case .runCustomCommand = item.kind { return true }
+        return false
+      } == false
+    )
+  }
+
+  @Test func searchSurfacesCustomCommands() {
+    // Custom commands are not in `defaultSuggestion` (so they don't crowd the
+    // empty-query view); a search query matching the command's title must
+    // still surface them.
+    let command = UserCustomCommand(
+      id: "cmd-1",
+      title: "Run Build",
+      systemImage: "hammer",
+      command: "npm run build",
+      execution: .shellScript,
+      shortcut: nil
+    )
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: RepositoriesFeature.State(),
+      customCommands: [command]
+    )
+    let matched = CommandPaletteFeature.filterItems(items: items, query: "build")
+    #expect(
+      matched.contains { item in
+        if case .runCustomCommand(let inner) = item.kind {
+          return inner.commandID == command.id
+        }
+        return false
+      }
+    )
+  }
+
+  @Test func activateCustomCommandDispatchesDelegate() async {
+    let now = Date(timeIntervalSince1970: 1_111_111)
+    let item = CommandPaletteItem.appShortcut(
+      id: "custom-command.cmd-2",
+      title: "Lint",
+      category: .worktree,
+      kind: .runCustomCommand(index: 0, commandID: "cmd-2", systemImage: "checkmark.shield")
+    )
+    var state = CommandPaletteFeature.State()
+    state.isPresented = true
+    let store = TestStore(initialState: state) {
+      CommandPaletteFeature()
+    }
+    store.dependencies.date = .constant(now)
+
+    await store.send(.activateItem(item)) {
+      $0.isPresented = false
+      $0.query = ""
+      $0.selectedIndex = nil
+      $0.recencyByItemID[item.id] = now.timeIntervalSince1970
+    }
+    await store.receive(.delegate(.runCustomCommand(commandID: "cmd-2")))
+  }
+
+  @Test func pruneRecency_preservesCustomCommandEntries() async {
+    var state = CommandPaletteFeature.State()
+    let customEntry = "custom-command.cmd-keep"
+    let purgeable = "worktree.removed-wt.select"
+    state.recencyByItemID = [
+      customEntry: 100,
+      purgeable: 200,
+      "global.open-settings": 300,
+    ]
+    let store = TestStore(initialState: state) {
+      CommandPaletteFeature()
+    }
+    await store.send(.pruneRecency(["global.open-settings"])) {
+      $0.recencyByItemID = [
+        customEntry: 100,
+        "global.open-settings": 300,
+      ]
+    }
+  }
+
+  @Test func commandPaletteItems_showsBranchActionWhenRepoSupportsCodeHost() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let branchItem = items.first {
+      if case .openBranchOnCodeHost(let worktreeID) = $0.kind {
+        return worktreeID == worktree.id
+      }
+      return false
+    }
+    #expect(branchItem != nil)
+    #expect(branchItem?.section == .pullRequest)
+
+    let searched = CommandPaletteFeature.filterItems(items: items, query: "branch")
+    #expect(searched.contains { $0.id == branchItem?.id })
+  }
+
+  // MARK: - selectedWorktreeActionItems
+
+  @Test func commandPaletteItems_includesSelectedWorktreeActionsForNonMain() {
+    let rootPath = "/tmp/repo-selected-actions"
+    // Non-main worktree (workingDirectory != repositoryRootURL) so the pin
+    // branch and the canvas/path/reveal actions all apply.
+    let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    // Selecting the worktree resolves `selectedTerminalWorktree`, which is what
+    // feeds `selectedWorktreeActionItems` through `commandPaletteItems`.
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    let toggleWorktreeCanvas = items.first {
+      if case .toggleWorktreeCanvas(let id) = $0.kind { return id == worktree.id }
+      return false
+    }
+    #expect(toggleWorktreeCanvas?.title == "Toggle Worktree Canvas")
+    #expect(toggleWorktreeCanvas?.subtitle == worktree.name)
+
+    let toggleRepoCanvas = items.first {
+      if case .toggleRepositoryCanvas(let id) = $0.kind { return id == repository.id }
+      return false
+    }
+    #expect(toggleRepoCanvas?.title == "Toggle Repo Canvas")
+    #expect(toggleRepoCanvas?.subtitle == repository.name)
+
+    let copyPath = items.first {
+      if case .copyWorktreePath(let id) = $0.kind { return id == worktree.id }
+      return false
+    }
+    #expect(copyPath?.title == "Copy Worktree Path")
+    #expect(copyPath?.subtitle == worktree.workingDirectory.path)
+
+    let reveal = items.first {
+      if case .revealWorktreeInFinder(let id) = $0.kind { return id == worktree.id }
+      return false
+    }
+    #expect(reveal?.title == "Reveal Worktree in Finder")
+    #expect(reveal?.subtitle == worktree.name)
+  }
+
+  @Test func commandPaletteItems_selectedWorktreeShowsPinForUnpinnedNonMain() {
+    let rootPath = "/tmp/repo-selected-pin"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let pinItem = items.first {
+      if case .pinWorktree(let id) = $0.kind { return id == worktree.id }
+      return false
+    }
+    #expect(pinItem?.title == "Pin Worktree to Top")
+    #expect(pinItem?.subtitle == worktree.name)
+    // The unpin variant must not also be present for an unpinned worktree.
+    #expect(
+      items.contains {
+        if case .unpinWorktree = $0.kind { return true }
+        return false
+      } == false
+    )
+  }
+
+  @Test func commandPaletteItems_selectedWorktreeShowsUnpinForPinnedNonMain() {
+    let rootPath = "/tmp/repo-selected-unpin"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    state.pinnedWorktreeIDs = [worktree.id]
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let unpinItem = items.first {
+      if case .unpinWorktree(let id) = $0.kind { return id == worktree.id }
+      return false
+    }
+    #expect(unpinItem?.title == "Unpin Worktree")
+    #expect(unpinItem?.subtitle == worktree.name)
+    // The pin variant must not also be present for a pinned worktree.
+    #expect(
+      items.contains {
+        if case .pinWorktree = $0.kind { return true }
+        return false
+      } == false
+    )
+  }
+
+  @Test func commandPaletteItems_selectedMainWorktreeOmitsPinUnpinButKeepsCanvasActions() {
+    let rootPath = "/tmp/repo-selected-main"
+    // Main worktree: workingDirectory == repositoryRootURL → Worktree.isMain == true,
+    // so the pin/unpin branch is skipped while canvas/path/reveal stay.
+    let main = makeWorktree(
+      id: rootPath,
+      name: "main",
+      repoRoot: rootPath,
+      workingDirectory: rootPath
+    )
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [main])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(main.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(
+      items.contains {
+        if case .pinWorktree = $0.kind { return true }
+        if case .unpinWorktree = $0.kind { return true }
+        return false
+      } == false
+    )
+    // Canvas / copy / reveal actions remain for the main worktree.
+    #expect(
+      items.contains {
+        if case .toggleWorktreeCanvas(let id) = $0.kind { return id == main.id }
+        return false
+      }
+    )
+    #expect(
+      items.contains {
+        if case .toggleRepositoryCanvas(let id) = $0.kind { return id == repository.id }
+        return false
+      }
+    )
+    #expect(
+      items.contains {
+        if case .copyWorktreePath(let id) = $0.kind { return id == main.id }
+        return false
+      }
+    )
+    #expect(
+      items.contains {
+        if case .revealWorktreeInFinder(let id) = $0.kind { return id == main.id }
+        return false
+      }
+    )
+  }
+
+  // MARK: - selectedCodeHostItems (no-code-host fallback)
+
+  @Test func commandPaletteItems_omitsCodeHostActionsForPlainRepo() {
+    let rootPath = "/tmp/folder-no-code-host"
+    // A `.plain` (non-git) repo reports `supportsCodeHost == false`, so neither
+    // the Open-Repository nor the Open-Branch code-host items should appear.
+    let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
+    let repository = makeRepository(
+      rootPath: rootPath,
+      name: "Folder",
+      kind: .plain,
+      worktrees: [worktree]
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(
+      items.contains {
+        if case .openRepositoryOnCodeHost = $0.kind { return true }
+        if case .openBranchOnCodeHost = $0.kind { return true }
+        return false
+      } == false
+    )
+  }
+
+  @Test func commandPaletteItems_gitRepoWithoutPullRequestShowsRepoAndBranchCodeHostItems() {
+    let rootPath = "/tmp/repo-no-pr"
+    // Code-host-capable (`.git`) repo with no PR info → both the Open-Repository
+    // (tier 2) and Open-Branch (tier 3) code-host items appear.
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    let openRepoItem = items.first {
+      if case .openRepositoryOnCodeHost(let id) = $0.kind { return id == worktree.id }
+      return false
+    }
+    #expect(openRepoItem?.title == "Open Repository on Code Host")
+    #expect(openRepoItem?.subtitle == repository.name)
+    #expect(openRepoItem?.priorityTier == 2)
+
+    let openBranchItem = items.first {
+      if case .openBranchOnCodeHost(let id) = $0.kind { return id == worktree.id }
+      return false
+    }
+    #expect(openBranchItem?.title == "Open Branch on Code Host")
+    #expect(openBranchItem?.subtitle == repository.name)
+    #expect(openBranchItem?.priorityTier == 3)
+  }
 }
 
 private func makeWorktree(
@@ -1737,11 +2092,13 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
   case .newWorktree, .refreshWorktrees, .viewArchivedWorktrees,
     .changeFocusedTabIcon,
     .runScript, .stopRunScript, .togglePinWorktree,
-    .renameBranch, .deleteWorktree, .runCustomCommand:
+    .renameBranch, .deleteWorktree, .runCustomCommand,
+    .pinWorktree, .unpinWorktree, .copyWorktreePath, .revealWorktreeInFinder:
     return .worktree
   case .jumpToLatestUnread, .worktreeSelect, .revealInFinder, .copyPath, .revealInSidebar:
     return .navigation
-  case .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady,
+  case .openPullRequest, .openRepositoryOnCodeHost, .openBranchOnCodeHost,
+    .markPullRequestReady,
     .mergePullRequest, .closePullRequest, .copyFailingJobURL, .copyCiFailureLogs,
     .rerunFailedJobs, .openFailingCheckDetails:
     return .pullRequest
@@ -1749,7 +2106,7 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
     return .terminal
   case .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas,
     .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .tileCanvasCards, .selectAllCanvasCards,
-    .toggleShelf, .showDiff:
+    .toggleShelf, .toggleWorktreeCanvas, .toggleRepositoryCanvas, .showDiff:
     return .view
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
@@ -1766,13 +2123,13 @@ private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
     .copyFailingJobURL, .copyCiFailureLogs, .rerunFailedJobs, .openFailingCheckDetails,
     .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas,
     .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .tileCanvasCards, .selectAllCanvasCards,
-    .toggleShelf, .showDiff,
-    .revealInFinder, .copyPath, .revealInSidebar,
-    .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-    .openRepositorySettings:
+    .toggleShelf, .toggleWorktreeCanvas, .toggleRepositoryCanvas, .showDiff,
+    .revealInFinder, .copyPath, .revealInSidebar, .copyWorktreePath, .revealWorktreeInFinder,
+    .runScript, .stopRunScript, .togglePinWorktree, .pinWorktree, .unpinWorktree,
+    .renameBranch, .openRepositorySettings:
     return true
   case .worktreeSelect, .changeFocusedTabIcon,
-    .ghosttyCommand, .openRepositoryOnCodeHost,
+    .ghosttyCommand, .openRepositoryOnCodeHost, .openBranchOnCodeHost,
     .deleteWorktree, .runCustomCommand:
     return false
   #if DEBUG

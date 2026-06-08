@@ -229,6 +229,14 @@ private struct WorktreeToolbarPreview: View {
       statusToast: nil,
       pullRequest: nil,
       codeHost: .github,
+      supportsCodeHost: true,
+      branchName: "feature/toolbar-preview",
+      repositoryName: "supacode",
+      addedLines: 120,
+      removedLines: 45,
+      aheadCount: 3,
+      behindCount: 1,
+      isPushed: false,
       notificationGroups: [],
       unseenNotificationWorktreeCount: 0,
       openActionSelection: .finder,
@@ -279,7 +287,9 @@ private struct WorktreeToolbarPreview: View {
         onRunScript: {},
         onStopRunScript: {},
         onRunCustomCommand: { _ in },
-        onActivateUpdateButton: {}
+        onActivateUpdateButton: {},
+        onCodeHostAction: { _ in },
+        onShowDiff: {}
       )
     }
     .environment(commandKeyObserver)

@@ -75,7 +75,7 @@ struct RepositoriesFeatureTests {
     command: CanvasCommandRequest.Command
   ) async {
     var initialState = RepositoriesFeature.State()
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     }
@@ -266,9 +266,14 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.gitClient.lineChanges = { _ in (12, 4) }
+      $0.gitClient.aheadBehind = { _, _ in nil }
+      $0.gitClient.remoteBranchExists = { _, _ in false }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.receive(\.worktreeBranchStateLoaded) {
+      $0.worktreeInfoByID[worktree.id]?.isPushed = false
+    }
     await store.finish()
   }
 
@@ -287,9 +292,14 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.gitClient.lineChanges = { _ in (0, 0) }
+      $0.gitClient.aheadBehind = { _, _ in nil }
+      $0.gitClient.remoteBranchExists = { _, _ in false }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.receive(\.worktreeBranchStateLoaded) {
+      $0.worktreeInfoByID[worktree.id]?.isPushed = false
+    }
     await store.finish()
   }
 
@@ -307,9 +317,14 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.gitClient.lineChanges = { _ in (0, 0) }
+      $0.gitClient.aheadBehind = { _, _ in nil }
+      $0.gitClient.remoteBranchExists = { _, _ in false }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.receive(\.worktreeBranchStateLoaded) {
+      $0.worktreeInfoByID[worktree.id]?.isPushed = false
+    }
     await store.finish()
   }
 
@@ -327,6 +342,8 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.gitClient.lineChanges = { _ in (15, 9) }
+      $0.gitClient.aheadBehind = { _, _ in nil }
+      $0.gitClient.remoteBranchExists = { _, _ in false }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
@@ -336,6 +353,85 @@ struct RepositoriesFeatureTests {
         removedLines: 9,
         pullRequest: nil
       )
+    }
+    await store.receive(\.worktreeBranchStateLoaded) {
+      $0.worktreeInfoByID[worktree.id]?.isPushed = false
+    }
+  }
+
+  @Test func filesChangedLoadsBranchStateAheadBehindAndPushStatus() async {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    // Line changes match the git report below, so only the branch-state action fires.
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: 15,
+      removedLines: 9,
+      pullRequest: nil
+    )
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.lineChanges = { _ in (15, 9) }
+      $0.gitClient.aheadBehind = { _, _ in (ahead: 3, behind: 1) }
+      $0.gitClient.remoteBranchExists = { _, _ in true }
+    }
+
+    await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.receive(\.worktreeBranchStateLoaded) {
+      $0.worktreeInfoByID[worktree.id]?.aheadBehind = AheadBehind(ahead: 3, behind: 1)
+      $0.worktreeInfoByID[worktree.id]?.isPushed = true
+    }
+  }
+
+  @Test func filesChangedStoresZeroAheadBehindWhenInSync() async {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: 15,
+      removedLines: 9,
+      pullRequest: nil
+    )
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.lineChanges = { _ in (15, 9) }
+      $0.gitClient.aheadBehind = { _, _ in (ahead: 0, behind: 0) }
+      $0.gitClient.remoteBranchExists = { _, _ in true }
+    }
+
+    await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.receive(\.worktreeBranchStateLoaded) {
+      $0.worktreeInfoByID[worktree.id]?.aheadBehind = AheadBehind(ahead: 0, behind: 0)
+      $0.worktreeInfoByID[worktree.id]?.isPushed = true
+    }
+  }
+
+  @Test func filesChangedStoresPushedWhenBaseUnresolved() async {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: 15,
+      removedLines: 9,
+      pullRequest: nil
+    )
+
+    // Base branch can't be resolved (aheadBehind nil) but the branch is on origin.
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.lineChanges = { _ in (15, 9) }
+      $0.gitClient.aheadBehind = { _, _ in nil }
+      $0.gitClient.remoteBranchExists = { _, _ in true }
+    }
+
+    await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.receive(\.worktreeBranchStateLoaded) {
+      $0.worktreeInfoByID[worktree.id]?.isPushed = true
     }
   }
 
@@ -2616,7 +2712,7 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var initialState = makeState(repositories: [repository])
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
 
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: initialState) {
@@ -2637,7 +2733,7 @@ struct RepositoriesFeatureTests {
     }
     await store.finish()
 
-    #expect(store.state.selection == .canvas)
+    #expect(store.state.selection == .canvas(.overall))
     #expect(
       sentCommands.value == [
         .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
@@ -2653,7 +2749,7 @@ struct RepositoriesFeatureTests {
       worktrees: []
     )
     var initialState = makeState(repositories: [repository])
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
 
     let expectedWorktree = Worktree(
       id: repository.id,
@@ -2681,7 +2777,7 @@ struct RepositoriesFeatureTests {
     }
     await store.finish()
 
-    #expect(store.state.selection == .canvas)
+    #expect(store.state.selection == .canvas(.overall))
     #expect(
       sentCommands.value == [
         .ensureInitialTab(expectedWorktree, runSetupScriptIfNew: false, focusing: false)
@@ -2693,7 +2789,7 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var initialState = makeState(repositories: [repository])
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
 
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: initialState) {
@@ -2714,7 +2810,7 @@ struct RepositoriesFeatureTests {
     }
     await store.finish()
 
-    #expect(store.state.selection == .canvas)
+    #expect(store.state.selection == .canvas(.overall))
     #expect(
       sentCommands.value == [
         .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
@@ -2726,7 +2822,7 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var state = makeState(repositories: [repository])
-    state.selection = .canvas
+    state.selection = .canvas(.overall)
     let surfaceID = UUID()
     let tabID = TerminalTabID(rawValue: UUID())
     let entry = ActiveAgentEntry(
@@ -2767,7 +2863,7 @@ struct RepositoriesFeatureTests {
     }
     await store.finish()
 
-    #expect(store.state.selection == .canvas)
+    #expect(store.state.selection == .canvas(.overall))
     #expect(focusedSurface.value?.0 == worktree.id)
     #expect(focusedSurface.value?.1 == surfaceID)
   }
@@ -2809,7 +2905,7 @@ struct RepositoriesFeatureTests {
       worktrees: []
     )
     var initialState = makeState(repositories: [repository])
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
@@ -2835,7 +2931,7 @@ struct RepositoriesFeatureTests {
       worktrees: []
     )
     var initialState = makeState(repositories: [repository])
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
     initialState.preCanvasTerminalTargetID = repository.id
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
@@ -2858,7 +2954,7 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var initialState = makeState(repositories: [repository])
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
 
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
@@ -2866,16 +2962,14 @@ struct RepositoriesFeatureTests {
       $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
     }
 
+    store.exhaustivity = .off
     await store.send(.setTopSegment(.tabbed))
-    await store.receive(\.selectTabbed)
-    await store.receive(\.toggleCanvas)
-    await store.receive(\.selectWorktree) {
-      $0.selection = .worktree(worktree.id)
-      $0.sidebarSelectedWorktreeIDs = [worktree.id]
-      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
-      $0.openedWorktreeIDs = [worktree.id]
-    }
-    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.skipReceivedActions()
+    await store.finish()
+    // setTopSegment(.tabbed) -> selectTabbed -> toggleCanvas, whose exit routes
+    // through exitCanvasToWorktree (bypassing selectWorktree's
+    // stay-in-global-canvas branch), so we land on the focused card's worktree.
+    #expect(store.state.selection == .worktree(worktree.id))
     #expect(store.state.pendingCanvasFocusRequest == nil)
   }
 
@@ -2883,7 +2977,7 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var initialState = makeState(repositories: [repository])
-    initialState.selection = .canvas
+    initialState.selection = .canvas(.overall)
 
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
@@ -2891,18 +2985,13 @@ struct RepositoriesFeatureTests {
       $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
     }
 
+    store.exhaustivity = .off
     await store.send(.setTopSegment(.shelf))
-    await store.receive(\.selectShelf)
-    await store.receive(\.toggleShelf) {
-      $0.isShelfActive = true
-    }
-    await store.receive(\.selectWorktree) {
-      $0.selection = .worktree(worktree.id)
-      $0.sidebarSelectedWorktreeIDs = [worktree.id]
-      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
-      $0.openedWorktreeIDs = [worktree.id]
-    }
-    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.skipReceivedActions()
+    await store.finish()
+    // setTopSegment(.shelf) exits canvas via exitCanvasToWorktree and activates
+    // the shelf, landing on the canvas-focused worktree instead of a card.
+    #expect(store.state.selection == .worktree(worktree.id))
     #expect(store.state.pendingCanvasFocusRequest == nil)
     #expect(store.state.isShowingShelf)
   }
@@ -2929,7 +3018,7 @@ struct RepositoriesFeatureTests {
     await store.send(.selectCanvas) {
       $0.preCanvasWorktreeID = worktree.id
       $0.preCanvasTerminalTargetID = worktree.id
-      $0.selection = .canvas
+      $0.selection = .canvas(.overall)
     }
     await store.finish()
 
@@ -2954,11 +3043,87 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.selectCanvas) {
-      $0.selection = .canvas
+      $0.selection = .canvas(.overall)
     }
     await store.finish()
 
     #expect(sentCommands.value == [.setCanvasMode(true)])
+  }
+
+  @Test func selectActiveAgentsCanvasEntersCanvasModeWithoutSeedingTab() async {
+    // Unlike `selectCanvas`, the active-agents canvas does NOT seed the
+    // selected worktree's tab — it shows only tabs with a live agent, so a
+    // non-agent seed card would be wrong. Only `.setCanvasMode(true)` is sent.
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.selectActiveAgentsCanvas) {
+      $0.preCanvasWorktreeID = worktree.id
+      $0.preCanvasTerminalTargetID = worktree.id
+      $0.selection = .canvas(.activeAgents)
+    }
+    await store.finish()
+
+    #expect(sentCommands.value == [.setCanvasMode(true)])
+  }
+
+  @Test func toggleActiveAgentsCanvasSelectsItWhenNotShowing() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.toggleActiveAgentsCanvas)
+    await store.receive(\.selectActiveAgentsCanvas) {
+      $0.preCanvasWorktreeID = worktree.id
+      $0.preCanvasTerminalTargetID = worktree.id
+      $0.selection = .canvas(.activeAgents)
+    }
+    await store.finish()
+
+    #expect(sentCommands.value == [.setCanvasMode(true)])
+  }
+
+  @Test func toggleActiveAgentsCanvasExitsViaExitCanvasToWorktreeWhenShowing() async {
+    // Toggling out of the active-agents canvas routes through the shared
+    // exitCanvasToWorktree action (target resolved here from
+    // preCanvasTerminalTargetID), exiting canvas rather than rebinding it.
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.activeAgents)
+    initialState.preCanvasTerminalTargetID = worktree.id
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.toggleActiveAgentsCanvas)
+    await store.receive(\.exitCanvasToWorktree)
+    await store.finish()
   }
 
   @Test func selectRepositoryIgnoresUnknownRepository() async {
@@ -2967,6 +3132,448 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.selectRepository("/tmp/missing"))
+  }
+
+  @Test func selectWorktreeRebindsScopedWorktreeCanvas() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.worktree(worktree1.id))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(worktree2.id, focusTerminal: false, recordHistory: false)) {
+      $0.selection = .canvas(.worktree(worktree2.id))
+      $0.openedWorktreeIDs = [worktree2.id]
+    }
+    // Lock down "no async effect emitted" — a future async effect added to
+    // the rebind branch would only fail intermittently otherwise.
+    await store.finish()
+  }
+
+  @Test func selectRepositoryRebindsScopedRepositoryCanvas() async {
+    let worktree = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [worktree])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [])
+    var initialState = makeState(repositories: [repoA, repoB])
+    initialState.selection = .canvas(.repository(repoA.id))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(repoB.id)) {
+      $0.selection = .canvas(.repository(repoB.id))
+    }
+    await store.finish()
+  }
+
+  @Test func selectRepositoryRebindToPlainRepoInsertsOpenedID() async {
+    let plainA = makeRepository(id: "/tmp/folder-a", kind: .plain, worktrees: [])
+    let plainB = makeRepository(id: "/tmp/folder-b", kind: .plain, worktrees: [])
+    var initialState = makeState(repositories: [plainA, plainB])
+    initialState.selection = .canvas(.repository(plainA.id))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(plainB.id)) {
+      $0.selection = .canvas(.repository(plainB.id))
+      $0.openedWorktreeIDs = [plainB.id]
+    }
+    await store.finish()
+  }
+
+  @Test func selectWorktreeFromRepositoryCanvasRebindsSameRepoScope() async {
+    // `selectWorktree` from inside a repository canvas keeps the canvas open
+    // and rebinds the scope to the tapped worktree's repo (same repo here →
+    // no-op rebind, but sidebar selection clears and `openedWorktreeIDs`
+    // tracks the tap). Delegate is suppressed because canvas mode has no
+    // single active worktree to broadcast.
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.repository(repository.id))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(worktree.id, focusTerminal: false, recordHistory: false)) {
+      $0.sidebarSelectedWorktreeIDs = []
+      $0.openedWorktreeIDs = [worktree.id]
+    }
+    await store.finish()
+  }
+
+  @Test func selectRepositoryFromWorktreeCanvasClosesCanvas() async {
+    let worktreeA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [worktreeA])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [])
+    var initialState = makeState(repositories: [repoA, repoB])
+    initialState.selection = .canvas(.worktree(worktreeA.id))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(repoB.id)) {
+      $0.selection = .repository(repoB.id)
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectWorktreeFromRepositoryCanvasRebindsToWorktreesRepoCanvas() async {
+    // Bug #3: while in repo-A canvas, tapping any worktree in repo B should
+    // rebind to repo-B canvas instead of exiting canvas. Same delegate
+    // suppression as the worktree-canvas rebind branch.
+    let worktreeA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo-b/main", name: "main", repoRoot: "/tmp/repo-b")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [worktreeA])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [worktreeB])
+    var initialState = makeState(repositories: [repoA, repoB])
+    initialState.selection = .canvas(.repository(repoA.id))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(worktreeB.id, focusTerminal: false, recordHistory: false)) {
+      $0.selection = .canvas(.repository(repoB.id))
+      $0.openedWorktreeIDs = [worktreeB.id]
+    }
+    // No delegate.selectedWorktreeChanged — canvas-rebind paths suppress it.
+  }
+
+  @Test func selectWorktreeFromOverallCanvasKeepsCanvasOpen() async {
+    // `.canvas(.overall)` already shows every worktree's card, so a sidebar
+    // tap or notification tap should keep canvas open and just nudge focus
+    // to the target card — never fall through to `setSingleWorktreeSelection`
+    // and silently exit canvas. Same delegate suppression as the scoped
+    // canvas rebind branches.
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.overall)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(worktree.id, focusTerminal: false, recordHistory: false)) {
+      $0.nextCanvasFocusRequestID = 1
+      $0.pendingCanvasFocusRequest = CanvasFocusRequest(id: 1, target: .worktree(worktree.id))
+      $0.openedWorktreeIDs = [worktree.id]
+    }
+    // `selection` stays `.canvas(.overall)` — assertion absence proves it.
+    // Focus is requested via `pendingCanvasFocusRequest` (not the
+    // `isScopedMode`-gated `setCanvasFocusedWorktreeID`) so the overall board
+    // actually scrolls to the card. No delegate.selectedWorktreeChanged —
+    // canvas paths suppress it.
+    await store.finish()
+  }
+
+  @Test func selectWorktreeFromActiveAgentsCanvasKeepsCanvasOpen() async {
+    // Same contract as `.canvas(.overall)`: the active-agents canvas renders
+    // a global board (filtered to tabs with active agents), so a tap that
+    // targets a worktree must keep canvas open rather than dropping back to
+    // the default worktree view.
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.activeAgents)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(worktree.id, focusTerminal: false, recordHistory: false)) {
+      $0.openedWorktreeIDs = [worktree.id]
+    }
+    await store.finish()
+  }
+
+  @Test func exitCanvasToWorktreeJumpsToWorktreeAndExitsCanvas() async {
+    // Bug #1+#2: clicking the expand button on a canvas card should land
+    // on that card's worktree (not the previous selection).
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.overall)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.exitCanvasToWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.openedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func exitCanvasToWorktreeWithUnknownIDFallsBackToToggleCanvas() async {
+    // Unknown target (in-flight action raced with applyRepositories): we
+    // shouldn't leave the user stuck in canvas with a silent no-op. Falling
+    // back to toggleCanvas exits canvas via the global path's exit branch.
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.overall)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.exitCanvasToWorktree("/tmp/repo/missing"))
+    await store.skipReceivedActions()
+    await store.finish()
+
+    // toggleCanvas's exit branch from .canvas(.overall) selects the first
+    // available worktree and broadcasts selectedWorktreeChanged.
+    #expect(store.state.selection == .worktree(worktree.id))
+  }
+
+  @Test func canvasSelectionAutoRecoversWhenScopedWorktreeMissing() async {
+    // Stale `.canvas(.worktree(deletedID))` should fall back to
+    // `.canvas(.overall)` after a refresh that no longer contains the worktree,
+    // not be silently bypassed by isSidebarSelectionValid.
+    let repo = makeRepository(id: "/tmp/repo", worktrees: [])
+    var initialState = makeState(repositories: [repo])
+    initialState.selection = .canvas(.worktree("/tmp/repo/missing"))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded([repo], failures: [], roots: [URL(fileURLWithPath: "/tmp/repo")], animated: false)
+    )
+    await store.skipReceivedActions()
+    await store.finish()
+
+    #expect(store.state.selection == .canvas(.overall))
+  }
+
+  @Test func canvasSelectionAutoRecoversWhenScopedRepositoryMissing() async {
+    let repo = makeRepository(id: "/tmp/repo", worktrees: [])
+    var initialState = makeState(repositories: [repo])
+    initialState.selection = .canvas(.repository("/tmp/missing-repo"))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded([repo], failures: [], roots: [URL(fileURLWithPath: "/tmp/repo")], animated: false)
+    )
+    // strict: false — production auto-recovers synchronously inside the
+    // .repositoriesLoaded handler without dispatching a follow-up action,
+    // so the receivedActions buffer is legitimately empty.
+    await store.skipReceivedActions(strict: false)
+    await store.finish()
+
+    #expect(store.state.selection == .canvas(.overall))
+  }
+
+  @Test func selectWorktreeCanvasCapturesPreCanvasStateAndEntersWorktreeScope() async {
+    let worktreeA = makeWorktree(id: "/tmp/repo/wt-a", name: "wt-a", repoRoot: "/tmp/repo")
+    let worktreeB = makeWorktree(id: "/tmp/repo/wt-b", name: "wt-b", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktreeA, worktreeB])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktreeA.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectWorktreeCanvas(worktreeB.id)) {
+      $0.preCanvasWorktreeID = worktreeA.id
+      $0.preCanvasTerminalTargetID = worktreeA.id
+      $0.selection = .canvas(.worktree(worktreeB.id))
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func selectRepositoryCanvasCapturesPreCanvasStateAndEntersRepoScope() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectRepositoryCanvas(repository.id)) {
+      $0.preCanvasWorktreeID = worktree.id
+      $0.preCanvasTerminalTargetID = worktree.id
+      $0.selection = .canvas(.repository(repository.id))
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func toggleWorktreeCanvasFromOutsideCanvasEntersScope() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.toggleWorktreeCanvas(worktree.id))
+    await store.skipReceivedActions()
+    await store.finish()
+
+    #expect(store.state.selection == .canvas(.worktree(worktree.id)))
+  }
+
+  @Test func toggleRepositoryCanvasFromOutsideCanvasEntersScope() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.toggleRepositoryCanvas(repository.id))
+    await store.skipReceivedActions()
+    await store.finish()
+
+    // Both pre-canvas slots should capture the entry-time selection so the
+    // exit branch can restore — same contract as the worktree variant.
+    #expect(store.state.selection == .canvas(.repository(repository.id)))
+    #expect(store.state.preCanvasWorktreeID == worktree.id)
+    #expect(store.state.preCanvasTerminalTargetID == worktree.id)
+  }
+
+  @Test func toggleWorktreeCanvasExitPrefersCanvasFocusedWorktree() async {
+    // Verifies that toggle-exit lands on the canvas-focused card's worktree
+    // rather than the pre-canvas selection. This is the user-visible
+    // contract of the new exit flow ("exit to the pane I was looking at").
+    // Asserts the action chain explicitly so a refactor that drops
+    // exitCanvasToWorktree from the dispatch path fails the test.
+    let worktreeA = makeWorktree(id: "/tmp/repo/wt-a", name: "wt-a", repoRoot: "/tmp/repo")
+    let worktreeB = makeWorktree(id: "/tmp/repo/wt-b", name: "wt-b", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktreeA, worktreeB])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.worktree(worktreeA.id))
+    initialState.preCanvasWorktreeID = worktreeA.id
+    initialState.preCanvasTerminalTargetID = worktreeA.id
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktreeB.id }
+    }
+
+    await store.send(.toggleWorktreeCanvas(worktreeA.id))
+    await store.receive(\.exitCanvasToWorktree) {
+      $0.selection = .worktree(worktreeB.id)
+      $0.sidebarSelectedWorktreeIDs = [worktreeB.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktreeB.id]
+      $0.openedWorktreeIDs = [worktreeB.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func toggleRepositoryCanvasExitPrefersCanvasFocusedInScopedRepo() async {
+    // Repo-canvas exit must filter the focused-worktree candidate against
+    // the scoped repo. A focused worktree from a different repo (stale
+    // pointer) must NOT be picked — fall through to a worktree in the
+    // scoped repo instead. Also asserts the dispatch chain explicitly.
+    let worktreeA = makeWorktree(id: "/tmp/repo-a/wt", name: "wt", repoRoot: "/tmp/repo-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo-b/wt", name: "wt", repoRoot: "/tmp/repo-b")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [worktreeA])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [worktreeB])
+    var initialState = makeState(repositories: [repoA, repoB])
+    initialState.selection = .canvas(.repository(repoA.id))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { worktreeB.id }  // stale: in repoB, not repoA
+    }
+
+    await store.send(.toggleRepositoryCanvas(repoA.id))
+    await store.receive(\.exitCanvasToWorktree) {
+      $0.selection = .worktree(worktreeA.id)
+      $0.sidebarSelectedWorktreeIDs = [worktreeA.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktreeA.id]
+      $0.openedWorktreeIDs = [worktreeA.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func toggleRepositoryCanvasExitWithMissingRepoFallsBackToToggleCanvas() async {
+    // Repo-canvas state pointing to a repo that's been removed: exit must
+    // not "guess" a worktree from another repo. Production routes through
+    // `toggleCanvas`, which from a non-overall canvas scope enters the
+    // overall canvas rather than dropping the user out of canvas mode — the
+    // hotkey would feel broken if pressing it landed on no selection.
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.repository("/tmp/missing-repo"))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.toggleRepositoryCanvas("/tmp/missing-repo"))
+    await store.skipReceivedActions()
+    await store.finish()
+
+    #expect(store.state.selection == .canvas(.overall))
+  }
+
+  @Test func exitCanvasToRepositoryLandsOnRepositoryAndExitsCanvas() async {
+    let plainRepo = makeRepository(id: "/tmp/folder", kind: .plain, worktrees: [])
+    var initialState = makeState(repositories: [plainRepo])
+    initialState.selection = .canvas(.overall)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.exitCanvasToRepository(plainRepo.id)) {
+      $0.selection = .repository(plainRepo.id)
+      $0.sidebarSelectedWorktreeIDs = []
+      $0.openedWorktreeIDs = [plainRepo.id]
+      $0.pendingTerminalFocusWorktreeIDs = [plainRepo.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func exitCanvasToRepositoryWithUnknownIDFallsBackToToggleCanvas() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas(.overall)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.exitCanvasToRepository("/tmp/missing"))
+    await store.skipReceivedActions()
+    await store.finish()
+
+    #expect(store.state.selection == .worktree(worktree.id))
   }
 
   @Test func setSidebarSelectedWorktreeIDsKeepsSelectedAndPrunesUnknown() async {
@@ -4320,6 +4927,40 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test(.dependencies) func archiveWorktreeWhileScopedCanvasFallsBackToOverall() async {
+    // When the canvas is scoped to the worktree being archived, the archive
+    // path should mirror applyRepositories' recovery and stay in canvas via
+    // .canvas(.overall) — not silently exit canvas to .worktree(nextID).
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var state = makeState(repositories: [repository])
+    state.selection = .canvas(.worktree(featureWorktree.id))
+    let fixedDate = Date(timeIntervalSince1970: 1_000_000)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date = .constant(fixedDate)
+    }
+    store.exhaustivity = .off
+
+    // requestArchiveWorktree only opens the confirmation prompt; the actual
+    // archive runs through .archiveWorktreeConfirmed, which removes the
+    // worktree and triggers the canvas auto-recovery to .canvas(.overall).
+    await store.send(
+      .worktreeLifecycle(.archiveWorktreeConfirmed(featureWorktree.id, repository.id))
+    )
+    await store.skipReceivedActions(strict: false)
+    await store.finish()
+
+    #expect(store.state.selection == .canvas(.overall))
   }
 
   @Test(.dependencies) func archiveWorktreeConfirmedRunsArchiveScriptAndShowsProgress() async {
@@ -5901,6 +6542,235 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func pullRequestActionOpenBranchOnCodeHostBuildsTreeURLFromHeadRefName() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature-dir-name",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    // PR's headRefName ("renamed-branch") differs from worktree name
+    // ("feature-dir-name") — verifies headRefName precedence.
+    let pullRequest = makePullRequest(
+      state: "OPEN",
+      headRefName: "renamed-branch",
+      number: 7,
+      url: "https://github.com/octo/repo/pull/7"
+    )
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: pullRequest
+    )
+    let openedURLs = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        URL(string: "https://github.com/octo/repo")
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(
+      .githubIntegration(.pullRequestAction(featureWorktree.id, .openBranchOnCodeHost))
+    )
+    await store.finish()
+
+    #expect(openedURLs.value == [URL(string: "https://github.com/octo/repo/tree/renamed-branch")!])
+  }
+
+  @Test func pullRequestActionOpenBranchOnCodeHostFallsBackToWorktreeNameWhenNoPR() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature-branch",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openedURLs = LockIsolated<[URL]>([])
+    // No PR info on the worktree — falls back to worktree.name.
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        URL(string: "https://github.com/octo/repo")
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(
+      .githubIntegration(.pullRequestAction(featureWorktree.id, .openBranchOnCodeHost))
+    )
+    await store.finish()
+
+    #expect(openedURLs.value == [URL(string: "https://github.com/octo/repo/tree/feature-branch")!])
+  }
+
+  @Test func pullRequestActionOpenBranchOrRepoOnCodeHostOpensBranchWhenPushed() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature-branch",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openedURLs = LockIsolated<[URL]>([])
+    // Branch is on the remote, so the no-PR tap opens the branch page.
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        URL(string: "https://github.com/octo/repo")
+      }
+      $0.gitClient.remoteBranchExists = { _, _ in true }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(
+      .githubIntegration(.pullRequestAction(featureWorktree.id, .openBranchOrRepoOnCodeHost))
+    )
+    await store.finish()
+
+    #expect(openedURLs.value == [URL(string: "https://github.com/octo/repo/tree/feature-branch")!])
+  }
+
+  @Test func pullRequestActionOpenBranchOrRepoOnCodeHostOpensRepositoryWhenNotPushed() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature-branch",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openedURLs = LockIsolated<[URL]>([])
+    // Branch is not yet on the remote, so the no-PR tap opens the repository page.
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        URL(string: "https://github.com/octo/repo")
+      }
+      $0.gitClient.remoteBranchExists = { _, _ in false }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(
+      .githubIntegration(.pullRequestAction(featureWorktree.id, .openBranchOrRepoOnCodeHost))
+    )
+    await store.finish()
+
+    #expect(openedURLs.value == [URL(string: "https://github.com/octo/repo")!])
+  }
+
+  @Test func pullRequestActionOpenBranchOrRepoOnCodeHostShowsAlertWhenRepositoryURLUnavailable() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+
+    await store.send(
+      .githubIntegration(.pullRequestAction(featureWorktree.id, .openBranchOrRepoOnCodeHost))
+    )
+    await store.receive(\.presentAlert) {
+      $0.alert = AlertState<RepositoriesFeature.Alert> {
+        TextState("Repository URL not available")
+      } actions: {
+        ButtonState(role: .cancel) {
+          TextState("OK")
+        }
+      } message: {
+        TextState("Prowl could not determine a code host URL for this repository.")
+      }
+    }
+  }
+
+  @Test func pullRequestActionOpenBranchOnCodeHostPercentEncodesBranchWithSpecialChars() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feat/foo bar#1",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openedURLs = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in
+        URL(string: "https://github.com/octo/repo")
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(
+      .githubIntegration(.pullRequestAction(featureWorktree.id, .openBranchOnCodeHost))
+    )
+    await store.finish()
+
+    // `/` is preserved (urlPathAllowed includes it); space → `%20`, `#` → `%23`.
+    #expect(
+      openedURLs.value == [URL(string: "https://github.com/octo/repo/tree/feat/foo%20bar%231")!]
+    )
+  }
+
+  @Test func pullRequestActionOpenBranchOnCodeHostShowsAlertWhenRepositoryURLUnavailable() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+
+    await store.send(
+      .githubIntegration(.pullRequestAction(featureWorktree.id, .openBranchOnCodeHost))
+    )
+    await store.receive(\.presentAlert) {
+      $0.alert = AlertState<RepositoriesFeature.Alert> {
+        TextState("Repository URL not available")
+      } actions: {
+        ButtonState(role: .cancel) {
+          TextState("OK")
+        }
+      } message: {
+        TextState("Prowl could not determine a code host URL for this repository.")
+      }
+    }
+  }
+
   @Test func worktreeInfoEventRepositoryPullRequestRefreshMarksInFlightThenCompletes() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -6870,6 +7740,27 @@ struct RepositoriesFeatureTests {
 
     #expect(!store.state.canNavigateWorktreeHistoryForward)
     #expect(store.state.canNavigateWorktreeHistoryBackward)
+  }
+
+  @Test func worktreeContextLabelShowsRepoAndBranchForWorktree() {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature/file-control", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", name: "SI3-Android", worktrees: [worktree])
+    let state = makeState(repositories: [repository])
+
+    #expect(state.worktreeContextLabel(for: worktree.id) == "SI3-Android · feature/file-control")
+  }
+
+  @Test func worktreeContextLabelShowsRepoNameOnlyForPlainFolder() {
+    let repository = makeRepository(id: "/tmp/plain", name: "my-folder", kind: .plain, worktrees: [])
+    let state = makeState(repositories: [repository])
+
+    #expect(state.worktreeContextLabel(for: "/tmp/plain") == "my-folder")
+  }
+
+  @Test func worktreeContextLabelReturnsNilForUnknownID() {
+    let state = makeState(repositories: [])
+
+    #expect(state.worktreeContextLabel(for: "/tmp/nonexistent") == nil)
   }
 
   // MARK: - Workspace child rows

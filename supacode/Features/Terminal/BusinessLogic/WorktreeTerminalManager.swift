@@ -29,6 +29,12 @@ final class WorktreeTerminalManager {
   /// The worktree+tab focused in Canvas, updated by CanvasView on card tap.
   /// Used by toggleCanvas to know which worktree to return to.
   var canvasFocusedWorktreeID: Worktree.ID?
+  /// Tab IDs currently selected in canvas (single-tap = primary only;
+  /// cmd-tap adds to selection for broadcast). Mirrored from CanvasView's
+  /// `CanvasSelectionState` so views outside CanvasView (e.g. the parent
+  /// toolbar) can react to multi-select transitions without owning the
+  /// selection state. Empty when canvas is inactive or selection is cleared.
+  var canvasSelectedTabIDs: Set<TerminalTabID> = []
 
   init(
     runtime: GhosttyRuntime,
@@ -119,6 +125,29 @@ final class WorktreeTerminalManager {
     return true
   }
 
+  /// Types `text` into `surfaceID` and, when `trailingEnter` is true, submits it
+  /// with Return. Returns whether the text was delivered — `false` (and logs)
+  /// when the worktree has no terminal state or the surface is gone, so the
+  /// caller can surface the drop instead of losing the user's message. Backs
+  /// `TerminalClient.sendTextToSurface` (the quick-send-to-agent panel).
+  func sendText(toSurface surfaceID: UUID, in worktree: Worktree, text: String, trailingEnter: Bool) -> Bool {
+    guard let state = stateIfExists(for: worktree.id) else {
+      terminalLogger.warning("[QuickSend] no terminal state for \(worktree.id); message not delivered")
+      return false
+    }
+    // Only press Return if the text actually landed — if the surface is gone
+    // (agent pane closed between composing and sending) `insertCommittedText`
+    // returns false, and a stray Return must not leak to another surface.
+    guard state.insertCommittedText(text, in: surfaceID) else {
+      terminalLogger.warning("[QuickSend] surface \(surfaceID) unavailable; message not delivered")
+      return false
+    }
+    if trailingEnter {
+      state.submitLine(in: surfaceID)
+    }
+    return true
+  }
+
   private func handleSearchCommand(_ command: TerminalClient.Command) -> Bool {
     switch command {
     case .startSearch(let worktree):
@@ -162,6 +191,11 @@ final class WorktreeTerminalManager {
         terminalLogger.info("[CanvasExit] enteringCanvas previousSelectedWorktree=\(selectedWorktreeID ?? "nil")")
         selectedWorktreeID = nil
       }
+    case .setCanvasFocusedWorktreeID(let id):
+      // CanvasView observes `canvasFocusedWorktreeID` and switches its primary
+      // card to the worktree's first tab when this value diverges from the
+      // current primary's worktree.
+      canvasFocusedWorktreeID = id
     case .setSelectedWorktreeID(let id):
       guard id != selectedWorktreeID else { return }
       let previousSelectedWorktreeID = selectedWorktreeID

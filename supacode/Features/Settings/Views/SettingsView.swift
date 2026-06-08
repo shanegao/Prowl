@@ -36,6 +36,8 @@ struct SettingsView: View {
             .tag(SettingsSection.notifications)
           Label("Shortcuts", systemImage: "keyboard")
             .tag(SettingsSection.shortcuts)
+          Label("Commands", systemImage: "terminal")
+            .tag(SettingsSection.commands)
           Label("Worktree", systemImage: "archivebox")
             .tag(SettingsSection.worktree)
           Label("Updates", systemImage: "arrow.down.circle")
@@ -103,6 +105,15 @@ struct SettingsView: View {
           GithubSettingsView(store: settingsStore)
             .navigationTitle("GitHub")
             .navigationSubtitle("GitHub CLI integration")
+        }
+      case .commands:
+        SettingsDetailView {
+          GlobalCommandsSettingsView(
+            store: settingsStore.scope(state: \.globalCommands, action: \.globalCommands),
+            keybindingUserOverrides: settingsStore.keybindingUserOverrides
+          )
+          .navigationTitle("Commands")
+          .navigationSubtitle("Global terminal actions, available in every worktree")
         }
       case .repository(let repositoryID):
         if let repository = repositories[id: repositoryID] {

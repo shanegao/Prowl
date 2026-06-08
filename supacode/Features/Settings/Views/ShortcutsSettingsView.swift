@@ -938,6 +938,8 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.selectShelfBook7,
       AppShortcuts.CommandID.selectShelfBook8,
       AppShortcuts.CommandID.selectShelfBook9,
+      AppShortcuts.CommandID.toggleWorktreeCanvas,
+      AppShortcuts.CommandID.toggleRepoCanvas,
       AppShortcuts.CommandID.selectAllCanvasCards,
       AppShortcuts.CommandID.arrangeCanvasCards,
       AppShortcuts.CommandID.organizeCanvasCards,

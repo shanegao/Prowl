@@ -40,10 +40,36 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       setSystemNotificationTapHandler { [weak appStore] worktreeID, surfaceID in
         appStore?.send(.systemNotificationTapped(worktreeID: worktreeID, surfaceID: surfaceID))
       }
+      setSystemNotificationReplyHandler { [weak appStore] worktreeID, surfaceID, text in
+        appStore?.send(.systemNotificationReplied(worktreeID: worktreeID, surfaceID: surfaceID, text: text))
+      }
+      setSystemNotificationAnswerHandler { [weak appStore] worktreeID, surfaceID, key in
+        appStore?.send(.systemNotificationAnswered(worktreeID: worktreeID, surfaceID: surfaceID, key: key))
+      }
     }
   }
   var terminalManager: WorktreeTerminalManager?
   var cliSocketServer: CLISocketServer?
+  /// Owns the menubar status item + menu. Created from
+  /// `installMenubarStatusItemDeferred()` (called late in
+  /// `applicationDidFinishLaunching`), not synchronously in `didSet`. The
+  /// status item is backed by an `NSStatusBarWindow` that, if present in
+  /// `NSApp.windows` at SwiftUI scene-evaluation time, blocks the main
+  /// `Window(_:id:)` from auto-presenting. Creating it on the next
+  /// runloop tick (or later) gives the Window scene a turn to render
+  /// first, then the status item appears alongside without disrupting it.
+  private var menubarController: MenubarStatusItemController?
+
+  /// Schedules the menubar `NSStatusItem` to be created on the next
+  /// runloop tick. The async hop is essential — see the property's doc.
+  /// Idempotent: a no-op if the status item is already installed.
+  func installMenubarStatusItemDeferred() {
+    guard menubarController == nil, appStore != nil else { return }
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.menubarController == nil, let appStore = self.appStore else { return }
+      self.menubarController = MenubarStatusItemController(store: appStore)
+    }
+  }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     WindowLifecycleDiagnostics.startMainThreadHeartbeat()
@@ -55,6 +81,11 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       "ApplePressAndHoldEnabled": false
     ])
     appStore?.send(.appLaunched)
+    // Install the menubar status item on the next runloop tick — see
+    // `installMenubarStatusItemDeferred` docs for the rationale (in short,
+    // it lets the main Window scene win the auto-present race before any
+    // NSStatusBarWindow joins `NSApp.windows`).
+    installMenubarStatusItemDeferred()
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
@@ -103,6 +134,7 @@ struct SupacodeApp: App {
   @State private var worktreeInfoWatcher: WorktreeInfoWatcherManager
   @State private var pullRequestRefreshCoordinator: PullRequestRefreshCoordinator
   @State private var commandKeyObserver: CommandKeyObserver
+  @State private var popoverPresentationCoordinator: PopoverPresentationCoordinator
   @State private var cliSocketServer: CLISocketServer
   @State private var store: StoreOf<AppFeature>
   @State private var memoryWatchdog: MemoryWatchdog
@@ -204,6 +236,7 @@ struct SupacodeApp: App {
     _pullRequestRefreshCoordinator = State(initialValue: coordinator)
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
+    _popoverPresentationCoordinator = State(initialValue: PopoverPresentationCoordinator())
     var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
     if let cliOpenPath = Self.cliLaunchOpenPath() {
       initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
@@ -253,6 +286,7 @@ struct SupacodeApp: App {
       ghosttyShortcuts: shortcuts,
       commandKeyObserver: keyObserver
     )
+    QuickSendPanelManager.shared.configure(store: appStore)
     #if DEBUG
       DebugWindowManager.shared.configure(store: appStore)
     #endif
@@ -344,6 +378,23 @@ struct SupacodeApp: App {
       },
       markNotificationsReadForSurface: { worktreeID, surfaceID in
         terminalManager.markNotificationsRead(worktreeID: worktreeID, surfaceID: surfaceID)
+      },
+      sendTextToSurface: { worktree, surfaceID, text, trailingEnter in
+        terminalManager.sendText(toSurface: surfaceID, in: worktree, text: text, trailingEnter: trailingEnter)
+      },
+      sendKeyToken: { worktree, surfaceID, token in
+        terminalManager.stateIfExists(for: worktree.id)?.sendKeyToken(token, in: surfaceID) ?? false
+      },
+      readPermissionPrompt: { worktreeID, surfaceID in
+        // Read only the active screen region, not the full scrollback: a
+        // just-appeared permission prompt always sits in the active area, and this
+        // runs on the notification path for every agent, so scanning the whole
+        // scrollback on each banner would be wasteful.
+        guard
+          let screen = terminalManager.stateIfExists(for: worktreeID)?
+            .surfaceView(for: surfaceID)?.readActiveContentsForCLI()
+        else { return nil }
+        return ClaudePermissionPrompt.parse(screen: screen)
       }
     )
   }
@@ -822,6 +873,11 @@ struct SupacodeApp: App {
   }
 
   var body: some Scene {
+    // Menubar status item is set up in `SupacodeAppDelegate.appStore.didSet`
+    // via `MenubarStatusItemController` (AppKit `NSStatusItem`), not as a
+    // SwiftUI scene here. See that controller's docs for the rationale —
+    // briefly, a SwiftUI `MenuBarExtra` scene breaks this `Window` scene's
+    // auto-launch behavior, so the menubar lives outside the scene tree.
     Window("Prowl", id: WindowID.main) {
       GhosttyColorSchemeSyncView(
         ghostty: ghostty,
@@ -830,6 +886,7 @@ struct SupacodeApp: App {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
+          .environment(popoverPresentationCoordinator)
           .environment(\.resolvedKeybindings, store.resolvedKeybindings)
           .environment(askAgentHelp)
           .sheet(
@@ -857,6 +914,7 @@ struct SupacodeApp: App {
     }
     .environment(ghosttyShortcuts)
     .environment(commandKeyObserver)
+    .environment(popoverPresentationCoordinator)
     .commands {
       // Grouped to keep `commands` under SwiftUI's CommandsBuilder
       // tuple-arity limit when `#if DEBUG` adds the Debug menu below.

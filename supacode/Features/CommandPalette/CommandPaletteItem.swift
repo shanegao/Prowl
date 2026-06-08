@@ -10,6 +10,7 @@ struct CommandPaletteSuggestions: Equatable {
 
 struct CommandPaletteItem: Identifiable, Equatable {
   static let defaultPriorityTier = 100
+  static let customCommandPriorityTier = 50
 
   let id: String
   let title: String
@@ -71,6 +72,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case tileCanvasCards
     case selectAllCanvasCards
     case toggleShelf
+    case toggleWorktreeCanvas(Worktree.ID)
+    case toggleRepositoryCanvas(Repository.ID)
     case showDiff
     case revealInFinder
     case copyPath
@@ -82,6 +85,11 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(index: Int, commandID: String, systemImage: String)
+    case openBranchOnCodeHost(Worktree.ID)
+    case pinWorktree(Worktree.ID)
+    case unpinWorktree(Worktree.ID)
+    case copyWorktreePath(Worktree.ID)
+    case revealWorktreeInFinder(Worktree.ID)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -99,6 +107,63 @@ struct CommandPaletteItem: Identifiable, Equatable {
     #if DEBUG
       case debug
     #endif
+  }
+
+  enum Section: String, CaseIterable, Equatable {
+    case pullRequest
+    case customCommands
+    case worktrees
+    case appActions
+    case terminal
+    case debug
+
+    var displayName: String {
+      switch self {
+      case .pullRequest: "Pull Request"
+      case .customCommands: "Custom Commands"
+      case .worktrees: "Worktrees"
+      case .appActions: "App Actions"
+      case .terminal: "Terminal"
+      case .debug: "Debug"
+      }
+    }
+  }
+
+  var section: Section {
+    switch kind {
+    case .openPullRequest,
+      .openRepositoryOnCodeHost,
+      .openBranchOnCodeHost,
+      .markPullRequestReady,
+      .mergePullRequest,
+      .closePullRequest,
+      .copyFailingJobURL,
+      .copyCiFailureLogs,
+      .rerunFailedJobs,
+      .openFailingCheckDetails:
+      return .pullRequest
+    case .runCustomCommand:
+      return .customCommands
+    case .worktreeSelect,
+      .pinWorktree, .unpinWorktree, .copyWorktreePath, .revealWorktreeInFinder,
+      .togglePinWorktree, .deleteWorktree, .revealInFinder, .copyPath, .revealInSidebar,
+      .renameBranch, .openRepositorySettings, .showDiff:
+      return .worktrees
+    case .ghosttyCommand, .changeFocusedTabIcon:
+      return .terminal
+    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .newWorkspace,
+      .viewArchivedWorktrees,
+      .refreshWorktrees, .jumpToLatestUnread, .installCLI,
+      .toggleCanvas, .toggleShelf, .toggleWorktreeCanvas, .toggleRepositoryCanvas,
+      .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .tileCanvasCards, .selectAllCanvasCards,
+      .toggleLeftSidebar, .toggleActiveAgentsPanel,
+      .runScript, .stopRunScript:
+      return .appActions
+    #if DEBUG
+      case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
+        return .debug
+    #endif
+    }
   }
 
   var appShortcutCommandID: String? {
@@ -126,6 +191,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.CommandID.toggleLeftSidebar
     case .toggleActiveAgentsPanel:
       return AppShortcuts.CommandID.toggleActiveAgentsPanel
+    case .runCustomCommand(_, let commandID, _):
+      return LegacyCustomCommandShortcutMigration.customCommandBindingID(for: commandID)
     case .toggleCanvas:
       return AppShortcuts.CommandID.toggleCanvas
     case .expandCanvasCard:
@@ -150,7 +217,12 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.CommandID.stopScript
     case .renameBranch:
       return AppShortcuts.CommandID.renameBranch
+    case .toggleWorktreeCanvas:
+      return AppShortcuts.CommandID.toggleWorktreeCanvas
+    case .toggleRepositoryCanvas:
+      return AppShortcuts.CommandID.toggleRepoCanvas
     case .ghosttyCommand,
+      .openBranchOnCodeHost,
       .markPullRequestReady,
       .mergePullRequest,
       .closePullRequest,
@@ -166,7 +238,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .togglePinWorktree,
       .deleteWorktree,
       .openRepositorySettings,
-      .runCustomCommand:
+      .pinWorktree,
+      .unpinWorktree,
+      .copyWorktreePath,
+      .revealWorktreeInFinder:
       return nil
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:

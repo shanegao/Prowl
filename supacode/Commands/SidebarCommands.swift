@@ -44,6 +44,14 @@ struct SidebarCommands: Commands {
         )
       )
       .help(helpText(title: "Select Previous Agent", commandID: AppShortcuts.CommandID.selectPreviousActiveAgent))
+      // No in-app `.keyboardShortcut` here: ⌘⇧P is now a system-wide hotkey
+      // (see `KeyboardShortcuts.Name.quickSendActiveAgent` in QuickSendPanelManager),
+      // which also fires when Prowl is focused — binding it here too would double-fire.
+      Button("Send to Active Agent…") {
+        store.send(.presentQuickSend(defaultAgentID: nil))
+      }
+      .help(helpText(title: "Send to Active Agent…", commandID: AppShortcuts.CommandID.quickSendActiveAgent))
+      .disabled(store.repositories.activeAgents.entries.isEmpty)
       Button("Canvas") {
         store.send(.repositories(.toggleCanvas))
       }

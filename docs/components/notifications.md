@@ -36,6 +36,25 @@ A standalone sound (`notificationSoundEnabled`) plays only when system
 notifications are **disabled** — when banners are on, the banner carries its own
 sound.
 
+macOS banners are labelled with their **source**: the title is whatever the agent
+or terminal sent (e.g. "Claude Code"), and the subtitle is the originating
+`repository · worktree` (just the repository for a plain folder), so you can tell
+which pane is asking. Tapping a banner focuses that worktree's surface.
+
+Targeted banners also let you respond **without** leaving your current app:
+
+- **Reply:** type directly in the banner's reply field; Prowl delivers the text to
+  the originating pane (with a trailing Return), like a Slack reply, and does
+  **not** focus the pane.
+- **Quick-answer buttons:** when the pane is showing a Claude permission prompt,
+  the banner shows the real question as its body and a button per option; tapping
+  one sends that option's number as a keypress to the pane. Up to three options
+  fit alongside Reply (the macOS four-action limit) — use Reply or tap through for
+  the rest.
+
+If the pane has closed by the time you reply or answer, Prowl shows a warning toast
+rather than silently dropping the input.
+
 ## Where unread shows up
 
 - **Sidebar:** an orange bell next to a worktree with unseen notifications.

@@ -99,6 +99,27 @@ final class TerminalTabManager {
     tabs[index].iconLock = .script
   }
 
+  /// Agent-detection write path. Pins the icon to `.agent` so a detected
+  /// agent's brand mark blocks command auto-detection, while still yielding to
+  /// a Run Script (`.script`) or user (`.user`) lock. Idempotent — skips the
+  /// no-op write so frequent detection ticks don't churn observers.
+  func setAgentIcon(_ id: TerminalTabID, icon: String) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    guard tabs[index].iconLock == .auto || tabs[index].iconLock == .agent else { return }
+    guard tabs[index].icon != icon || tabs[index].iconLock != .agent else { return }
+    tabs[index].icon = icon
+    tabs[index].iconLock = .agent
+  }
+
+  /// Release the `.agent` pin when the agent leaves, dropping back to `.auto`
+  /// so command auto-detection resumes. The stale icon is left in place until
+  /// the next detected command refreshes it. No-op for other locks.
+  func clearAgentIcon(_ id: TerminalTabID) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    guard tabs[index].iconLock == .agent else { return }
+    tabs[index].iconLock = .auto
+  }
+
   func updateDirty(_ id: TerminalTabID, isDirty: Bool) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
     // OSC-9 drives this on every progress tick; skip the no-op write so an

@@ -100,22 +100,36 @@ struct AppFeatureRunScriptTests {
 
   @Test(.dependencies) func runScriptUsesCanvasFocusedWorktree() async {
     let worktree = makeWorktree()
-    var repositories = makeRepositoriesState(worktree: worktree)
-    repositories.selection = .canvas
     let sent = LockIsolated<[TerminalClient.Command]>([])
-    var state = AppFeature.State(
-      repositories: repositories,
-      settings: SettingsFeature.State()
-    )
-    state.selectedRunScript = "npm test"
-    let store = TestStore(initialState: state) {
-      AppFeature()
-    } withDependencies: {
-      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
-      $0.terminalClient.send = { command in
-        sent.withValue { $0.append(command) }
+
+    // In canvas mode, `actionTargetContext` reads the script from
+    // `@Shared(.repositorySettings(rootURL))`, not from `state.selectedRunScript`.
+    // Seed the shared store under .inMemory so the test exercises the same
+    // path the live app would.
+    let store = withDependencies {
+      $0.defaultFileStorage = .inMemory
+    } operation: {
+      @Shared(.repositorySettings(worktree.repositoryRootURL)) var repoSettings
+      $repoSettings.withLock { $0.runScript = "npm test" }
+
+      var repositories = makeRepositoriesState(worktree: worktree)
+      repositories.selection = .canvas(.overall)
+      var state = AppFeature.State(
+        repositories: repositories,
+        settings: SettingsFeature.State()
+      )
+      state.selectedRunScript = "npm test"
+
+      return TestStore(initialState: state) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
+        $0.terminalClient.send = { command in
+          sent.withValue { $0.append(command) }
+        }
       }
     }
+    store.exhaustivity = .off
 
     await store.send(.runScript)
     await store.finish()
@@ -126,7 +140,7 @@ struct AppFeatureRunScriptTests {
   @Test(.dependencies) func newTerminalUsesCanvasFocusedWorktree() async {
     let worktree = makeWorktree()
     var repositories = makeRepositoriesState(worktree: worktree)
-    repositories.selection = .canvas
+    repositories.selection = .canvas(.overall)
     let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(
       initialState: AppFeature.State(

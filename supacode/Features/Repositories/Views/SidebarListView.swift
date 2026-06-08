@@ -36,12 +36,17 @@ struct SidebarListView: View {
   @Binding var expandedRepoIDs: Set<Repository.ID>
   @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
+  /// When `true` (docked sidebar), renders the top mode-switcher (Default /
+  /// Canvas / Shelf) and the Add-Repository toolbar item. The quick-nav popover
+  /// passes `false`: the mode-switcher's canonical entry is `WorktreeToolbarContent`
+  /// and Add-Repository is also reachable from `EmptyStateView`, the command
+  /// palette, and the `newRepository` keyboard shortcut.
+  var showsHeaderChrome: Bool = true
   @State private var isDragActive = false
   @State private var draggingRepositoryID: Repository.ID?
   @State private var targetedRepositoryDropDestination: Int?
   @State private var sidebarHeight = 0.0
   @State private var sidebarFooterHeight = 0.0
-  @State private var resizingPanelHeight: Double?
   @State private var isAddChoicePresented = false
   @Namespace private var topSegmentNamespace
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
@@ -59,36 +64,7 @@ struct SidebarListView: View {
     )
     let repositoryItems = presentation.items.filter(\.isRepositoryOrderItem)
     let selectedWorktreeIDs = Self.selectedWorktreeIDs(in: state)
-    let selectedSurfaceID = state.selectedWorktreeID.flatMap { worktreeID in
-      terminalManager.stateIfExists(for: worktreeID)?.activeSurfaceID
-    }
-    // Only surface the hint while Cmd is held and the bindings are still at their
-    // defaults; a customized binding makes the merged "⌥⌃↑↓" glyph inaccurate.
-    let activeAgentsShortcutHint =
-      commandKeyObserver.isPressed
-      ? AppShortcuts.activeAgentsNavigationDisplay(in: resolvedKeybindings)
-      : nil
     let pendingSidebarReveal = state.pendingSidebarReveal
-
-    let maximumPanelHeight =
-      sidebarHeight > 0
-      ? ActiveAgentsFeature.maximumPanelHeight(forContainerHeight: sidebarHeight)
-      : ActiveAgentsFeature.maximumPanelHeight
-    let agentWorktreeMetadata = Self.activeAgentWorktreeMetadata(
-      repositories: state.repositories,
-      customTitles: state.repositoryCustomTitles,
-      repositoryAppearances: repositoryAppearances
-    )
-    let agentRowDisplays = Self.activeAgentRowDisplays(
-      entries: state.activeAgents.entries,
-      repositories: state.repositories,
-      metadata: agentWorktreeMetadata
-    )
-    let panelHeight = min(resizingPanelHeight ?? state.activeAgents.panelHeight, maximumPanelHeight)
-    let panelOffset = state.activeAgents.isPanelHidden ? panelHeight : 0
-    let activeAgentsPanelTopGap = 4.0
-    let listBottomPadding =
-      state.activeAgents.isPanelHidden ? 0 : panelHeight + activeAgentsPanelTopGap
 
     ScrollViewReader { scrollProxy in
       ScrollView {
@@ -115,16 +91,10 @@ struct SidebarListView: View {
           }
         }
         .padding(.vertical, 2)
-        .padding(.bottom, listBottomPadding)
       }
       .scrollIndicators(.never)
       .frame(minWidth: 220)
       .clipped()
-      .onGeometryChange(for: Double.self) { proxy in
-        Double(proxy.size.height)
-      } action: { newHeight in
-        sidebarHeight = newHeight
-      }
       .onDragSessionUpdated { session in
         if case .ended = session.phase {
           endSidebarDrag()
@@ -135,7 +105,9 @@ struct SidebarListView: View {
         }
       }
       .safeAreaInset(edge: .top, spacing: 0) {
-        topSegmentBar
+        if showsHeaderChrome {
+          topSegmentBar
+        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         SidebarFooterView(store: store)
@@ -158,31 +130,6 @@ struct SidebarListView: View {
             .accessibilityAddTraits(.isStaticText)
         }
       }
-      .overlay(alignment: .bottom) {
-        ActiveAgentsPanel(
-          store: store.scope(state: \.activeAgents, action: \.activeAgents),
-          rowDisplays: agentRowDisplays,
-          selectedSurfaceID: selectedSurfaceID,
-          navigationShortcutHint: activeAgentsShortcutHint,
-          showTabTitles: state.showActiveAgentTabTitles,
-          height: panelHeight,
-          maximumHeight: maximumPanelHeight,
-          onHeightChanged: { height in
-            resizingPanelHeight = height
-          },
-          onHeightChangeEnded: { height in
-            resizingPanelHeight = nil
-            store.send(.activeAgents(.panelHeightChanged(height)))
-          }
-        )
-        .padding(6)
-        .frame(height: panelHeight)
-        .offset(y: panelOffset)
-        .clipped()
-        .padding(.bottom, sidebarFooterHeight)
-        .allowsHitTesting(!state.activeAgents.isPanelHidden)
-        .animation(.easeOut(duration: 0.18), value: state.activeAgents.isPanelHidden)
-      }
       .dropDestination(for: URL.self) { urls, _ in
         let fileURLs = urls.filter(\.isFileURL)
         guard !fileURLs.isEmpty else { return false }
@@ -196,29 +143,31 @@ struct SidebarListView: View {
         await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
       }
       .toolbar {
-        ToolbarItem(placement: .automatic) {
-          Button {
-            isAddChoicePresented = true
-          } label: {
-            Label("Add...", systemImage: "folder.badge.plus")
-          }
-          .help("Add Repository or Workspace")
-          .persistentPopover(isPresented: $isAddChoicePresented) {
-            AddToProwlView(
-              dismiss: { isAddChoicePresented = false },
-              onBrowse: {
-                store.send(.setOpenPanelPresented(true))
-              },
-              onCloneCompleted: { url in
-                store.send(.repositoryManagement(.openRepositories([url])))
-              },
-              onWorkspace: {
-                store.send(.workspaceCreation(.promptRequested))
-              },
-              onDrop: { urls in
-                store.send(.repositoryManagement(.openRepositories(urls)))
-              }
-            )
+        if showsHeaderChrome {
+          ToolbarItem(placement: .automatic) {
+            Button {
+              isAddChoicePresented = true
+            } label: {
+              Label("Add...", systemImage: "folder.badge.plus")
+            }
+            .help("Add Repository or Workspace")
+            .persistentPopover(isPresented: $isAddChoicePresented) {
+              AddToProwlView(
+                dismiss: { isAddChoicePresented = false },
+                onBrowse: {
+                  store.send(.setOpenPanelPresented(true))
+                },
+                onCloneCompleted: { url in
+                  store.send(.repositoryManagement(.openRepositories([url])))
+                },
+                onWorkspace: {
+                  store.send(.workspaceCreation(.promptRequested))
+                },
+                onDrop: { urls in
+                  store.send(.repositoryManagement(.openRepositories(urls)))
+                }
+              )
+            }
           }
         }
       }
@@ -234,13 +183,6 @@ struct SidebarListView: View {
   private var topSegmentBar: some View {
     HStack(spacing: 4) {
       topSegmentButton(.tabbed, systemImage: "checklist.unchecked", title: "Default")
-      topSegmentButton(
-        .canvas,
-        systemImage: "square.grid.2x2",
-        title: "Canvas",
-        shortcutCommandID: AppShortcuts.CommandID.toggleCanvas,
-        requiresRepository: true
-      )
       topSegmentButton(
         .shelf,
         systemImage: "distribute.horizontal.fill",

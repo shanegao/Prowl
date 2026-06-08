@@ -159,10 +159,11 @@ struct WorktreeRow: View {
           Button {
             onDiffTap?()
           } label: {
-            WorktreeRowChangeCountView(
+            ChangeCountBadge(
               addedLines: displayAddedLines,
               removedLines: displayRemovedLines,
-              isSelected: isSelected,
+              strokeStyle: isSelected
+                ? AnyShapeStyle(.secondary.opacity(0.3)) : AnyShapeStyle(.tertiary)
             )
           }
           .buttonStyle(.plain)

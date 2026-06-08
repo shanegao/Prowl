@@ -43,21 +43,6 @@ struct SidebarFooterView: View {
       .help("Help")
       Spacer()
       Button {
-        withAnimation(.easeOut(duration: 0.18)) {
-          _ = store.send(.activeAgents(.togglePanelVisibility))
-        }
-      } label: {
-        Image(systemName: Self.activeAgentsPanelIconName(isPanelHidden: store.state.activeAgents.isPanelHidden))
-          .accessibilityLabel(store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents")
-      }
-      .help(
-        AppShortcuts.helpText(
-          title: store.state.activeAgents.isPanelHidden ? "Show Active Agents" : "Hide Active Agents",
-          commandID: AppShortcuts.CommandID.toggleActiveAgentsPanel,
-          in: resolvedKeybindings
-        )
-      )
-      Button {
         store.send(.refreshWorktrees)
       } label: {
         Image(systemName: "arrow.clockwise")
@@ -100,9 +85,5 @@ struct SidebarFooterView: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  static func activeAgentsPanelIconName(isPanelHidden: Bool) -> String {
-    isPanelHidden ? "person.crop.rectangle.stack" : "person.crop.rectangle.stack.fill"
   }
 }

@@ -1,4 +1,3 @@
-import AppKit
 import ComposableArchitecture
 import SwiftUI
 
@@ -12,16 +11,10 @@ struct ActiveAgentsPanel: View {
   /// or Cmd not held). Resolved by the parent so the panel stays presentational.
   let navigationShortcutHint: String?
   let showTabTitles: Bool
-  let height: Double
-  let maximumHeight: Double
-  let onHeightChanged: (Double) -> Void
-  let onHeightChangeEnded: (Double) -> Void
-  @State private var dragStartHeight: Double?
-  @State private var dragIndicatorPillOpacity: CGFloat = 0.4
+  let onEntrySelected: () -> Void
 
   var body: some View {
     VStack(spacing: 0) {
-      resizeHandle
       HStack {
         Text("Active Agents")
           .font(.caption)
@@ -38,87 +31,63 @@ struct ActiveAgentsPanel: View {
       .animation(.easeInOut(duration: 0.15), value: navigationShortcutHint)
 
       if store.entries.isEmpty {
-        Spacer(minLength: 0)
-        Text("New agents will appear here")
+        Text("No active agents")
           .font(.callout)
           .foregroundStyle(.secondary)
-          // Nudge up slightly off dead-center for better visual balance.
-          .offset(y: -8)
-        Spacer(minLength: 0)
+          .padding(.horizontal, 40)
+          .padding(.vertical, 32)
       } else {
         ScrollView {
-          LazyVStack(spacing: 0) {
-            ForEach(store.entries) { entry in
-              Button {
-                store.send(.entryTapped(entry.id))
-              } label: {
-                ActiveAgentRow(
-                  entry: entry,
-                  repositoryName: repositoryName(for: entry),
-                  subtitle: subtitle(for: entry),
-                  repositoryColor: repositoryColor(for: entry),
-                  isDimmed: isDimmed(entry)
-                )
+          LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(groupedEntries, id: \.repoName) { group in
+              VStack(alignment: .leading, spacing: 0) {
+                Divider()
+                Text(group.repoName)
+                  .font(.subheadline)
+                  .padding(.horizontal, 12)
+                  .padding(.vertical, 6)
+                ForEach(group.entries) { entry in
+                  Button {
+                    store.send(.entryTapped(entry.id))
+                    onEntrySelected()
+                  } label: {
+                    ActiveAgentRow(
+                      entry: entry,
+                      repositoryName: repositoryName(for: entry),
+                      subtitle: subtitle(for: entry),
+                      repositoryColor: repositoryColor(for: entry),
+                      isDimmed: isDimmed(entry)
+                    )
+                  }
+                  .buttonStyle(.plain)
+                  .help(helpText(for: entry))
+                }
               }
-              .buttonStyle(.plain)
-              .help(helpText(for: entry))
             }
           }
         }
         .scrollIndicators(.never)
+        .frame(minWidth: 320, maxWidth: 520, maxHeight: 440)
       }
     }
-    .background {
-      panelBackgroundShape
-        .fill(.thinMaterial)
+  }
+
+  /// Entries grouped by repository, preserving first-seen-of-repo order. Same
+  /// pattern as `ToolbarNotificationsPopoverView` — keeps the visual layout
+  /// stable as agents come and go during a working session.
+  private var groupedEntries: [(repoName: String, entries: [ActiveAgentEntry])] {
+    var order: [String] = []
+    var seen = Set<String>()
+    var byRepo: [String: [ActiveAgentEntry]] = [:]
+    for entry in store.entries {
+      let name = repositoryName(for: entry)
+      if !seen.contains(name) {
+        order.append(name)
+        seen.insert(name)
+      }
+      byRepo[name, default: []].append(entry)
     }
-    .clipShape(panelBackgroundShape)
-  }
-
-  private var resizeHandle: some View {
-    Rectangle()
-      .fill(.clear)
-      .frame(height: 1)
-      .frame(maxWidth: .infinity)
-      .overlay(alignment: .top) {
-        Capsule()
-          .fill(.separator.opacity(dragIndicatorPillOpacity))
-          .frame(width: 32, height: 4)
-          .padding(.vertical, 4)
-      }
-      .overlay {
-        Rectangle()
-          .fill(.clear)
-          .frame(height: 8)
-          .contentShape(.rect)
-      }
-      .gesture(
-        DragGesture(coordinateSpace: .global)
-          .onChanged { value in
-            let start = dragStartHeight ?? height
-            dragStartHeight = start
-            onHeightChanged(clampedHeight(start - value.translation.height))
-            dragIndicatorPillOpacity = 0.8
-          }
-          .onEnded { value in
-            let start = dragStartHeight ?? height
-            let height = clampedHeight(start - value.translation.height)
-            dragStartHeight = nil
-            onHeightChangeEnded(height)
-            dragIndicatorPillOpacity = 0.4
-          }
-      )
-      .onHover { hovering in
-        if hovering {
-          NSCursor.resizeUpDown.set()
-        } else {
-          NSCursor.arrow.set()
-        }
-      }
-  }
-
-  private func clampedHeight(_ height: Double) -> Double {
-    min(maximumHeight, max(ActiveAgentsFeature.minimumPanelHeight, height))
+    return order.map { (repoName: $0, entries: byRepo[$0] ?? []) }
   }
 
   private func repositoryName(for entry: ActiveAgentEntry) -> String {
@@ -180,9 +149,5 @@ struct ActiveAgentsPanel: View {
   static func tabTitle(for entry: ActiveAgentEntry) -> String {
     let trimmed = entry.tabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? "Untitled tab" : trimmed
-  }
-
-  private var panelBackgroundShape: RoundedRectangle {
-    RoundedRectangle(cornerRadius: 14)
   }
 }

@@ -204,6 +204,47 @@ struct TerminalTabManagerTests {
     #expect(manager.tabs.first?.iconLock == .user)
   }
 
+  @Test func setAgentIconPinsOverAutoDetection() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "one", icon: "terminal")
+    manager.setAgentIcon(tabId, icon: "claude")
+    #expect(manager.tabs.first?.icon == "claude")
+    #expect(manager.tabs.first?.iconLock == .agent)
+    // Command auto-detection can't override an agent pin.
+    manager.updateIcon(tabId, icon: "hammer")
+    #expect(manager.tabs.first?.icon == "claude")
+  }
+
+  @Test func setAgentIconYieldsToScriptAndUserLocks() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "one", icon: "terminal")
+    manager.setScriptIcon(tabId, icon: "play.fill")
+    manager.setAgentIcon(tabId, icon: "claude")
+    #expect(manager.tabs.first?.icon == "play.fill")
+    manager.overrideIcon(tabId, icon: "sparkles")
+    manager.setAgentIcon(tabId, icon: "claude")
+    #expect(manager.tabs.first?.icon == "sparkles")
+  }
+
+  @Test func clearAgentIconReleasesToAutoForCommandDetection() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "one", icon: "terminal")
+    manager.setAgentIcon(tabId, icon: "claude")
+    manager.clearAgentIcon(tabId)
+    #expect(manager.tabs.first?.iconLock == .auto)
+    // Auto-detection resumes once the agent pin is released.
+    manager.updateIcon(tabId, icon: "hammer")
+    #expect(manager.tabs.first?.icon == "hammer")
+  }
+
+  @Test func clearAgentIconLeavesUserLockIntact() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "one", icon: "terminal")
+    manager.overrideIcon(tabId, icon: "sparkles")
+    manager.clearAgentIcon(tabId)
+    #expect(manager.tabs.first?.iconLock == .user)
+  }
+
   @Test func clearIconOverrideReleasesScriptLock() {
     let manager = TerminalTabManager()
     let tabId = manager.createTab(title: "one", icon: "terminal")

@@ -10,8 +10,10 @@ struct CanvasLayoutStoreTests {
     let defaults = makeDefaults()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let legacyLayouts = [
-      "tab-a": CanvasCardLayout(position: CGPoint(x: 10, y: 20), size: CGSize(width: 300, height: 200)),
-      "tab-b": CanvasCardLayout(position: CGPoint(x: 30, y: 40), size: CGSize(width: 500, height: 400)),
+      "tab-a": CanvasCardLayout(
+        position: CGPoint(x: 10, y: 20), size: CGSize(width: 300, height: 200)),
+      "tab-b": CanvasCardLayout(
+        position: CGPoint(x: 30, y: 40), size: CGSize(width: 500, height: 400)),
     ]
     let data = try JSONEncoder().encode(legacyLayouts)
     defaults.set(data, forKey: "canvasCardLayouts")
@@ -20,22 +22,6 @@ struct CanvasLayoutStoreTests {
 
     #expect(store.cardLayouts == legacyLayouts)
     #expect(Set(store.zOrder) == Set(legacyLayouts.keys))
-    #expect(store.shouldAutoArrangeOnInitialEntry(for: ["tab-a", "tab-b"]) == false)
-  }
-
-  @Test func skipsInitialAutoArrangeWhenCurrentCardsWereLoadedFromStorage() throws {
-    let defaults = makeDefaults()
-    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
-    let store = CanvasLayoutStore(defaults: defaults)
-    store.setCardLayouts([
-      "tab-a": CanvasCardLayout(position: CGPoint(x: 10, y: 20)),
-      "tab-b": CanvasCardLayout(position: CGPoint(x: 30, y: 40)),
-    ])
-
-    let restoredStore = CanvasLayoutStore(defaults: defaults)
-
-    #expect(restoredStore.shouldAutoArrangeOnInitialEntry(for: ["tab-a", "tab-b"]) == false)
-    #expect(restoredStore.shouldAutoArrangeOnInitialEntry(for: ["tab-c", "tab-d"]))
   }
 
   @Test func moveToFrontPersistsZOrder() {

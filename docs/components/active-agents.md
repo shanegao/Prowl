@@ -51,6 +51,35 @@ Rows appear in the order agents are first detected. (See
 - **Auto-show:** if `autoShowActiveAgentsPanel` is on and the panel is hidden, a
   newly detected agent opens it automatically.
 
+## Quick-send to an agent
+
+Send a message to any active agent without leaving the keyboard or bringing
+Prowl forward.
+
+- **Menubar:** the Prowl status-bar item lists active agents; each is a submenu
+  with **Focus** (jump to the pane) and **Send text…**.
+- **Shortcut:** `⌘⇧P` (`quick_send_active_agent`) opens it for the **focused**
+  agent. It's a **system-wide** hotkey, so it works even when Prowl is in the
+  background.
+
+Either opens a small **non-activating panel** (the main window stays in the
+background): pick a target from the agent list, type a (multi-line) message —
+**Return** inserts a newline, **⌘/⇧Return** sends (types the text into the
+agent's pane and presses Enter), **Esc** cancels.
+
+Type `/` at the start of a word in the composer to open a **skill picker** — a
+floating list filtered as you type. **↑/↓** move the highlight, **Return**/**Tab**
+insert the chosen `/skill-name`, **Esc** dismisses it. The skills are the subfolders
+of the configured **Skills directory** (Settings → Advanced → Quick Send), or, when
+that's empty, the selected agent's `~/.<agent>/skills` (global) **and** its worktree's
+`./.<agent>/skills` (project-local) — e.g. `~/.claude/skills` plus the worktree's
+`.claude/skills`.
+
+Type `@` at the start of a word to search **files and folders** under the selected
+agent's worktree root. Accepting a match inserts `@relative/path` relative to that
+root — folders insert with a trailing slash (`@relative/path/`) to mark them — so the
+receiving CLI can resolve it like its native file-reference picker.
+
 ## Empty state
 
 When nothing is running: "New agents will appear here".

@@ -82,8 +82,40 @@ extension RepositoriesFeature.State {
     selection == .archivedWorktrees
   }
 
+  var canvasScope: CanvasScope? {
+    if case .canvas(let scope) = selection { return scope }
+    return nil
+  }
+
   var isShowingCanvas: Bool {
-    selection == .canvas
+    canvasScope != nil
+  }
+
+  /// True only for the app-wide overall canvas (not the per-worktree or
+  /// per-repository variants).
+  var isShowingGlobalCanvas: Bool {
+    canvasScope == .overall
+  }
+
+  /// True when showing the active-agents canvas (global, filtered to tabs that
+  /// currently have an active agent). Drives the active-agents canvas button's
+  /// active state and the `scopedTabIDs` filter passed to `CanvasView`.
+  var isShowingActiveAgentsCanvas: Bool {
+    canvasScope == .activeAgents
+  }
+
+  /// The worktree ID when the user is in a per-worktree canvas. `nil` for
+  /// other canvas scopes or when not in a canvas at all.
+  var scopedCanvasWorktreeID: Worktree.ID? {
+    if case .worktree(let id) = canvasScope { return id }
+    return nil
+  }
+
+  /// The repository ID when the user is in a per-repository canvas. `nil` for
+  /// other canvas scopes or when not in a canvas at all.
+  var scopedCanvasRepositoryID: Repository.ID? {
+    if case .repository(let id) = canvasScope { return id }
+    return nil
   }
 
   var isShowingShelf: Bool {
@@ -358,6 +390,21 @@ extension RepositoriesFeature.State {
       return repository.id
     }
     return nil
+  }
+
+  /// Display label identifying a notification's source: `"repo · worktree"` for a
+  /// worktree, or just `"repo"` for a plain folder (which has no separate
+  /// worktree). `nil` when neither resolves. Surfaced as the macOS notification
+  /// subtitle so the banner shows which repo/worktree an agent's alert came from.
+  func worktreeContextLabel(for worktreeID: Worktree.ID) -> String? {
+    if let worktree = worktree(for: worktreeID),
+      let repositoryID = repositoryID(containing: worktreeID),
+      let repositoryName = repositoryName(for: repositoryID)
+    {
+      return "\(repositoryName) · \(worktree.name)"
+    }
+    // Plain folder: the repository acts as its own worktree, so show just its name.
+    return repositoryName(for: worktreeID)
   }
 
   func isMainWorktree(_ worktree: Worktree) -> Bool {

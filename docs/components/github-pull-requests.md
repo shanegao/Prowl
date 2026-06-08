@@ -43,6 +43,14 @@ GitHub remote, stale PR badges are cleared.
 PR status can surface as a badge on the worktree and as a summary in the command
 palette.
 
+When a worktree has **no PR yet**, the center toolbar status item (for any git
+repo) shows an **Open on \<host\>** button instead of the idle clock. Tapping it
+opens the branch page (`…/tree/<branch>`) when the branch is on the remote, or the
+repository page when it isn't pushed yet. Hovering reveals a popover with the
+repository/branch/host and explicit **Open branch** and **Open repository**
+actions — so the item stays useful before a PR exists, including for local
+branches and repos whose remote host isn't a recognized provider.
+
 ## Actions (via Command Palette, when a PR exists)
 
 Open the [Command Palette](command-palette.md) (`⌘P`) on a worktree that has a PR

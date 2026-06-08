@@ -3,6 +3,7 @@ import Sharing
 
 enum CommandPaletteItemID {
   static let ghosttyPrefix = "ghostty."
+  static let customCommandPrefix = "custom-command."
   static let globalCheckForUpdates = "global.check-for-updates"
   static let globalOpenSettings = "global.open-settings"
   static let globalOpenRepository = "global.open-repository"
@@ -36,7 +37,31 @@ enum CommandPaletteItemID {
   }
 
   static func customCommand(_ commandID: String) -> CommandPaletteItem.ID {
-    "custom-command.\(commandID)"
+    "\(customCommandPrefix)\(commandID)"
+  }
+
+  static func toggleWorktreeCanvas(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
+    "worktree.\(worktreeID).toggle-canvas"
+  }
+
+  static func toggleRepositoryCanvas(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
+    "repo.\(repositoryID).toggle-canvas"
+  }
+
+  static func pinWorktree(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
+    "worktree.\(worktreeID).pin"
+  }
+
+  static func unpinWorktree(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
+    "worktree.\(worktreeID).unpin"
+  }
+
+  static func copyWorktreePath(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
+    "worktree.\(worktreeID).copy-path"
+  }
+
+  static func revealWorktreeInFinder(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
+    "worktree.\(worktreeID).reveal-in-finder"
   }
 
   static var globalIDs: [CommandPaletteItem.ID] {
@@ -85,6 +110,7 @@ enum CommandPaletteItemID {
   static func pullRequestIDs(repositoryID: Repository.ID) -> [CommandPaletteItem.ID] {
     [
       pullRequestOpen(repositoryID),
+      pullRequestBranch(repositoryID),
       pullRequestReady(repositoryID),
       pullRequestCopyFailingJobURL(repositoryID),
       pullRequestCopyCiLogs(repositoryID),
@@ -97,6 +123,10 @@ enum CommandPaletteItemID {
 
   static func pullRequestOpen(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
     "pr.\(repositoryID).open"
+  }
+
+  static func pullRequestBranch(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
+    "pr.\(repositoryID).branch"
   }
 
   static func pullRequestReady(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
@@ -157,10 +187,23 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     return .togglePinWorktree(worktreeID, isCurrentlyPinned: isCurrentlyPinned)
   case .openRepositorySettings(let repositoryID):
     return .openRepositorySettings(repositoryID)
-  case .runCustomCommand(let index, _, _):
-    return .runCustomCommand(index)
+  case .runCustomCommand(_, let commandID, _):
+    return .runCustomCommand(commandID: commandID)
+  case .toggleWorktreeCanvas(let worktreeID):
+    return .toggleWorktreeCanvas(worktreeID)
+  case .toggleRepositoryCanvas(let repositoryID):
+    return .toggleRepositoryCanvas(repositoryID)
+  case .pinWorktree(let worktreeID):
+    return .pinWorktree(worktreeID)
+  case .unpinWorktree(let worktreeID):
+    return .unpinWorktree(worktreeID)
+  case .copyWorktreePath(let worktreeID):
+    return .copyWorktreePath(worktreeID)
+  case .revealWorktreeInFinder(let worktreeID):
+    return .revealWorktreeInFinder(worktreeID)
   case .openPullRequest,
     .openRepositoryOnCodeHost,
+    .openBranchOnCodeHost,
     .markPullRequestReady,
     .mergePullRequest,
     .closePullRequest,
@@ -290,6 +333,8 @@ func pullRequestDelegateAction(
   case .openPullRequest(let worktreeID),
     .openRepositoryOnCodeHost(let worktreeID):
     return .openPullRequest(worktreeID)
+  case .openBranchOnCodeHost(let worktreeID):
+    return .openBranchOnCodeHost(worktreeID)
   case .markPullRequestReady(let worktreeID):
     return .markPullRequestReady(worktreeID)
   case .mergePullRequest(let worktreeID):
@@ -325,6 +370,8 @@ func pullRequestDelegateAction(
     .tileCanvasCards,
     .selectAllCanvasCards,
     .toggleShelf,
+    .toggleWorktreeCanvas,
+    .toggleRepositoryCanvas,
     .showDiff,
     .revealInFinder,
     .copyPath,
@@ -335,7 +382,11 @@ func pullRequestDelegateAction(
     .renameBranch,
     .deleteWorktree,
     .openRepositorySettings,
-    .runCustomCommand:
+    .runCustomCommand,
+    .pinWorktree,
+    .unpinWorktree,
+    .copyWorktreePath,
+    .revealWorktreeInFinder:
     return nil
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:

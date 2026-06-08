@@ -10,6 +10,10 @@ struct ToolbarNotificationsPopoverButton: View {
   @State private var isHoveringButton = false
   @State private var isHoveringPopover = false
   @State private var closeTask: Task<Void, Never>?
+  /// Stable identity used by `PopoverPresentationCoordinator` to track
+  /// which popover button currently holds presentation.
+  @State private var popoverOwnerID = UUID()
+  @Environment(PopoverPresentationCoordinator.self) private var popoverCoordinator
 
   private var notificationCount: Int {
     groups.reduce(0) { count, repository in
@@ -66,8 +70,21 @@ struct ToolbarNotificationsPopoverButton: View {
         closePopover()
       }
     }
+    // Coordinate with sibling toolbar popover buttons so only one is
+    // presented at a time. See `PopoverPresentationCoordinator` for the
+    // race-condition this prevents (fast cursor sweep freezing the app).
+    .onChange(of: isPresented) { _, isOpen in
+      if isOpen {
+        popoverCoordinator.claim(owner: popoverOwnerID) {
+          closePopover()
+        }
+      } else {
+        popoverCoordinator.release(owner: popoverOwnerID)
+      }
+    }
     .onDisappear {
       closeTask?.cancel()
+      popoverCoordinator.release(owner: popoverOwnerID)
     }
   }
 

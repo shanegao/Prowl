@@ -11,7 +11,7 @@ struct WorktreeCommandsTests {
     let worktree = Self.makeWorktree(id: "\(rootPath)/wt-1", name: "feature/canvas", repoRoot: rootPath)
     let repository = Self.makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.selection = SidebarSelection.canvas
+    state.selection = SidebarSelection.canvas(.overall)
 
     let result = codeHostWorktreeID(
       repositories: state,
@@ -30,7 +30,7 @@ struct WorktreeCommandsTests {
       worktrees: []
     )
     var state = RepositoriesFeature.State(repositories: [repository])
-    state.selection = SidebarSelection.canvas
+    state.selection = SidebarSelection.canvas(.overall)
 
     let result = codeHostWorktreeID(
       repositories: state,

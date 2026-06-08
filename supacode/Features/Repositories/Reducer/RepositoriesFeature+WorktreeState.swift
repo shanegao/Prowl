@@ -25,6 +25,34 @@ func requestCanvasFocus(
   state.openedWorktreeIDs.insert(openedWorktreeID)
 }
 
+/// Keep-open canvas rebind: when navigating to `worktreeID` while a *scoped*
+/// worktree- or repository-canvas is open, swap that canvas's scope to the
+/// target (staying in the same canvas mode) so the target's card is on the
+/// board. Overall / active-agents canvases already render every worktree, so
+/// they need no rebind and this leaves the scope untouched. Mirrors the
+/// *selection* rebind in `selectWorktree`; issuing the focus move is the
+/// caller's responsibility (e.g. `entryTapped`'s `requestCanvasFocus`).
+func rebindScopedCanvas(toWorktree worktreeID: Worktree.ID, state: inout RepositoriesFeature.State) {
+  if let rebound = state.selection?.reboundCanvas(toWorktree: worktreeID) {
+    state.selection = rebound
+    state.sidebarSelectedWorktreeIDs = []
+    state.openedWorktreeIDs.insert(worktreeID)
+    return
+  }
+  // A plain folder's `worktreeID` IS its repository id, so `repositoryID(containing:)`
+  // (which searches each repo's `worktrees`) returns nil — fall back to the id itself
+  // so a plain-folder agent can still rebind a repo-scoped canvas to it.
+  if case .canvas(.repository) = state.selection,
+    let repoID = state.repositoryID(containing: worktreeID)
+      ?? (state.repositories[id: worktreeID]?.kind == .plain ? worktreeID : nil),
+    let rebound = state.selection?.reboundCanvas(toRepository: repoID)
+  {
+    state.selection = rebound
+    state.sidebarSelectedWorktreeIDs = []
+    state.openedWorktreeIDs.insert(worktreeID)
+  }
+}
+
 func updatePendingWorktreeProgress(
   _ id: String,
   progress: WorktreeCreationProgress,
@@ -285,6 +313,22 @@ func updateWorktreePullRequest(
 ) {
   var entry = state.worktreeInfoByID[worktreeID] ?? WorktreeInfoEntry()
   entry.pullRequest = pullRequest
+  if entry.isEmpty {
+    state.worktreeInfoByID.removeValue(forKey: worktreeID)
+  } else {
+    state.worktreeInfoByID[worktreeID] = entry
+  }
+}
+
+func updateWorktreeBranchState(
+  worktreeID: Worktree.ID,
+  aheadBehind: AheadBehind?,
+  isPushed: Bool?,
+  state: inout RepositoriesFeature.State
+) {
+  var entry = state.worktreeInfoByID[worktreeID] ?? WorktreeInfoEntry()
+  entry.aheadBehind = aheadBehind
+  entry.isPushed = isPushed
   if entry.isEmpty {
     state.worktreeInfoByID.removeValue(forKey: worktreeID)
   } else {

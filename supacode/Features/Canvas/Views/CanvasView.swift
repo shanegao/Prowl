@@ -7,6 +7,29 @@ struct CanvasView: View {
   @Environment(\.resolvedKeybindings) var resolvedKeybindings
 
   let terminalManager: WorktreeTerminalManager
+
+  /// When non-nil, the canvas is in per-worktree scope and shows only panes
+  /// from this worktree. The three canvas scopes are mutually exclusive:
+  /// - `scopedWorktreeID` set, `scopedWorktreeIDs` nil → per-worktree
+  /// - `scopedWorktreeID` nil, `scopedWorktreeIDs` set → per-repository
+  /// - both nil → overall canvas (every active worktree's panes)
+  var scopedWorktreeID: Worktree.ID?
+  /// When non-nil, the canvas is in per-repository scope and shows only panes
+  /// from worktrees whose IDs are in this set. See `scopedWorktreeID` doc for
+  /// the full mode matrix.
+  var scopedWorktreeIDs: Set<Worktree.ID>?
+  /// When non-nil, restricts the rendered cards to tabs whose ID is in this
+  /// set — used by the active-agents canvas to show only tabs that currently
+  /// have a live agent. Applies on top of the worktree-scope filters (the
+  /// active-agents canvas leaves both worktree filters nil, so this is the
+  /// sole filter for that mode). `nil` renders every tab (all other modes).
+  var scopedTabIDs: Set<TerminalTabID>?
+  /// Optional pane ordering. The closure returns a (primary, secondary) string
+  /// pair used to sort `WorktreeTerminalState`s after scope filtering. Pass
+  /// `(repoName, worktreeName)` to group panes by repository, then alphabetize
+  /// within each repo. `nil` keeps the natural order from `terminalManager`.
+  var sortKey: ((WorktreeTerminalState) -> (String, String))?
+
   /// Per-repo display titles resolved by the parent reducer. Used to
   /// override the folder-derived `Repository.name` on each card title
   /// bar without subscribing to per-repo settings files on the
@@ -16,6 +39,10 @@ struct CanvasView: View {
   /// A one-shot, reducer-driven request to run a view-local canvas command
   /// (expand/arrange/organize/select-all), e.g. from the command palette.
   var commandRequest: CanvasCommandRequest?
+  /// Exit-to-tab callback. The associated worktree ID is non-nil for
+  /// expand-to-pane (jump to that card's worktree and leave canvas) and nil
+  /// for a plain toggle-off (the parent decides where to land based on scope).
+  var onExitToTab: (Worktree.ID?) -> Void = { _ in }
   var onFocusedWorktreeChanged: (Worktree.ID?) -> Void = { _ in }
   var onFocusRequestConsumed: (Int) -> Void = { _ in }
   var onCommandConsumed: (Int) -> Void = { _ in }
@@ -36,6 +63,7 @@ struct CanvasView: View {
   @State var hasPerformedInitialFit = false
   @State var hasSeenCanvasCards = false
   @State var viewportSize: CGSize = .zero
+  @State private var resizeRelayoutTask: Task<Void, Never>?
   @State var configReloadCounter = 0
   @State var focusViewportAnimationID = 0
   /// The tab currently expanded in place (near-fullscreen overlay) on canvas,
@@ -79,6 +107,66 @@ struct CanvasView: View {
     CanvasCardLayout.adaptiveDefaultSize(forScreenWidth: hostScreenWidth)
   }
 
+  /// True for any scoped canvas (per-worktree, per-repository, or active-agents).
+  /// Scoped canvases tile the viewport with `focusAwareCardLayout` and reset
+  /// their layout on scope/viewport changes; the overall canvas keeps user
+  /// card positions and sizes.
+  var isScopedMode: Bool {
+    scopedWorktreeID != nil || scopedWorktreeIDs != nil || scopedTabIDs != nil
+  }
+
+  /// The tab whose card should be grown to 50% of its row width. Non-nil only
+  /// when exactly one card is selected (matches "selected only one card" from
+  /// the user spec); during multi-card broadcast and zero-selection the value
+  /// is nil and rows fall back to uniform widths. Drives `focusAwareCardLayout`
+  /// and the `.onChange` re-layout trigger; recomputed from `selectionState`
+  /// every body evaluation so SwiftUI's `.onChange(of:)` sees value changes.
+  private var focusGrowTabID: TerminalTabID? {
+    selectionState.selectedTabIDs.count == 1 ? selectionState.primaryTabID : nil
+  }
+
+  /// Worktree that owns the current primary card. Used by the external-focus
+  /// `.onChange(of: terminalManager.canvasFocusedWorktreeID)` handler to skip
+  /// when the requested focus already matches the current primary — that's
+  /// the self-trigger guard against `syncPrimaryFocus`'s own writes.
+  private var primaryCardOwnerWorktreeID: Worktree.ID? {
+    guard let primaryTabID = selectionState.primaryTabID else { return nil }
+    return terminalManager.activeWorktreeStates
+      .first(where: { $0.surfaceView(for: primaryTabID) != nil })?
+      .worktreeID
+  }
+
+  /// Filters `terminalManager.activeWorktreeStates` by the active scope filter:
+  /// `scopedWorktreeID` (per-worktree) or `scopedWorktreeIDs` (per-repo). With
+  /// no filter set, returns all active states (overall canvas). Sorted by
+  /// `sortKey` when provided.
+  var scopedActiveStates: [WorktreeTerminalState] {
+    let all = terminalManager.activeWorktreeStates
+    var filtered: [WorktreeTerminalState]
+    if let scopedWorktreeID {
+      filtered = all.filter { $0.worktreeID == scopedWorktreeID }
+    } else if let scopedWorktreeIDs {
+      filtered = all.filter { scopedWorktreeIDs.contains($0.worktreeID) }
+    } else {
+      filtered = all
+    }
+    guard let sortKey else { return filtered }
+    return filtered.sorted { lhs, rhs in
+      let l = sortKey(lhs)
+      let r = sortKey(rhs)
+      let primary = l.0.localizedCaseInsensitiveCompare(r.0)
+      if primary != .orderedSame { return primary == .orderedAscending }
+      return l.1.localizedCaseInsensitiveCompare(r.1) == .orderedAscending
+    }
+  }
+
+  /// Tab visibility gate. `scopedTabIDs == nil` (the worktree/repo/overall
+  /// canvases) shows every tab; the active-agents canvas passes the set of
+  /// agent tab IDs so only those render.
+  func includesTab(_ tabID: TerminalTabID) -> Bool {
+    scopedTabIDs?.contains(tabID) ?? true
+  }
+
   var body: some View {
     let selectAllCanvasShortcut = AppShortcuts.resolvedShortcut(
       for: AppShortcuts.CommandID.selectAllCanvasCards,
@@ -108,82 +196,7 @@ struct CanvasView: View {
       lastScale: $lastCanvasScale,
       isInteractionEnabled: expandedTabID == nil
     ) {
-      GeometryReader { _ in
-        let activeStates = terminalManager.activeWorktreeStates
-        let allCardKeys = collectCardKeys(from: activeStates)
-        let allTabIDs = collectVisibleTabIDs(from: activeStates)
-
-        // Background layer: handles canvas pan and tap-to-clear.
-        Color.clear
-          .onAppear {
-            if !allCardKeys.isEmpty {
-              hasSeenCanvasCards = true
-            }
-            ensureLayouts(for: allCardKeys)
-            if !allCardKeys.isEmpty {
-              layoutStore.ensureZOrder(for: allCardKeys)
-            }
-            pruneSelection(previousOrder: [], currentOrder: allTabIDs, states: activeStates)
-            syncBroadcastCallbacks(states: activeStates)
-            fulfillPendingFocusRequest(focusRequest, states: activeStates)
-          }
-          .onChange(of: allCardKeys) { _, newKeys in
-            if newKeys.isEmpty {
-              CanvasLayoutStore.hasAutoArrangedInSession = false
-              if hasSeenCanvasCards {
-                layoutStore.prune(to: [])
-              }
-            } else {
-              hasSeenCanvasCards = true
-            }
-            ensureLayouts(for: newKeys)
-            if !newKeys.isEmpty {
-              layoutStore.ensureZOrder(for: newKeys)
-            }
-            syncBroadcastCallbacks(states: activeStates)
-            fulfillPendingFocusRequest(focusRequest, states: activeStates)
-          }
-          .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in
-            pruneSelection(previousOrder: oldTabIDs, currentOrder: newTabIDs, states: activeStates)
-            if let expandedTabID, !newTabIDs.contains(expandedTabID) {
-              cancelExpandForRelayout()
-            }
-            fulfillPendingFocusRequest(focusRequest, states: activeStates)
-          }
-          .onChange(of: focusRequest) { _, newRequest in
-            fulfillPendingFocusRequest(newRequest, states: activeStates)
-          }
-          .contentShape(.rect)
-          .accessibilityAddTraits(.isButton)
-          .onTapGesture { clearSelection(states: activeStates) }
-          .gesture(canvasPanGesture, isEnabled: expandedTabID == nil)
-
-        cardsLayer(activeStates: activeStates)
-      }
-      .contentShape(.rect)
-      .simultaneousGesture(canvasZoomGesture, isEnabled: expandedTabID == nil)
-      .animation(.easeInOut(duration: 0.22), value: focusViewportAnimationID)
-      .onGeometryChange(for: CGSize.self) { proxy in
-        proxy.size
-      } action: { newSize in
-        viewportSize = newSize
-        let currentCardKeys = collectCardKeys(from: terminalManager.activeWorktreeStates)
-        if !hasPerformedInitialFit, !currentCardKeys.isEmpty {
-          hasPerformedInitialFit = true
-          if !CanvasLayoutStore.hasAutoArrangedInSession {
-            CanvasLayoutStore.hasAutoArrangedInSession = true
-            if layoutStore.shouldAutoArrangeOnInitialEntry(for: currentCardKeys) {
-              switch settingsFile.global.canvasDefaultLayout {
-              case .uniform:
-                arrangeCards()
-              case .tile:
-                tileCards()
-              }
-            }
-          }
-          fitToView(canvasSize: newSize)
-        }
-      }
+      canvasScrollContent
     }
     .overlay(alignment: .bottomTrailing) {
       canvasToolbar
@@ -193,7 +206,7 @@ struct CanvasView: View {
     }
     .onKeyPress(.escape) {
       guard selectionState.isBroadcasting else { return .ignored }
-      clearSelection(states: terminalManager.activeWorktreeStates)
+      clearSelection(states: scopedActiveStates)
       return .handled
     }
     .onKeyPress(
@@ -253,7 +266,11 @@ struct CanvasView: View {
     .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
       configReloadCounter &+= 1
     }
-    .onDisappear { deactivateCanvas() }
+    .onDisappear {
+      resizeRelayoutTask?.cancel()
+      resizeRelayoutTask = nil
+      deactivateCanvas()
+    }
   }
 
   func showsSelectionShield(for tabID: TerminalTabID) -> Bool {
@@ -263,9 +280,149 @@ struct CanvasView: View {
     return false
   }
 
+  /// The scrollable canvas surface (background + cards). Extracted from `body`
+  /// so the `CanvasScrollContainer` / `GeometryReader` / `.onGeometryChange`
+  /// chain stays small enough for the Swift type checker.
+  @ViewBuilder
+  private var canvasScrollContent: some View {
+    GeometryReader { _ in
+      let activeStates = scopedActiveStates
+      let allCardKeys = collectCardKeys(from: activeStates)
+      let allTabIDs = collectVisibleTabIDs(from: activeStates)
+
+      canvasBackgroundLayer(
+        activeStates: activeStates,
+        allCardKeys: allCardKeys,
+        allTabIDs: allTabIDs
+      )
+
+      cardsLayer(activeStates: activeStates)
+    }
+    .contentShape(.rect)
+    .simultaneousGesture(canvasZoomGesture, isEnabled: expandedTabID == nil)
+    .animation(.easeInOut(duration: 0.22), value: focusViewportAnimationID)
+    .onGeometryChange(for: CGSize.self) { proxy in
+      proxy.size
+    } action: { newSize in
+      let previousSize = viewportSize
+      viewportSize = newSize
+      let currentCardKeys = collectCardKeys(from: scopedActiveStates)
+      if !hasPerformedInitialFit, !currentCardKeys.isEmpty {
+        performInitialFit(for: currentCardKeys, canvasSize: newSize)
+      } else if previousSize != newSize, isScopedMode {
+        // Scoped canvases re-tile to the new viewport on window resize so the
+        // grid keeps filling the visible space; debounced to avoid thrash
+        // during a live drag. The overall canvas keeps user card positions.
+        scheduleResizeRelayout(for: newSize)
+      }
+    }
+  }
+
   // MARK: - Cards Layer
 
-  /// Cards layer: one card per open tab across all worktrees.
+  /// Background layer: handles canvas pan, tap-to-clear, and the lifecycle /
+  /// scope `.onChange` handlers. Extracted from `body` so the type checker
+  /// doesn't choke on the combined modifier chain.
+  @ViewBuilder
+  private func canvasBackgroundLayer(
+    activeStates: [WorktreeTerminalState],
+    allCardKeys: [String],
+    allTabIDs: [TerminalTabID]
+  ) -> some View {
+    Color.clear
+      .modifier(
+        CanvasLifecycleHandlers(
+          allCardKeys: allCardKeys,
+          allTabIDs: allTabIDs,
+          focusRequest: focusRequest,
+          onAppear: {
+            if !allCardKeys.isEmpty {
+              hasSeenCanvasCards = true
+            }
+            ensureLayouts(for: allCardKeys)
+            if !allCardKeys.isEmpty {
+              layoutStore.ensureZOrder(for: allCardKeys)
+            }
+            pruneSelection(previousOrder: [], currentOrder: allTabIDs, states: activeStates)
+            syncBroadcastCallbacks(states: activeStates)
+            fulfillPendingFocusRequest(focusRequest, states: activeStates)
+          },
+          onCardKeysChanged: { newKeys in
+            if newKeys.isEmpty {
+              if hasSeenCanvasCards {
+                layoutStore.prune(to: [])
+              }
+            } else {
+              hasSeenCanvasCards = true
+            }
+            ensureLayouts(for: newKeys)
+            if !newKeys.isEmpty {
+              layoutStore.ensureZOrder(for: newKeys)
+              performColdEntryFitIfNeeded()
+            }
+            syncBroadcastCallbacks(states: activeStates)
+            fulfillPendingFocusRequest(focusRequest, states: activeStates)
+          },
+          onTabIDsChanged: { oldTabIDs, newTabIDs in
+            pruneSelection(previousOrder: oldTabIDs, currentOrder: newTabIDs, states: activeStates)
+            if let expandedTabID, !newTabIDs.contains(expandedTabID) {
+              cancelExpandForRelayout()
+            }
+            fulfillPendingFocusRequest(focusRequest, states: activeStates)
+          },
+          onFocusRequestChanged: { newRequest in
+            fulfillPendingFocusRequest(newRequest, states: activeStates)
+          }
+        )
+      )
+      .modifier(canvasScopeChangeHandlers)
+      .contentShape(.rect)
+      .accessibilityAddTraits(.isButton)
+      .onTapGesture { clearSelection(states: activeStates) }
+      .gesture(canvasPanGesture, isEnabled: expandedTabID == nil)
+  }
+
+  /// Scope-driven relayout handlers, factored into a `ViewModifier` so the
+  /// background layer's modifier chain stays short enough for the type checker.
+  private var canvasScopeChangeHandlers: some ViewModifier {
+    CanvasScopeChangeHandlers(
+      scopedWorktreeID: scopedWorktreeID,
+      scopedWorktreeIDs: scopedWorktreeIDs,
+      scopedTabIDs: scopedTabIDs,
+      focusGrowTabID: focusGrowTabID,
+      canvasFocusedWorktreeID: terminalManager.canvasFocusedWorktreeID,
+      isScopedMode: isScopedMode,
+      onScopeRelayout: {
+        applyLayoutForCurrentMode()
+        fitToView(canvasSize: viewportSize)
+      },
+      onFocusGrowChanged: {
+        guard isScopedMode else { return }
+        withAnimation(.smooth(duration: 0.15)) {
+          organizeCards()
+        }
+      },
+      onExternalFocus: { newValue in
+        // External focus request (e.g. repo-canvas sidebar tap on a different
+        // worktree): switch the primary card to that worktree's first tab.
+        // `syncPrimaryFocus` writes this same field on every primary change,
+        // so the divergence guard below prevents a self-trigger loop —
+        // syncPrimaryFocus's writes always equal the current primary's owner.
+        guard let newValue,
+          isScopedMode,
+          primaryCardOwnerWorktreeID != newValue,
+          let owner = scopedActiveStates.first(where: { $0.worktreeID == newValue }),
+          let firstTab = owner.tabManager.tabs.first
+        else { return }
+        focusSingleCard(firstTab.id, states: scopedActiveStates)
+        // External navigation (sidebar / notification / command-palette) into a
+        // scoped canvas: zoom-fit + center the target, matching the active-agents
+        // popover behavior so navigating always brings the card fully into view.
+        focusViewport(on: firstTab.id)
+      }
+    )
+  }
+
   /// Uses .offset() (not .position()) to avoid parent size proposals
   /// reaching the NSView, keeping terminal grid stable during zoom.
   @ViewBuilder
@@ -276,7 +433,7 @@ struct CanvasView: View {
     ZStack(alignment: .topLeading) {
       ForEach(activeStates, id: \.worktreeID) { state in
         ForEach(state.tabManager.tabs) { tab in
-          if state.surfaceView(for: tab.id) != nil {
+          if state.surfaceView(for: tab.id) != nil, includesTab(tab.id) {
             cardView(for: tab, in: state, activeStates: activeStates)
           }
         }
@@ -315,11 +472,18 @@ struct CanvasView: View {
     let cardKey = tab.id.rawValue.uuidString
     let baseLayout = layoutStore.cardLayouts[cardKey] ?? CanvasCardLayout(position: .zero)
     let isCardExpanded = expandedTabID == tab.id
-    let expandHelp = AppShortcuts.helpText(
-      title: isCardExpanded ? "Restore card size" : "Expand card",
-      commandID: AppShortcuts.CommandID.expandCanvasCard,
-      in: resolvedKeybindings
-    )
+    // The title-bar button exits to this card's pane when not expanded, and
+    // restores the card while expanded in place (⌘-expand shortcut). The help
+    // text tracks the action; only the restore case carries the shortcut hint
+    // since the shortcut drives in-place expand/restore, not the exit.
+    let expandHelp =
+      isCardExpanded
+      ? AppShortcuts.helpText(
+        title: "Restore card size",
+        commandID: AppShortcuts.CommandID.expandCanvasCard,
+        in: resolvedKeybindings
+      )
+      : "Expand to tab view"
     // The expanded card magic-moves between its in-canvas frame and the full
     // viewport. AnimatedExpandableCard drives every sub-value (size, center,
     // scale) from one animatable progress, so they advance frame by frame in
@@ -365,6 +529,10 @@ struct CanvasView: View {
             handleSelectionShieldTap(tab.id, surfaceState: state, states: activeStates)
           } else {
             focusSingleCard(tab.id, states: activeStates)
+            // Body tap only — center an off-screen card when zoomed. The
+            // title-bar tap deliberately does NOT do this (it owns the
+            // double-tap-to-exit, which needs the card to stay put).
+            recenterFocusedCardIfOffscreen(tab.id)
           }
         },
         onSelectionTap: {
@@ -396,12 +564,28 @@ struct CanvasView: View {
           if wasAlreadyFocused,
             now.timeIntervalSince(lastTitleBarTapDate) <= NSEvent.doubleClickInterval
           {
-            toggleExpand(tab.id, states: activeStates)
+            // Double-tap the title bar exits canvas straight to this card's pane
+            // rather than expanding the card in place. While the card is expanded
+            // in place (⌘-expand shortcut), double-tap restores it instead.
+            if expandedTabID == tab.id {
+              collapseExpand()
+            } else {
+              onExitToTab(state.worktreeID)
+            }
           }
           lastTitleBarTapDate = now
         },
         onExpand: {
-          toggleExpand(tab.id, states: activeStates)
+          // The title-bar button exits canvas to this card's pane (the feature's
+          // UX). When the card is currently expanded in place (only reachable via
+          // the ⌘-expand keyboard shortcut), it instead restores the card so that
+          // state stays recoverable from the button.
+          if expandedTabID == tab.id {
+            collapseExpand()
+          } else {
+            focusSingleCard(tab.id, states: activeStates)
+            onExitToTab(state.worktreeID)
+          }
         },
         onClose: {
           state.closeTab(tab.id)
@@ -500,7 +684,27 @@ struct CanvasView: View {
   /// cards positioned in different passes.
   func ensureLayouts(for cardKeys: [String]) {
     let unpositioned = cardKeys.filter { layoutStore.cardLayouts[$0] == nil }
-    guard !unpositioned.isEmpty else { return }
+    let isScoped = isScopedMode
+    guard !unpositioned.isEmpty || isScoped else { return }
+
+    if isScoped {
+      // Re-tile the whole scoped grid so every card matches the new fitted
+      // size — keeps the "all equal" invariant as panes come and go, and lets
+      // focus-grow apply when exactly one card is selected. The no-`zOrder:`
+      // overload preserves the existing stacking order and only appends new
+      // keys (alphabetically) — important so a `moveToFront` from a recent
+      // tap isn't undone when a sibling card opens. Merge (don't replace) so a
+      // scoped relayout never wipes the off-scope overall-canvas positions.
+      let focusedKey = focusGrowTabID?.rawValue.uuidString
+      let focusedIndex = focusedKey.flatMap { cardKeys.firstIndex(of: $0) }
+      let layouts = focusAwareCardLayout(
+        keys: cardKeys,
+        focusedIndex: focusedIndex,
+        viewportSize: viewportSize
+      )
+      layoutStore.mergeCardLayouts(layouts)
+      return
+    }
 
     // Count only VISIBLE cards that already have layouts (ignores stale entries).
     let positionedCount = cardKeys.count - unpositioned.count
@@ -588,6 +792,20 @@ struct CanvasView: View {
   func collectCardKeys(from states: [WorktreeTerminalState]) -> [String] {
     states.flatMap { state in
       state.tabManager.tabs.compactMap { tab in
+        state.surfaceView(for: tab.id) != nil && includesTab(tab.id)
+          ? tab.id.rawValue.uuidString : nil
+      }
+    }
+  }
+
+  /// Card keys for every tab that currently has a surface, across all active
+  /// worktrees — independent of the canvas scope. Unlike `collectCardKeys`, this
+  /// does not apply the `includesTab` gate, so out-of-scope-but-live cards are
+  /// still reported. Used by `cleanStaleLayouts` to prune only genuinely dead
+  /// tabs without deleting off-scope card positions.
+  func collectAllLiveCardKeys() -> [String] {
+    terminalManager.activeWorktreeStates.flatMap { state in
+      state.tabManager.tabs.compactMap { tab in
         state.surfaceView(for: tab.id) != nil ? tab.id.rawValue.uuidString : nil
       }
     }
@@ -596,7 +814,7 @@ struct CanvasView: View {
   func collectVisibleTabIDs(from states: [WorktreeTerminalState]) -> [TerminalTabID] {
     states.flatMap { state in
       state.tabManager.tabs.compactMap { tab in
-        state.surfaceView(for: tab.id) != nil ? tab.id : nil
+        state.surfaceView(for: tab.id) != nil && includesTab(tab.id) ? tab.id : nil
       }
     }
   }
@@ -611,9 +829,75 @@ struct CanvasView: View {
     }
   }
 
-  /// Reset all card positions to a clean grid layout (uniform sizes).
+  /// Second first-fit latch for cold entry from the command palette: cards can
+  /// materialize AFTER the geometry pass (the overlay tears down in the same
+  /// transaction that opens the canvas), so the `.onGeometryChange` latch may
+  /// have run before any card keys existed. Re-fit once when the viewport is
+  /// already measured, gated by the same `hasPerformedInitialFit` flag.
+  func performColdEntryFitIfNeeded() {
+    let keys = collectCardKeys(from: scopedActiveStates)
+    performInitialFit(for: keys, canvasSize: viewportSize)
+  }
+
+  /// First-fit on entry from outside canvas mode. Scoped canvases intentionally
+  /// re-tile to the viewport; the overall canvas only fills missing card
+  /// layouts so persisted user positions, sizes, and stacking are restored.
+  func performInitialFit(for cardKeys: [String], canvasSize: CGSize) {
+    guard !hasPerformedInitialFit, !cardKeys.isEmpty, canvasSize.width > 0, canvasSize.height > 0 else {
+      return
+    }
+    hasPerformedInitialFit = true
+    if isScopedMode {
+      arrangeCards()
+    } else {
+      ensureLayouts(for: cardKeys)
+      layoutStore.ensureZOrder(for: cardKeys)
+    }
+    fitToView(canvasSize: canvasSize)
+  }
+
+  /// Runs the auto-layout for the current canvas mode. Scoped canvases tile the
+  /// viewport with `focusAwareCardLayout`; the overall canvas uses the adaptive
+  /// default card size. Both reset on every canvas open / scope change / resize.
+  func applyLayoutForCurrentMode() {
+    organizeCards()
+  }
+
+  /// Debounce viewport-change relayouts so a live window drag doesn't thrash
+  /// the grid on every delta. Cancels any pending relayout and re-fires after
+  /// the user stops resizing.
+  func scheduleResizeRelayout(for newSize: CGSize) {
+    resizeRelayoutTask?.cancel()
+    resizeRelayoutTask = Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(200))
+      guard !Task.isCancelled else { return }
+      applyLayoutForCurrentMode()
+      fitToView(canvasSize: newSize)
+    }
+  }
+
+  /// Reset all card positions to a clean grid layout. For the overall canvas
+  /// this keeps the adaptive default size so user dashboards stay predictable;
+  /// for a scoped canvas it tiles the viewport so a handful of panes fill the
+  /// visible space (with focus-grow when exactly one card is selected).
   func organizeCards() {
-    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    let keys = collectCardKeys(from: scopedActiveStates)
+    guard !keys.isEmpty else { return }
+    if isScopedMode {
+      let focusedKey = focusGrowTabID?.rawValue.uuidString
+      let focusedIndex = focusedKey.flatMap { keys.firstIndex(of: $0) }
+      let layouts = focusAwareCardLayout(
+        keys: keys,
+        focusedIndex: focusedIndex,
+        viewportSize: viewportSize
+      )
+      // Merge so re-tiling the scoped grid keeps the off-scope overall-canvas
+      // card positions instead of replacing the whole store with scoped keys.
+      layoutStore.mergeCardLayouts(layouts, zOrder: keys)
+      return
+    }
+    // Overall (non-scoped) canvas keeps the adaptive default size so new cards
+    // line up with user-placed ones; no focus-grow behavior here.
     let columns = gridColumns(for: keys.count)
     let cardSize = adaptiveDefaultCardSize
     var layouts = layoutStore.cardLayouts
@@ -626,11 +910,103 @@ struct CanvasView: View {
     layoutStore.setCardLayouts(layouts, zOrder: keys)
   }
 
+  /// Selection-aware tiling for scoped canvases.
+  ///
+  /// With `focusedIndex == nil`, OR the focused card's row holds only one
+  /// card, every card uses the grid-wide uniform width `availableW / columns`
+  /// so partial last rows stay at the same width as full rows.
+  ///
+  /// With a focused card in a multi-card row, that row's focused card takes
+  /// 50% of `availableW` and the peers split the other 50% equally. Other
+  /// rows still use the grid-wide uniform width. Heights stay uniform across
+  /// rows.
+  ///
+  /// Peer widths clamp to `minCardWidth`; the row may exceed the viewport
+  /// width as a result — pan/zoom absorbs the overflow.
+  ///
+  /// If `viewportSize` is zero (viewport not measured yet), falls back to the
+  /// adaptive default size uniform tiling. Critical: never return an empty
+  /// dict for non-empty `keys`, because callers pass the result straight to
+  /// `setCardLayouts(...)` which would wipe persisted layouts.
+  func focusAwareCardLayout(
+    keys: [String],
+    focusedIndex: Int?,
+    viewportSize: CGSize
+  ) -> [String: CanvasCardLayout] {
+    guard !keys.isEmpty else { return [:] }
+    let columns = gridColumns(for: keys.count)
+
+    if viewportSize.width <= 0 || viewportSize.height <= 0 {
+      let defaultSize = adaptiveDefaultCardSize
+      var fallback: [String: CanvasCardLayout] = [:]
+      for (index, key) in keys.enumerated() {
+        fallback[key] = CanvasCardLayout(
+          position: gridPosition(index: index, columns: columns, cardSize: defaultSize),
+          size: defaultSize
+        )
+      }
+      return fallback
+    }
+
+    let rows = Int(ceil(Double(keys.count) / Double(columns)))
+    let availableW = viewportSize.width - cardSpacing * CGFloat(columns + 1)
+    let availableH =
+      viewportSize.height - cardSpacing * CGFloat(rows + 1) - titleBarHeight * CGFloat(rows)
+    let cardHeight = clampHeight(availableH / CGFloat(rows))
+    let uniformWidth = clampWidth(availableW / CGFloat(columns))
+
+    var layouts: [String: CanvasCardLayout] = [:]
+    for rowIdx in 0..<rows {
+      let firstColOfRow = rowIdx * columns
+      let lastColOfRow = min(firstColOfRow + columns - 1, keys.count - 1)
+      let rowCardCount = lastColOfRow - firstColOfRow + 1
+
+      // Focused card is grown only when it sits in this row AND the row has
+      // at least one peer to share the other half with. Single-card rows
+      // fall through to uniform (which gives the lone card full row width).
+      let localFocusedIndex: Int? = {
+        guard let focusedIndex,
+          focusedIndex >= firstColOfRow,
+          focusedIndex <= lastColOfRow,
+          rowCardCount > 1
+        else { return nil }
+        return focusedIndex - firstColOfRow
+      }()
+
+      let widths: [CGFloat] = {
+        if let localFocusedIndex {
+          let focusedW = clampWidth(0.5 * availableW)
+          let peerW = clampWidth(0.5 * availableW / CGFloat(rowCardCount - 1))
+          return (0..<rowCardCount).map { $0 == localFocusedIndex ? focusedW : peerW }
+        }
+        return Array(repeating: uniformWidth, count: rowCardCount)
+      }()
+
+      // Y is uniform per row; X walks a cursor across the row so non-uniform
+      // widths place neighbors correctly without overlap.
+      let centerY =
+        cardSpacing
+        + (cardHeight + titleBarHeight + cardSpacing) * CGFloat(rowIdx)
+        + (cardHeight + titleBarHeight) / 2
+      var cursorX = cardSpacing
+      for localCol in 0..<rowCardCount {
+        let width = widths[localCol]
+        let key = keys[firstColOfRow + localCol]
+        layouts[key] = CanvasCardLayout(
+          position: CGPoint(x: cursorX + width / 2, y: centerY),
+          size: CGSize(width: width, height: cardHeight)
+        )
+        cursorX += width + cardSpacing
+      }
+    }
+    return layouts
+  }
+
   /// Arrange cards using MaxRects-BSSF bin packing. Preserves each card's
   /// current size and finds a compact layout whose aspect ratio matches
   /// the viewport.
   func arrangeCards() {
-    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    let keys = collectCardKeys(from: scopedActiveStates)
     guard !keys.isEmpty, viewportSize.width > 0, viewportSize.height > 0 else { return }
 
     let cards: [CanvasCardPacker.CardInfo] = keys.map { key in
@@ -643,7 +1019,8 @@ struct CanvasView: View {
     let result = packer.pack(cards: cards, targetRatio: targetRatio)
 
     guard !result.layouts.isEmpty else { return }
-    layoutStore.setCardLayouts(result.layouts, zOrder: keys)
+    // Merge so packing the scoped cards preserves off-scope card positions.
+    layoutStore.mergeCardLayouts(result.layouts, zOrder: keys)
   }
 
   /// Tile cards to fill the viewport: resize every card into a balanced grid
@@ -699,7 +1076,10 @@ struct CanvasView: View {
   func fitToView(canvasSize: CGSize) {
     guard canvasSize.width > 0, canvasSize.height > 0 else { return }
 
-    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    // Fit only the cards visible in the current scope. The store now retains
+    // off-scope cards (merge, not replace), so an unscoped key set would skew
+    // the bounding box toward worktrees that aren't on screen.
+    let keys = collectCardKeys(from: scopedActiveStates)
     guard !keys.isEmpty else { return }
 
     var bounds = CGRect.null
@@ -726,9 +1106,13 @@ struct CanvasView: View {
     lastCanvasOffset = canvasOffset
   }
 
-  /// Remove stored layouts for tabs that no longer exist.
+  /// Remove stored layouts for tabs that no longer exist. Staleness is a global
+  /// property: a card that's merely out of the current scope (e.g. a non-agent
+  /// card while the active-agents canvas is open) is not stale, so this prunes
+  /// against every live card — never the scope-filtered set, which would re-wipe
+  /// the off-scope positions the merge relayout just preserved.
   func cleanStaleLayouts() {
-    let visibleKeys = Set(collectCardKeys(from: terminalManager.activeWorktreeStates))
+    let visibleKeys = Set(collectAllLiveCardKeys())
     guard !visibleKeys.isEmpty || hasSeenCanvasCards else { return }
     layoutStore.prune(to: visibleKeys)
   }
@@ -858,7 +1242,10 @@ struct CanvasView: View {
   }
 
   func selectAllCards() {
-    let activeStates = terminalManager.activeWorktreeStates
+    // Scope to the active canvas so "Select All Cards" can't reach worktrees the
+    // user isn't viewing — an unscoped selection fans broadcast commands out to
+    // off-canvas worktrees (matches the scoped Escape/clear path).
+    let activeStates = scopedActiveStates
     let allTabIDs = collectVisibleTabIDs(from: activeStates)
     guard allTabIDs.count > 1 else { return }
     mutateSelection(states: activeStates) { state in
@@ -1037,5 +1424,50 @@ struct CanvasView: View {
     } else if let tabID = selectionState.primaryTabID {
       expandCard(tabID, states: terminalManager.activeWorktreeStates)
     }
+  }
+}
+
+/// Applies the canvas background layer's lifecycle `.onAppear` / `.onChange`
+/// handlers. Factored into a `ViewModifier` so the chain stays short enough for
+/// the Swift type checker.
+private struct CanvasLifecycleHandlers: ViewModifier {
+  let allCardKeys: [String]
+  let allTabIDs: [TerminalTabID]
+  let focusRequest: CanvasFocusRequest?
+  let onAppear: () -> Void
+  let onCardKeysChanged: ([String]) -> Void
+  let onTabIDsChanged: ([TerminalTabID], [TerminalTabID]) -> Void
+  let onFocusRequestChanged: (CanvasFocusRequest?) -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear { onAppear() }
+      .onChange(of: allCardKeys) { _, newKeys in onCardKeysChanged(newKeys) }
+      .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in onTabIDsChanged(oldTabIDs, newTabIDs) }
+      .onChange(of: focusRequest) { _, newRequest in onFocusRequestChanged(newRequest) }
+  }
+}
+
+/// Applies the canvas's scope-change relayout `.onChange` handlers. Lives in a
+/// dedicated `ViewModifier` so `CanvasView.canvasBackgroundLayer`'s modifier
+/// chain stays short enough for the Swift type checker.
+private struct CanvasScopeChangeHandlers: ViewModifier {
+  let scopedWorktreeID: Worktree.ID?
+  let scopedWorktreeIDs: Set<Worktree.ID>?
+  let scopedTabIDs: Set<TerminalTabID>?
+  let focusGrowTabID: TerminalTabID?
+  let canvasFocusedWorktreeID: Worktree.ID?
+  let isScopedMode: Bool
+  let onScopeRelayout: () -> Void
+  let onFocusGrowChanged: () -> Void
+  let onExternalFocus: (Worktree.ID?) -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .onChange(of: scopedWorktreeID) { _, _ in onScopeRelayout() }
+      .onChange(of: scopedWorktreeIDs) { _, _ in onScopeRelayout() }
+      .onChange(of: scopedTabIDs) { _, _ in onScopeRelayout() }
+      .onChange(of: focusGrowTabID) { _, _ in onFocusGrowChanged() }
+      .onChange(of: canvasFocusedWorktreeID) { _, newValue in onExternalFocus(newValue) }
   }
 }

@@ -59,13 +59,16 @@ extension AppFeature {
   ) -> Effect<Action>? {
     switch delegate {
     case .selectWorktree(let worktreeID):
-      if state.repositories.isShowingCanvas {
-        if state.repositories.worktree(for: worktreeID) == nil,
-          state.repositories.repositories[id: worktreeID]?.kind == .plain
-        {
-          return .send(.repositories(.focusCanvasRepository(worktreeID)))
-        }
-        return .send(.repositories(.focusCanvasWorktree(worktreeID)))
+      // Plain folders in canvas focus their single card (they have no worktree
+      // to select). Everything else routes through the canvas-aware
+      // `selectWorktree` reducer, which keeps canvas open and rebinds/focuses
+      // per the active scope (worktree/repo/overall) — and selects normally
+      // when canvas is closed.
+      if state.repositories.isShowingCanvas,
+        state.repositories.worktree(for: worktreeID) == nil,
+        state.repositories.repositories[id: worktreeID]?.kind == .plain
+      {
+        return .send(.repositories(.focusCanvasRepository(worktreeID)))
       }
       return .send(.repositories(.selectWorktree(worktreeID)))
 
@@ -149,6 +152,12 @@ extension AppFeature {
     case .toggleShelf:
       return .send(.repositories(.toggleShelf))
 
+    case .toggleWorktreeCanvas(let worktreeID):
+      return .send(.repositories(.toggleWorktreeCanvas(worktreeID)))
+
+    case .toggleRepositoryCanvas(let repositoryID):
+      return .send(.repositories(.toggleRepositoryCanvas(repositoryID)))
+
     default:
       return nil
     }
@@ -167,7 +176,14 @@ extension AppFeature {
 
     case .copyPath:
       guard let worktree = state.repositories.selectedTerminalWorktree else {
-        return .none
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Worktree not available",
+              message: "Prowl could not find a worktree to copy the path from."
+            )
+          )
+        )
       }
       let path = worktree.workingDirectory.path
       return .run { _ in
@@ -240,13 +256,86 @@ extension AppFeature {
       }
       return .send(.repositories(.worktreeOrdering(.pinWorktree(worktreeID))))
 
-    case .runCustomCommand(let index):
+    case .runCustomCommand(let commandID):
+      // No active worktree (canvas not focused AND no sidebar selection):
+      // no-op silently — matches the no-op stance of other action handlers
+      // (`.runScript`, `.newTerminal`) that depend on an active worktree.
+      guard let context = actionTargetContext(state: state) else { return .none }
+      // Resolve commandID → index against the effective commands for the
+      // current action target (canvas-focused worktree when canvas is showing,
+      // otherwise sidebar selection) so the index matches what the handler
+      // will look up. Resolving against `state.selectedCustomCommands` would
+      // misalign when canvas-focused and sidebar repos have different command
+      // lists. If the command was removed between palette open and dispatch,
+      // alert with a precise message rather than silently no-op.
+      guard let index = context.commands.firstIndex(where: { $0.id == commandID })
+      else {
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Command not available",
+              message: "The selected custom command is no longer available."
+            )
+          )
+        )
+      }
       return .send(.runCustomCommand(index))
 
-    case .ghosttyCommand(let action):
-      guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
-        return .none
+    case .pinWorktree(let worktreeID):
+      return .send(.repositories(.worktreeOrdering(.pinWorktree(worktreeID))))
+
+    case .unpinWorktree(let worktreeID):
+      return .send(.repositories(.worktreeOrdering(.unpinWorktree(worktreeID))))
+
+    case .copyWorktreePath(let worktreeID):
+      guard let worktree = state.repositories.worktree(for: worktreeID) else {
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Worktree not available",
+              message: "Prowl could not find the worktree to copy the path from."
+            )
+          )
+        )
       }
+      let path = worktree.workingDirectory.path
+      return .run { send in
+        await MainActor.run {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(path, forType: .string)
+        }
+        await send(.repositories(.showToast(.success("Worktree path copied"))))
+      }
+
+    case .revealWorktreeInFinder(let worktreeID):
+      guard let worktree = state.repositories.worktree(for: worktreeID) else {
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Worktree not available",
+              message: "Prowl could not find the worktree to reveal in Finder."
+            )
+          )
+        )
+      }
+      let path = worktree.workingDirectory.path
+      return .run { @MainActor _ in
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+      }
+
+    case .ghosttyCommand(let action):
+      guard let context = actionTargetContext(state: state) else {
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Terminal not available",
+              message:
+                "Prowl could not find a focused worktree terminal to run this command in."
+            )
+          )
+        )
+      }
+      let worktree = context.worktree
       // Capture the target surface synchronously: the async effect below races
       // AppKit's post-dismiss focus reshuffle, which can hand first responder
       // to a different pane before the binding action runs.
@@ -261,10 +350,18 @@ extension AppFeature {
       }
 
     case .changeFocusedTabIcon(let worktreeID):
-      guard let worktree = state.repositories.selectedTerminalWorktree,
-        worktree.id == worktreeID
-      else {
-        return .none
+      // Palette passes the explicit `worktreeID` — resolve it directly rather
+      // than gating on sidebar selection, which would alert in canvas mode
+      // when the focused card belongs to a different worktree than the sidebar.
+      guard let worktree = state.repositories.worktree(for: worktreeID) else {
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Worktree not available",
+              message: "Prowl could not find the worktree to change the tab icon for."
+            )
+          )
+        )
       }
       return .run { _ in
         await terminalClient.send(.presentTabIconPicker(worktree))
@@ -281,6 +378,10 @@ extension AppFeature {
     switch delegate {
     case .openPullRequest(let worktreeID):
       return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .openOnCodeHost))))
+
+    case .openBranchOnCodeHost(let worktreeID):
+      return .send(
+        .repositories(.githubIntegration(.pullRequestAction(worktreeID, .openBranchOnCodeHost))))
 
     case .markPullRequestReady(let worktreeID):
       return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .markReadyForReview))))

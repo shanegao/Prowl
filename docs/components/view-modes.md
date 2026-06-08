@@ -17,8 +17,8 @@
 
 ## How to switch
 
-- **Canvas:** `⌘⌥↩` (`toggle_canvas`), the sidebar Canvas button, or Command
-  Palette → "Toggle Canvas".
+- **Canvas:** `⌘⌥↩` (`toggle_canvas`), the **Overall** canvas button in the window
+  toolbar, or Command Palette → "Toggle Canvas".
 - **Shelf:** `⌘⇧↩` (`toggle_shelf`), the sidebar Shelf button, or Command Palette →
   "Toggle Shelf".
 - **Back to Normal:** toggle the active mode off, or select a worktree in the

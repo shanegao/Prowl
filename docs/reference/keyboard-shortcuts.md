@@ -43,10 +43,16 @@ Symbols: **⌘** Command · **⇧** Shift · **⌥** Option · **⌃** Control �
 | Toggle Active Agents Panel | ⌘⌥P | `toggle_active_agents_panel` | yes |
 | Select Next Agent (in panel) | ⌥⌃↓ | `select_next_active_agent` | yes |
 | Select Previous Agent (in panel) | ⌥⌃↑ | `select_previous_active_agent` | yes |
+| Send to Active Agent… | ⌘⇧P | `quick_send_active_agent` | yes |
 | Jump to Latest Unread | ⌘⌥U | `jump_to_latest_unread` | yes |
 | Show Diff | ⌘⇧Y | `show_diff` | yes |
 | Toggle Canvas | ⌘⌥↩ | `toggle_canvas` | yes |
 | Toggle Shelf | ⌘⇧↩ | `toggle_shelf` | yes |
+
+> **Send to Active Agent…** is additionally registered as a **system-wide** hotkey
+> (via the KeyboardShortcuts library, keyed `quickSendActiveAgent`), so the default
+> ⌘⇧P opens the quick-send composer from any app — even when Prowl is in the
+> background.
 
 ## Shelf view
 
