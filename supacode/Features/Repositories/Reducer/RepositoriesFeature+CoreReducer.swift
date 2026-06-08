@@ -698,14 +698,15 @@ extension RepositoriesFeature {
       return .send(.worktreeCreation(.promptCanceled))
 
     case .worktreeCreationPrompt(
-      .presented(.delegate(.submit(let repositoryID, let branchName, let baseRef)))
+      .presented(.delegate(.submit(let repositoryID, let branchName, let baseRef, let placement)))
     ):
       return .send(
         .worktreeCreation(
           .startPromptedWorktreeCreation(
             repositoryID: repositoryID,
             branchName: branchName,
-            baseRef: baseRef
+            baseRef: baseRef,
+            placement: placement
           )
         )
       )

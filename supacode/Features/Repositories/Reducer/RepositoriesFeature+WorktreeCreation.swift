@@ -139,19 +139,27 @@ extension RepositoriesFeature {
         return .none
       }
       @Shared(.settingsFile) var settingsFile
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      let defaultWorktreeBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+        for: repository.rootURL,
+        globalDefaultPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
+        repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
+      )
       state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
+        repositoryRootURL: repository.rootURL,
         repositoryName: repository.name,
         automaticBaseRef: automaticBaseRef,
         baseRefOptions: baseRefOptions,
         branchName: "",
         selectedBaseRef: selectedBaseRef,
         fetchRemote: settingsFile.global.fetchOriginBeforeWorktreeCreation,
+        defaultWorktreeBaseDirectory: defaultWorktreeBaseDirectory.path(percentEncoded: false),
         validationMessage: nil
       )
       return .none
 
-    case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef):
+    case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef, let placement):
       guard let repository = state.repositories[id: repositoryID] else {
         state.worktreeCreationPrompt = nil
         state.alert = messageAlert(
@@ -186,6 +194,7 @@ extension RepositoriesFeature {
               branchName: branchName,
               baseRef: baseRef,
               fetchRemote: fetchRemote,
+              placement: placement,
               duplicateMessage: duplicateMessage
             )
           )
@@ -198,6 +207,7 @@ extension RepositoriesFeature {
       let branchName,
       let baseRef,
       let fetchRemote,
+      let placement,
       let duplicateMessage
     ):
       guard let prompt = state.worktreeCreationPrompt, prompt.repositoryID == repositoryID else {
@@ -215,12 +225,14 @@ extension RepositoriesFeature {
             repositoryID: repositoryID,
             nameSource: .explicit(branchName),
             baseRefSource: .explicit(baseRef),
-            fetchRemote: fetchRemote
+            fetchRemote: fetchRemote,
+            placement: placement
           )
         )
       )
 
-    case .createWorktreeInRepository(let repositoryID, let nameSource, let baseRefSource, let fetchRemote):
+    case .createWorktreeInRepository(
+      let repositoryID, let nameSource, let baseRefSource, let fetchRemote, let placement):
       guard let repository = state.repositories[id: repositoryID] else {
         state.alert = messageAlert(
           title: "Unable to create worktree",
@@ -448,13 +460,23 @@ extension RepositoriesFeature {
             copyIgnored ? ((try? await gitClient.ignoredFileCount(repository.rootURL)) ?? 0) : 0
           progress.untrackedFilesToCopyCount =
             copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
+          // Resolve an explicit destination from the dialog's name / parent-folder
+          // overrides; nil keeps `wt`'s default `base/<branch>` placement.
+          let directoryOverride = SupacodePaths.resolvedWorktreeDirectory(
+            defaultBaseDirectory: worktreeBaseDirectory,
+            repositoryRootURL: repository.rootURL,
+            nameOverride: placement.name,
+            pathOverride: placement.path,
+            branchName: name
+          )
           progress.stage = .creatingWorktree
           progress.commandText = worktreeCreateCommand(
             baseDirectoryURL: worktreeBaseDirectory,
             name: name,
             copyIgnored: copyIgnored,
             copyUntracked: copyUntracked,
-            baseRef: resolvedBaseRef
+            baseRef: resolvedBaseRef,
+            directoryOverride: directoryOverride
           )
           await send(
             .worktreeCreation(
@@ -470,7 +492,8 @@ extension RepositoriesFeature {
             worktreeBaseDirectory,
             copyIgnored,
             copyUntracked,
-            resolvedBaseRef
+            resolvedBaseRef,
+            directoryOverride
           )
           for try await event in stream {
             switch event {

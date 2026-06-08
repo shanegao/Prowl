@@ -184,7 +184,8 @@ nonisolated func worktreeCreateCommand(
   name: String,
   copyIgnored: Bool,
   copyUntracked: Bool,
-  baseRef: String
+  baseRef: String,
+  directoryOverride: URL? = nil
 ) -> String {
   let baseDir = baseDirectoryURL.path(percentEncoded: false)
   var parts = ["wt", "--base-dir", baseDir, "sw"]
@@ -197,6 +198,10 @@ nonisolated func worktreeCreateCommand(
   if !baseRef.isEmpty {
     parts.append("--from")
     parts.append(baseRef)
+  }
+  if let directoryOverride {
+    parts.append("--path")
+    parts.append(directoryOverride.path(percentEncoded: false))
   }
   if copyIgnored || copyUntracked {
     parts.append("--verbose")

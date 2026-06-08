@@ -240,7 +240,8 @@ struct GitClient {
     in repoRoot: URL,
     baseDirectory: URL,
     copyFiles: (ignored: Bool, untracked: Bool),
-    baseRef: String
+    baseRef: String,
+    directoryOverride: URL? = nil
   ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error> {
     AsyncThrowingStream { continuation in
       Task {
@@ -252,7 +253,8 @@ struct GitClient {
             name: name,
             copyIgnored: copyFiles.ignored,
             copyUntracked: copyFiles.untracked,
-            baseRef: baseRef
+            baseRef: baseRef,
+            directoryOverride: directoryOverride
           )
           let envURL = URL(fileURLWithPath: "/usr/bin/env")
           let localeArguments = ["LANG=C", "LC_ALL=C", "LC_MESSAGES=C"]
@@ -323,7 +325,8 @@ struct GitClient {
     name: String,
     copyIgnored: Bool,
     copyUntracked: Bool,
-    baseRef: String
+    baseRef: String,
+    directoryOverride: URL? = nil
   ) -> [String] {
     var arguments = ["--base-dir", baseDirectory.path(percentEncoded: false), "sw"]
     if copyIgnored {
@@ -335,6 +338,10 @@ struct GitClient {
     if !baseRef.isEmpty {
       arguments.append("--from")
       arguments.append(baseRef)
+    }
+    if let directoryOverride {
+      arguments.append("--path")
+      arguments.append(directoryOverride.path(percentEncoded: false))
     }
     if copyIgnored || copyUntracked {
       arguments.append("--verbose")

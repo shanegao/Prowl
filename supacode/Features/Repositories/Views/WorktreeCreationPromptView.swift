@@ -45,10 +45,39 @@ struct WorktreeCreationPromptView: View {
           .foregroundStyle(.secondary)
       }
 
-      if let validationMessage = store.validationMessage, !validationMessage.isEmpty {
-        Text(validationMessage)
+      DisclosureGroup("Advanced", isExpanded: $store.showAdvancedOptions) {
+        VStack(alignment: .leading, spacing: 8) {
+          TextField(
+            "Worktree name",
+            text: $store.worktreeNameOverride,
+            prompt: Text(store.worktreeNamePlaceholder)
+          )
+          .textFieldStyle(.roundedBorder)
+          TextField(
+            "Parent folder",
+            text: $store.worktreePathOverride,
+            prompt: Text(store.defaultWorktreeBaseDirectory)
+          )
+          .textFieldStyle(.roundedBorder)
+        }
+        .padding(.top, 4)
+      }
+
+      // Footer: surface a validation error, otherwise preview the full destination
+      // path the worktree will be created at (mirrors the reducer's resolution).
+      if let message = store.validationMessage ?? store.worktreeNameValidationError, !message.isEmpty {
+        Text(message)
           .font(.footnote)
           .foregroundStyle(.red)
+      } else {
+        Text(store.resolvedWorktreeLocationPreview)
+          .font(.footnote)
+          .monospaced()
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+          .lineLimit(2)
+          .truncationMode(.middle)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       HStack {

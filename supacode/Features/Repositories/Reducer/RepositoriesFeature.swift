@@ -96,7 +96,8 @@ struct RepositoriesFeature {
       repositoryID: Repository.ID,
       nameSource: WorktreeCreationNameSource,
       baseRefSource: WorktreeCreationBaseRefSource,
-      fetchRemote: Bool
+      fetchRemote: Bool,
+      placement: WorktreePlacementOverride = WorktreePlacementOverride()
     )
     case promptedWorktreeCreationDataLoaded(
       repositoryID: Repository.ID,
@@ -107,13 +108,15 @@ struct RepositoriesFeature {
     case startPromptedWorktreeCreation(
       repositoryID: Repository.ID,
       branchName: String,
-      baseRef: String?
+      baseRef: String?,
+      placement: WorktreePlacementOverride = WorktreePlacementOverride()
     )
     case promptedWorktreeCreationChecked(
       repositoryID: Repository.ID,
       branchName: String,
       baseRef: String?,
       fetchRemote: Bool,
+      placement: WorktreePlacementOverride = WorktreePlacementOverride(),
       duplicateMessage: String?
     )
     case pendingWorktreeProgressUpdated(id: Worktree.ID, progress: WorktreeCreationProgress)

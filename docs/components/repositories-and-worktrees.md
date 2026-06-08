@@ -53,6 +53,16 @@ By default a **creation prompt** appears (controlled by
 - choose the **base ref** (branch/tag) to branch from,
 - optionally **fetch the remote first**.
 
+An optional, default-collapsed **Advanced** section lets you override where the
+worktree lands:
+- **Worktree name** — the leaf folder name (defaults to the branch name).
+- **Parent folder** — the directory it's created in (defaults to the repo's
+  resolved base directory).
+
+Leave both blank to keep the default `base/<branch>` placement. The footer shows
+the full destination path as you type, or an inline error (the worktree name is a
+single folder, so slashes, `.`/`..`, and `.git` are rejected).
+
 Press **↩** to create, **Esc** to cancel. Branch names are validated live
 (`git check-ref-format`).
 
