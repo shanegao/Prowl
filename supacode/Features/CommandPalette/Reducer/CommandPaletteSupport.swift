@@ -6,6 +6,7 @@ enum CommandPaletteItemID {
   static let globalCheckForUpdates = "global.check-for-updates"
   static let globalOpenSettings = "global.open-settings"
   static let globalOpenRepository = "global.open-repository"
+  static let globalNewWorkspace = "global.new-workspace"
   static let globalNewWorktree = "global.new-worktree"
   static let globalRefreshWorktrees = "global.refresh-worktrees"
   static let globalJumpToLatestUnread = "global.jump-to-latest-unread"
@@ -42,6 +43,7 @@ enum CommandPaletteItemID {
       globalCheckForUpdates,
       globalOpenSettings,
       globalOpenRepository,
+      globalNewWorkspace,
       globalNewWorktree,
       globalRefreshWorktrees,
       globalJumpToLatestUnread,
@@ -178,6 +180,7 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     .openSettings,
     .newWorktree,
     .openRepository,
+    .newWorkspace,
     .viewArchivedWorktrees,
     .refreshWorktrees,
     .jumpToLatestUnread,
@@ -217,6 +220,8 @@ func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeatu
     return .newWorktree
   case .openRepository:
     return .openRepository
+  case .newWorkspace:
+    return .newWorkspace
   case .viewArchivedWorktrees:
     return .viewArchivedWorktrees
   case .refreshWorktrees:
@@ -300,6 +305,7 @@ func pullRequestDelegateAction(
     .openSettings,
     .newWorktree,
     .openRepository,
+    .newWorkspace,
     .viewArchivedWorktrees,
     .refreshWorktrees,
     .jumpToLatestUnread,

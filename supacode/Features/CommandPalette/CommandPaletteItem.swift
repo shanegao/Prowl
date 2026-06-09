@@ -43,6 +43,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
   enum Kind: Equatable {
     case checkForUpdates
     case openRepository
+    case newWorkspace
     case worktreeSelect(Worktree.ID)
     case openSettings
     case newWorktree
@@ -105,6 +106,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.CommandID.checkForUpdates
     case .openRepository:
       return AppShortcuts.CommandID.openRepository
+    case .newWorkspace:
+      return nil
     case .openSettings:
       return AppShortcuts.CommandID.openSettings
     case .newWorktree:

@@ -126,6 +126,62 @@ struct ProjectWorkspaceTests {
     #expect(normalized == [PersistedRepositoryEntry(path: rootPath, kind: .plain)])
   }
 
+  @Test func createWorkspaceWritesMetadataAndRepositoryLinks() throws {
+    let rootURL = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-created-workspace-\(UUID().uuidString)")
+      .standardizedFileURL
+    let appURL = try makeTemporaryWorkspaceRoot()
+    let apiURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: appURL)
+      try? FileManager.default.removeItem(at: apiURL)
+    }
+    let createdAt = Date(timeIntervalSince1970: 1_234_567)
+    let workspace = try ProjectWorkspace.create(
+      ProjectWorkspaceCreationRequest(
+        draft: ProjectWorkspaceCreationDraft(
+          title: "Checkout Flow",
+          rootURL: rootURL,
+          repositories: [
+            ProjectWorkspaceCreationRepository(
+              id: "app",
+              name: "App Repo",
+              rootURL: appURL,
+              branchName: "main"
+            ),
+            ProjectWorkspaceCreationRepository(
+              id: "api",
+              name: "App Repo",
+              rootURL: apiURL,
+              branchName: "feature/api"
+            ),
+          ]
+        ),
+        createdAt: createdAt
+      )
+    )
+
+    #expect(workspace.title == "Checkout Flow")
+    #expect(workspace.createdAt == createdAt)
+    let loaded = try #require(ProjectWorkspace.load(from: rootURL))
+    #expect(loaded.repositories.map(\.path) == ["App-Repo", "App-Repo-2"])
+    #expect(loaded.repositories.map(\.sourceKind) == [.existingPath, .existingPath])
+    let appPath = normalizedTestPath(appURL)
+    let apiPath = normalizedTestPath(apiURL)
+    #expect(
+      loaded.repositories.map(\.sourceLocation) == [
+        appPath,
+        apiPath,
+      ])
+    #expect(loaded.repositories.map(\.branchName) == ["main", "feature/api"])
+
+    let appLinkPath = rootURL.appending(path: "App-Repo").path(percentEncoded: false)
+    let apiLinkPath = rootURL.appending(path: "App-Repo-2").path(percentEncoded: false)
+    #expect(URL(fileURLWithPath: appLinkPath).resolvingSymlinksInPath().path(percentEncoded: false) == appPath)
+    #expect(URL(fileURLWithPath: apiLinkPath).resolvingSymlinksInPath().path(percentEncoded: false) == apiPath)
+  }
+
   @Test func listRuntimeContextsReportWorkspaceKind() {
     let rootURL = URL(fileURLWithPath: "/tmp/workspace")
     let repository = Repository(
@@ -157,5 +213,13 @@ struct ProjectWorkspaceTests {
     let metadataDirectoryURL = rootURL.appending(path: ProjectWorkspace.metadataDirectoryName)
     try FileManager.default.createDirectory(at: metadataDirectoryURL, withIntermediateDirectories: true)
     try Data(json.utf8).write(to: ProjectWorkspace.metadataURL(for: rootURL))
+  }
+
+  private func normalizedTestPath(_ url: URL) -> String {
+    var path = PathPolicy.normalizeURL(url).path(percentEncoded: false)
+    while path.count > 1, path.hasSuffix("/") {
+      path.removeLast()
+    }
+    return path
   }
 }

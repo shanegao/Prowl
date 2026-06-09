@@ -194,7 +194,14 @@ struct SidebarListView: View {
         await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
       }
       .toolbar {
-        ToolbarItem(placement: .automatic) {
+        ToolbarItemGroup(placement: .automatic) {
+          Button {
+            store.send(.workspaceCreation(.promptRequested))
+          } label: {
+            Label("New Workspace", systemImage: "folder.badge.person.crop")
+          }
+          .help("New Workspace")
+          .disabled(!state.canCreateWorkspace)
           Button {
             store.send(.setOpenPanelPresented(true))
           } label: {

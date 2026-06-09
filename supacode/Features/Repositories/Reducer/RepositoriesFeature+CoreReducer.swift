@@ -10,7 +10,8 @@ extension RepositoriesFeature {
     action: Action
   ) -> Effect<Action> {
     switch action {
-    case .worktreeCreation, .worktreeLifecycle, .worktreeOrdering, .githubIntegration, .repositoryManagement:
+    case .worktreeCreation, .worktreeLifecycle, .worktreeOrdering, .githubIntegration, .repositoryManagement,
+      .workspaceCreation:
       return .none
 
     case .activeAgents(.entryTapped(let id)):
@@ -715,6 +716,18 @@ extension RepositoriesFeature {
       return .send(.worktreeCreation(.promptDismissed))
 
     case .worktreeCreationPrompt:
+      return .none
+
+    case .workspaceCreationPrompt(.presented(.delegate(.cancel))):
+      return .send(.workspaceCreation(.promptCanceled))
+
+    case .workspaceCreationPrompt(.presented(.delegate(.submit(let draft)))):
+      return .send(.workspaceCreation(.createWorkspace(draft)))
+
+    case .workspaceCreationPrompt(.dismiss):
+      return .send(.workspaceCreation(.promptDismissed))
+
+    case .workspaceCreationPrompt:
       return .none
 
     case .alert(.presented(.confirmArchiveWorktree(let worktreeID, let repositoryID))):

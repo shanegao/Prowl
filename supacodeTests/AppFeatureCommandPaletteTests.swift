@@ -369,6 +369,26 @@ struct AppFeatureCommandPaletteTests {
     }
   }
 
+  @Test(.dependencies) func newWorkspaceDispatchesPromptRequest() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create workspace")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Open at least two repositories to create a workspace.")
+    }
+
+    await store.send(.commandPalette(.delegate(.newWorkspace)))
+    await store.receive(\.repositories.workspaceCreation.promptRequested) {
+      $0.repositories.alert = expectedAlert
+    }
+  }
+
   @Test(.dependencies) func refreshWorktreesDispatchesRefresh() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()

@@ -80,6 +80,10 @@ struct ContentView: View {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
     }
+    .sheet(item: $repositoriesStore.scope(state: \.workspaceCreationPrompt, action: \.workspaceCreationPrompt)) {
+      promptStore in
+      WorkspaceCreationPromptView(store: promptStore)
+    }
     .sheet(isPresented: deleteWorktreeConfirmationPresented) {
       if let confirmation = repositoriesStore.deleteWorktreeConfirmation {
         DeleteWorktreeConfirmationView(

@@ -36,6 +36,7 @@ struct CommandPaletteFeature {
     case openSettings
     case newWorktree
     case openRepository
+    case newWorkspace
     case deleteWorktree(Worktree.ID, Repository.ID)
     case viewArchivedWorktrees
     case refreshWorktrees
@@ -351,6 +352,15 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       category: .app,
       kind: .openRepository,
       keywords: ["repo", "add repo"]
+    ),
+    CommandPaletteItem(
+      id: CommandPaletteItemID.globalNewWorkspace,
+      title: "New Workspace",
+      subtitle: nil,
+      kind: .newWorkspace,
+      category: .app,
+      defaultSuggestion: true,
+      keywords: ["workspace", "multi repo", "many repos"]
     ),
   ]
   if showsNewWorktreeAction {

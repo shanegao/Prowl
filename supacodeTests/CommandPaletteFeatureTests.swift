@@ -14,6 +14,7 @@ struct CommandPaletteFeatureTests {
       "global.check-for-updates",
       "global.open-settings",
       "global.open-repository",
+      "global.new-workspace",
       "global.new-worktree",
       "global.refresh-worktrees",
       "global.jump-to-latest-unread",
@@ -1704,7 +1705,7 @@ private func makeItem(
 
 private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteItem.Category {
   switch kind {
-  case .checkForUpdates, .openSettings, .openRepository, .installCLI,
+  case .checkForUpdates, .openSettings, .openRepository, .newWorkspace, .installCLI,
     .openRepositorySettings:
     return .app
   case .newWorktree, .refreshWorktrees, .viewArchivedWorktrees,
@@ -1733,7 +1734,7 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
 
 private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
   switch kind {
-  case .checkForUpdates, .openSettings, .openRepository, .installCLI,
+  case .checkForUpdates, .openSettings, .openRepository, .newWorkspace, .installCLI,
     .newWorktree, .refreshWorktrees, .viewArchivedWorktrees, .jumpToLatestUnread,
     .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest,
     .copyFailingJobURL, .copyCiFailureLogs, .rerunFailedJobs, .openFailingCheckDetails,

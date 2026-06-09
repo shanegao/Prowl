@@ -30,6 +30,9 @@ extension AppFeature {
     if let effect = reduceCommandPaletteNavigationDelegate(delegate, state: &state) {
       return effect
     }
+    if let effect = reduceCommandPaletteRepositoryDelegate(delegate) {
+      return effect
+    }
     if let effect = reduceCommandPaletteCanvasDelegate(delegate) {
       return effect
     }
@@ -80,9 +83,6 @@ extension AppFeature {
     case .newWorktree:
       return .send(.repositories(.worktreeCreation(.createRandomWorktree)))
 
-    case .openRepository:
-      return .send(.repositories(.setOpenPanelPresented(true)))
-
     case .deleteWorktree(let worktreeID, let repositoryID):
       return .send(.repositories(.worktreeLifecycle(.requestDeleteWorktree(worktreeID, repositoryID))))
 
@@ -103,6 +103,21 @@ extension AppFeature {
 
     case .toggleActiveAgentsPanel:
       return .send(.repositories(.activeAgents(.togglePanelVisibility)))
+
+    default:
+      return nil
+    }
+  }
+
+  func reduceCommandPaletteRepositoryDelegate(
+    _ delegate: CommandPaletteFeature.Delegate
+  ) -> Effect<Action>? {
+    switch delegate {
+    case .openRepository:
+      return .send(.repositories(.setOpenPanelPresented(true)))
+
+    case .newWorkspace:
+      return .send(.repositories(.workspaceCreation(.promptRequested)))
 
     default:
       return nil

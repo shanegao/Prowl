@@ -572,6 +572,108 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func workspaceCreationPromptRequiresAtLeastTwoRepositories() async {
+    let repository = makeRepository(id: "/tmp/repo-a", name: "Repo A", worktrees: [])
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create workspace")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Open at least two repositories to create a workspace.")
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.workspaceCreation(.promptRequested)) {
+      $0.alert = expectedAlert
+    }
+  }
+
+  @Test func workspaceCreationPromptUsesLoadedRepositories() async {
+    let testID = UUID().uuidString
+    let repoRootA = "/tmp/\(testID)-repo-a"
+    let repoRootB = "/tmp/\(testID)-repo-b"
+    let worktreeA = makeWorktree(id: repoRootA, name: "main", repoRoot: repoRootA)
+    let repoA = makeRepository(id: repoRootA, name: "Repo A", worktrees: [worktreeA])
+    let repoB = makeRepository(id: repoRootB, name: "Repo B", worktrees: [])
+    var state = makeState(repositories: [repoA, repoB])
+    state.repositoryCustomTitles[repoB.id] = "API"
+    let title = "Repo A + API"
+    let expectedRootPath = SupacodePaths.workspacesDirectory
+      .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
+      .standardizedFileURL
+      .path(percentEncoded: false)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.workspaceCreation(.promptRequested)) {
+      $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+        candidates: [
+          ProjectWorkspaceCreationRepository(
+            id: repoRootA,
+            name: "Repo A",
+            rootURL: URL(fileURLWithPath: repoRootA),
+            branchName: "main"
+          ),
+          ProjectWorkspaceCreationRepository(
+            id: repoRootB,
+            name: "API",
+            rootURL: URL(fileURLWithPath: repoRootB)
+          ),
+        ],
+        title: title,
+        rootPath: expectedRootPath,
+        selectedRepositoryIDs: [repoRootA, repoRootB]
+      )
+    }
+  }
+
+  @Test func workspaceCreationPromptSubmitBuildsDraft() async {
+    let repoRootA = "/tmp/repo-a"
+    let repoRootB = "/tmp/repo-b"
+    let repositories = [
+      ProjectWorkspaceCreationRepository(
+        id: repoRootA,
+        name: "Repo A",
+        rootURL: URL(fileURLWithPath: repoRootA),
+        branchName: "main"
+      ),
+      ProjectWorkspaceCreationRepository(
+        id: repoRootB,
+        name: "Repo B",
+        rootURL: URL(fileURLWithPath: repoRootB)
+      ),
+    ]
+    let rootURL = URL(fileURLWithPath: "/tmp/multi-repo-workspace")
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        candidates: repositories,
+        title: " Multi Repo ",
+        rootPath: " /tmp/multi-repo-workspace ",
+        selectedRepositoryIDs: [repoRootA, repoRootB]
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.createButtonTapped)
+    await store.receive(
+      .delegate(
+        .submit(
+          ProjectWorkspaceCreationDraft(
+            title: "Multi Repo",
+            rootURL: rootURL,
+            repositories: repositories
+          )
+        )
+      )
+    )
+  }
+
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {
     let root = "/tmp/folder"
     let worktree = makeWorktree(id: root, name: "folder", repoRoot: root)

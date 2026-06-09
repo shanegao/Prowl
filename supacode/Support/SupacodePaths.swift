@@ -57,6 +57,10 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "repos", directoryHint: .isDirectory)
   }
 
+  static var workspacesDirectory: URL {
+    baseDirectory.appending(path: "workspaces", directoryHint: .isDirectory)
+  }
+
   static func repositoryDirectory(for rootURL: URL) -> URL {
     let name = repositoryDirectoryName(for: rootURL)
     return reposDirectory.appending(path: name, directoryHint: .isDirectory)

@@ -18,8 +18,10 @@ When you open a workspace in Prowl:
 
 ## Folder layout
 
-Create or clone the repositories into a shared folder first, then add that
-folder to Prowl.
+Use **New Workspace** from the sidebar toolbar, Worktrees menu, or command
+palette to create a workspace from repositories already opened in Prowl. Prowl
+creates the shared folder, writes `.prowl/workspace.json`, and places symlinks
+to the selected repositories in the workspace root.
 
 ```text
 my-feature-workspace/
@@ -30,9 +32,10 @@ my-feature-workspace/
 └─ shared-package/
 ```
 
-Prowl currently reads the metadata and opens the workspace root. It does not yet
-clone remote repositories or materialize git worktrees from the metadata by
-itself, so those directories should already exist when the agent starts.
+The current creation flow supports existing local repositories that are already
+loaded in Prowl. Prowl still reads hand-authored metadata, but it does not yet
+clone remote repositories or materialize git worktrees from bare repositories by
+itself.
 
 ## Metadata
 
