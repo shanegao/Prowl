@@ -141,6 +141,11 @@ struct SupacodeApp: App {
           if let releaseName { options.releaseName = releaseName }
           options.tracesSampleRate = 0.05
           options.enableAppHangTracking = false
+          // Don't report failed HTTP requests. The SDK swizzles URLSession to
+          // turn any 5xx response into an HTTPClientError, but every request we
+          // make goes to servers we don't own (e.g. Sparkle fetching the
+          // appcast from GitHub), so their 502s are noise, not our bugs.
+          options.enableCaptureFailedRequests = false
         }
         // Match the Sentry user id to the PostHog distinct id so an event in
         // one system can be traced to the same install in the other.
