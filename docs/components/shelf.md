@@ -33,6 +33,10 @@ otherwise it's a no-op.
 So `⌘⌃←/→` moves **between agents**, and `⌘⌃↑/↓` moves **between that agent's
 tabs** — triage six in-flight agents one keystroke at a time.
 
+Two-finger horizontal swipes on the trackpad also flip between books. Vertical
+scrolling inside the terminal keeps working normally; Shelf only consumes a swipe
+after the horizontal movement clearly dominates.
+
 ## Interacting with spines
 
 - **Open a book:** click anywhere on a closed spine (it activates and shows its

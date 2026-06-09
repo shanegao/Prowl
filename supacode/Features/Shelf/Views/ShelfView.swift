@@ -1,3 +1,4 @@
+import AppKit
 import ComposableArchitecture
 import Sharing
 import SwiftUI
@@ -83,6 +84,19 @@ struct ShelfView: View {
     // the glass blends the leading band in, the nav panel, the open spine,
     // and the toolbar all read as one continuous color.
     .windowChromeTint(chromeFill, edges: [.top, .leading])
+    .overlay {
+      ShelfSwipeEventMonitor(isEnabled: books.count > 1) { direction in
+        switch direction {
+        case .next:
+          store.send(.selectNextShelfBook)
+        case .previous:
+          store.send(.selectPreviousShelfBook)
+        }
+      }
+      .accessibilityHidden(true)
+      .allowsHitTesting(false)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
     // Animate on every openBookID change — covers both Shelf-originated
     // book switches (which also set their own TCA animation) and
     // left-nav-originated switches, so the spine flow is consistent
@@ -243,6 +257,109 @@ struct ShelfView: View {
       // if the user has opened it before. For first-time opens the tab
       // manager seeds a default tab which we won't override.
       terminalManager.stateIfExists(for: book.id)?.tabManager.selectTab(tabID)
+    }
+  }
+}
+
+private enum ShelfSwipeDirection {
+  case next
+  case previous
+}
+
+private struct ShelfSwipeEventMonitor: NSViewRepresentable {
+  let isEnabled: Bool
+  let onSwipe: (ShelfSwipeDirection) -> Void
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    view.postsFrameChangedNotifications = true
+    context.coordinator.view = view
+    context.coordinator.installIfNeeded()
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.view = nsView
+    context.coordinator.isEnabled = isEnabled
+    context.coordinator.onSwipe = onSwipe
+    context.coordinator.installIfNeeded()
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.removeMonitor()
+  }
+
+  final class Coordinator {
+    weak var view: NSView?
+    var isEnabled = false
+    var onSwipe: (ShelfSwipeDirection) -> Void = { _ in }
+
+    private var monitor: Any?
+    private var accumulatedDeltaX: CGFloat = 0
+    private var accumulatedDeltaY: CGFloat = 0
+    private var lastEventTimestamp: TimeInterval = 0
+    private var cooldownUntil: TimeInterval = 0
+
+    private let swipeThreshold: CGFloat = 80
+    private let horizontalDominanceRatio: CGFloat = 1.6
+    private let eventGapResetInterval: TimeInterval = 0.25
+    private let triggerCooldown: TimeInterval = 0.35
+
+    func installIfNeeded() {
+      guard monitor == nil else { return }
+      monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+        self?.handle(event) ?? event
+      }
+    }
+
+    func removeMonitor() {
+      guard let monitor else { return }
+      NSEvent.removeMonitor(monitor)
+      self.monitor = nil
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+      guard isEnabled,
+        let view,
+        let window = view.window,
+        event.window === window,
+        view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+      else {
+        resetAccumulatedDeltas()
+        return event
+      }
+
+      if event.phase.contains(.began)
+        || event.timestamp - lastEventTimestamp > eventGapResetInterval
+      {
+        resetAccumulatedDeltas()
+      }
+      lastEventTimestamp = event.timestamp
+
+      accumulatedDeltaX += event.scrollingDeltaX
+      accumulatedDeltaY += event.scrollingDeltaY
+
+      guard event.timestamp >= cooldownUntil,
+        abs(accumulatedDeltaX) >= swipeThreshold,
+        abs(accumulatedDeltaX) > abs(accumulatedDeltaY) * horizontalDominanceRatio
+      else {
+        return event
+      }
+
+      let direction: ShelfSwipeDirection = accumulatedDeltaX > 0 ? .next : .previous
+      resetAccumulatedDeltas()
+      cooldownUntil = event.timestamp + triggerCooldown
+      onSwipe(direction)
+      return nil
+    }
+
+    private func resetAccumulatedDeltas() {
+      accumulatedDeltaX = 0
+      accumulatedDeltaY = 0
     }
   }
 }
