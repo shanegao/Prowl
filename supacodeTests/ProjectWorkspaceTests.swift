@@ -1,3 +1,4 @@
+import ComposableArchitecture
 import Foundation
 import IdentifiedCollections
 import Testing
@@ -126,7 +127,7 @@ struct ProjectWorkspaceTests {
     #expect(normalized == [PersistedRepositoryEntry(path: rootPath, kind: .plain)])
   }
 
-  @Test func createWorkspaceWritesMetadataAndRepositoryLinks() throws {
+  @Test func createWorkspaceWritesMetadataAndRepositoryLinks() async throws {
     let rootURL = FileManager.default.temporaryDirectory
       .appending(path: "prowl-created-workspace-\(UUID().uuidString)")
       .standardizedFileURL
@@ -138,7 +139,7 @@ struct ProjectWorkspaceTests {
       try? FileManager.default.removeItem(at: apiURL)
     }
     let createdAt = Date(timeIntervalSince1970: 1_234_567)
-    let workspace = try ProjectWorkspace.create(
+    let workspace = try await ProjectWorkspace.create(
       ProjectWorkspaceCreationRequest(
         draft: ProjectWorkspaceCreationDraft(
           title: "Checkout Flow",
@@ -159,7 +160,10 @@ struct ProjectWorkspaceTests {
           ]
         ),
         createdAt: createdAt
-      )
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        throw ProjectWorkspaceCreationError.gitCommandFailed(command: command.displayCommand, message: "unexpected")
+      }
     )
 
     #expect(workspace.title == "Checkout Flow")
@@ -180,6 +184,66 @@ struct ProjectWorkspaceTests {
     let apiLinkPath = rootURL.appending(path: "App-Repo-2").path(percentEncoded: false)
     #expect(URL(fileURLWithPath: appLinkPath).resolvingSymlinksInPath().path(percentEncoded: false) == appPath)
     #expect(URL(fileURLWithPath: apiLinkPath).resolvingSymlinksInPath().path(percentEncoded: false) == apiPath)
+  }
+
+  @Test func createWorkspaceMaterializesRemoteCloneAndBareWorktree() async throws {
+    let rootURL = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-materialized-workspace-\(UUID().uuidString)")
+      .standardizedFileURL
+    let bareURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: bareURL)
+    }
+    let commands = LockIsolated<[ProjectWorkspaceGitCommand]>([])
+    let workspace = try await ProjectWorkspace.create(
+      ProjectWorkspaceCreationRequest(
+        draft: ProjectWorkspaceCreationDraft(
+          title: "Materialized",
+          rootURL: rootURL,
+          repositories: [
+            ProjectWorkspaceCreationRepository(
+              id: "app",
+              name: "App",
+              sourceKind: .remote,
+              sourceLocation: "git@github.com:onevcat/app.git",
+              branchName: "codex/app",
+              baseRef: "origin/main",
+              path: "app"
+            ),
+            ProjectWorkspaceCreationRepository(
+              id: "api",
+              name: "API",
+              sourceKind: .bareRepository,
+              sourceLocation: bareURL.path(percentEncoded: false),
+              branchName: "codex/api",
+              baseRef: "main",
+              path: "api"
+            ),
+          ]
+        ),
+        createdAt: Date(timeIntervalSince1970: 2_345_678)
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        commands.withValue { $0.append(command) }
+      }
+    )
+
+    #expect(workspace.repositories.map(\.path) == ["app", "api"])
+    #expect(workspace.repositories.map(\.sourceKind) == [.remote, .bareRepository])
+    let rootPath = rootURL.path(percentEncoded: false)
+    let barePath = normalizedTestPath(bareURL)
+    #expect(
+      commands.value.map(\.arguments) == [
+        ["clone", "git@github.com:onevcat/app.git", "\(rootPath)/app"],
+        ["-C", "\(rootPath)/app", "checkout", "-B", "codex/app", "origin/main"],
+        ["-C", barePath, "worktree", "add", "-b", "codex/api", "\(rootPath)/api", "main"],
+      ])
+
+    let loaded = try #require(ProjectWorkspace.load(from: rootURL))
+    #expect(loaded.repositories.map(\.sourceLocation) == ["git@github.com:onevcat/app.git", barePath])
+    #expect(loaded.repositories.map(\.branchName) == ["codex/app", "codex/api"])
+    #expect(loaded.repositories.map(\.baseRef) == ["origin/main", "main"])
   }
 
   @Test func listRuntimeContextsReportWorkspaceKind() {

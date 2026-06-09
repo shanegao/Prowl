@@ -3,7 +3,7 @@ import Foundation
 
 extension RepositoriesFeature.State {
   var canCreateWorkspace: Bool {
-    workspaceCreationCandidates.count >= 2
+    true
   }
 
   var workspaceCreationCandidates: [ProjectWorkspaceCreationRepository] {
@@ -30,16 +30,9 @@ extension RepositoriesFeature {
     switch action {
     case .promptRequested:
       let candidates = state.workspaceCreationCandidates
-      guard candidates.count >= 2 else {
-        state.alert = messageAlert(
-          title: "Unable to create workspace",
-          message: "Open at least two repositories to create a workspace."
-        )
-        return .none
-      }
       let title = workspaceCreationDefaultTitle(candidates: candidates)
       state.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
-        candidates: candidates,
+        repositories: candidates,
         title: title,
         rootPath: defaultWorkspaceRootURL(title: title).path(percentEncoded: false),
         selectedRepositoryIDs: Set(candidates.map(\.id))
@@ -54,9 +47,26 @@ extension RepositoriesFeature {
       state.workspaceCreationPrompt?.isCreating = true
       state.workspaceCreationPrompt?.validationMessage = nil
       let request = ProjectWorkspaceCreationRequest(draft: draft, createdAt: now)
+      let shellClient = shellClient
+      let gitRunner = ProjectWorkspaceGitRunner { command in
+        do {
+          _ = try await shellClient.run(
+            URL(fileURLWithPath: "/usr/bin/env"),
+            ["git"] + command.arguments,
+            command.currentDirectoryURL
+          )
+        } catch let error as ShellClientError {
+          throw ProjectWorkspaceCreationError.gitCommandFailed(
+            command: command.displayCommand,
+            message: error.stderr.isEmpty ? error.stdout : error.stderr
+          )
+        } catch {
+          throw error
+        }
+      }
       return .run { send in
         do {
-          _ = try ProjectWorkspace.create(request)
+          _ = try await ProjectWorkspace.create(request, gitRunner: gitRunner)
           await send(.workspaceCreation(.workspaceCreated(request.draft.rootURL)))
         } catch {
           await send(.workspaceCreation(.workspaceCreationFailed(error.localizedDescription)))
@@ -94,6 +104,9 @@ extension RepositoriesFeature {
 
   private func workspaceCreationDefaultTitle(candidates: [ProjectWorkspaceCreationRepository]) -> String {
     let names = candidates.map(\.name).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    if names.isEmpty {
+      return "Workspace"
+    }
     if names.count <= 3 {
       return names.joined(separator: " + ")
     }

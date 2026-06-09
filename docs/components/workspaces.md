@@ -19,9 +19,9 @@ When you open a workspace in Prowl:
 ## Folder layout
 
 Use **New Workspace** from the sidebar toolbar, Worktrees menu, or command
-palette to create a workspace from repositories already opened in Prowl. Prowl
-creates the shared folder, writes `.prowl/workspace.json`, and places symlinks
-to the selected repositories in the workspace root.
+palette to create a workspace. Prowl creates the shared folder, materializes the
+selected repositories, writes `.prowl/workspace.json`, and opens the workspace
+as a runnable folder.
 
 ```text
 my-feature-workspace/
@@ -32,10 +32,18 @@ my-feature-workspace/
 └─ shared-package/
 ```
 
-The current creation flow supports existing local repositories that are already
-loaded in Prowl. Prowl still reads hand-authored metadata, but it does not yet
-clone remote repositories or materialize git worktrees from bare repositories by
-itself.
+Repository sources can be mixed in one workspace:
+
+- Already opened repositories are added as symlinks with `source_kind:
+  existing_path`.
+- Local repository folders selected from disk are added as symlinks with
+  `source_kind: local_repository`.
+- Remote repositories are cloned into the workspace folder with `source_kind:
+  remote`. If a branch and base ref are supplied, Prowl checks out the branch
+  from the base after cloning.
+- Bare repositories are materialized with `git worktree add` and recorded with
+  `source_kind: bare_repository`. If both branch and base ref are supplied,
+  Prowl creates the worktree branch from that base ref.
 
 ## Metadata
 

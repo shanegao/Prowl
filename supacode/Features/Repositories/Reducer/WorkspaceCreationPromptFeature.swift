@@ -1,11 +1,12 @@
 import ComposableArchitecture
 import Foundation
+import IdentifiedCollections
 
 @Reducer
 struct WorkspaceCreationPromptFeature {
   @ObservableState
   struct State: Equatable {
-    let candidates: [ProjectWorkspaceCreationRepository]
+    var repositories: IdentifiedArrayOf<ProjectWorkspaceCreationRepository>
     var title: String
     var rootPath: String
     var selectedRepositoryIDs: Set<Repository.ID>
@@ -13,21 +14,42 @@ struct WorkspaceCreationPromptFeature {
     var isCreating = false
 
     var selectedRepositoryCount: Int {
-      candidates.count { selectedRepositoryIDs.contains($0.id) }
+      repositories.count { selectedRepositoryIDs.contains($0.id) }
     }
 
     var selectedRepositories: [ProjectWorkspaceCreationRepository] {
-      candidates.filter { selectedRepositoryIDs.contains($0.id) }
+      repositories.filter { selectedRepositoryIDs.contains($0.id) }
     }
 
     var rootPathPreview: String {
       PathPolicy.normalizePath(rootPath, resolvingSymlinks: false) ?? rootPath
     }
+
+    init(
+      repositories: [ProjectWorkspaceCreationRepository],
+      title: String,
+      rootPath: String,
+      selectedRepositoryIDs: Set<Repository.ID>
+    ) {
+      self.repositories = IdentifiedArray(repositories, uniquingIDsWith: { current, _ in current })
+      self.title = title
+      self.rootPath = rootPath
+      self.selectedRepositoryIDs = selectedRepositoryIDs
+    }
   }
 
   enum Action: BindableAction, Equatable {
     case binding(BindingAction<State>)
+    case addBlankRepository(ProjectWorkspaceRepositorySourceKind)
+    case addRepositoryFromURL(ProjectWorkspaceRepositorySourceKind, String)
+    case removeRepository(Repository.ID)
     case repositorySelectionChanged(Repository.ID, Bool)
+    case repositorySourceKindChanged(Repository.ID, ProjectWorkspaceRepositorySourceKind)
+    case repositoryNameChanged(Repository.ID, String)
+    case repositoryPathChanged(Repository.ID, String)
+    case repositorySourceLocationChanged(Repository.ID, String)
+    case repositoryBranchNameChanged(Repository.ID, String)
+    case repositoryBaseRefChanged(Repository.ID, String)
     case rootPathChosen(String)
     case cancelButtonTapped
     case createButtonTapped
@@ -42,11 +64,53 @@ struct WorkspaceCreationPromptFeature {
     case submit(ProjectWorkspaceCreationDraft)
   }
 
+  @Dependency(\.uuid) var uuid
+
   var body: some Reducer<State, Action> {
     BindingReducer()
     Reduce { state, action in
       switch action {
       case .binding:
+        state.validationMessage = nil
+        return .none
+
+      case .addBlankRepository(let sourceKind):
+        let id = uuid().uuidString
+        state.repositories.append(
+          ProjectWorkspaceCreationRepository(
+            id: id,
+            name: "",
+            sourceKind: sourceKind,
+            sourceLocation: ""
+          )
+        )
+        state.selectedRepositoryIDs.insert(id)
+        state.validationMessage = nil
+        return .none
+
+      case .addRepositoryFromURL(let sourceKind, let path):
+        guard let rootPath = PathPolicy.normalizePath(path) else {
+          state.validationMessage =
+            ProjectWorkspaceCreationError.missingRepositorySource("repository").localizedDescription
+          return .none
+        }
+        let url = URL(fileURLWithPath: rootPath).standardizedFileURL
+        let id = uuid().uuidString
+        state.repositories.append(
+          ProjectWorkspaceCreationRepository(
+            id: id,
+            name: Repository.name(for: url),
+            sourceKind: sourceKind,
+            sourceLocation: rootPath
+          )
+        )
+        state.selectedRepositoryIDs.insert(id)
+        state.validationMessage = nil
+        return .none
+
+      case .removeRepository(let repositoryID):
+        state.repositories.remove(id: repositoryID)
+        state.selectedRepositoryIDs.remove(repositoryID)
         state.validationMessage = nil
         return .none
 
@@ -56,6 +120,43 @@ struct WorkspaceCreationPromptFeature {
         } else {
           state.selectedRepositoryIDs.remove(repositoryID)
         }
+        state.validationMessage = nil
+        return .none
+
+      case .repositorySourceKindChanged(let repositoryID, let sourceKind):
+        guard var repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        repository.sourceKind = sourceKind
+        if sourceKind == .remote {
+          repository.sourceLocation = ""
+        }
+        state.repositories[id: repositoryID] = repository
+        state.validationMessage = nil
+        return .none
+
+      case .repositoryNameChanged(let repositoryID, let name):
+        state.repositories[id: repositoryID]?.name = name
+        state.validationMessage = nil
+        return .none
+
+      case .repositoryPathChanged(let repositoryID, let path):
+        state.repositories[id: repositoryID]?.path = path
+        state.validationMessage = nil
+        return .none
+
+      case .repositorySourceLocationChanged(let repositoryID, let sourceLocation):
+        state.repositories[id: repositoryID]?.sourceLocation = sourceLocation
+        state.validationMessage = nil
+        return .none
+
+      case .repositoryBranchNameChanged(let repositoryID, let branchName):
+        state.repositories[id: repositoryID]?.branchName = branchName
+        state.validationMessage = nil
+        return .none
+
+      case .repositoryBaseRefChanged(let repositoryID, let baseRef):
+        state.repositories[id: repositoryID]?.baseRef = baseRef
         state.validationMessage = nil
         return .none
 
@@ -81,6 +182,16 @@ struct WorkspaceCreationPromptFeature {
         guard repositories.count >= 2 else {
           state.validationMessage = ProjectWorkspaceCreationError.notEnoughRepositories.localizedDescription
           return .none
+        }
+        for repository in repositories {
+          let name = repository.name.trimmingCharacters(in: .whitespacesAndNewlines)
+          let sourceLocation = repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+          guard !sourceLocation.isEmpty else {
+            let displayName = name.isEmpty ? "repository" : name
+            state.validationMessage =
+              ProjectWorkspaceCreationError.missingRepositorySource(displayName).localizedDescription
+            return .none
+          }
         }
         state.validationMessage = nil
         return .send(

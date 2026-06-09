@@ -572,23 +572,30 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
-  @Test func workspaceCreationPromptRequiresAtLeastTwoRepositories() async {
+  @Test func workspaceCreationPromptOpensWithoutTwoRepositories() async {
     let repository = makeRepository(id: "/tmp/repo-a", name: "Repo A", worktrees: [])
-    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
-      TextState("Unable to create workspace")
-    } actions: {
-      ButtonState(role: .cancel) {
-        TextState("OK")
-      }
-    } message: {
-      TextState("Open at least two repositories to create a workspace.")
-    }
     let store = TestStore(initialState: makeState(repositories: [repository])) {
       RepositoriesFeature()
     }
 
     await store.send(.workspaceCreation(.promptRequested)) {
-      $0.alert = expectedAlert
+      let title = "Repo A"
+      let expectedRootPath = SupacodePaths.workspacesDirectory
+        .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
+        .standardizedFileURL
+        .path(percentEncoded: false)
+      $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+        repositories: [
+          ProjectWorkspaceCreationRepository(
+            id: "/tmp/repo-a",
+            name: "Repo A",
+            rootURL: URL(fileURLWithPath: "/tmp/repo-a")
+          )
+        ],
+        title: title,
+        rootPath: expectedRootPath,
+        selectedRepositoryIDs: ["/tmp/repo-a"]
+      )
     }
   }
 
@@ -612,7 +619,7 @@ struct RepositoriesFeatureTests {
 
     await store.send(.workspaceCreation(.promptRequested)) {
       $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
-        candidates: [
+        repositories: [
           ProjectWorkspaceCreationRepository(
             id: repoRootA,
             name: "Repo A",
@@ -651,7 +658,7 @@ struct RepositoriesFeatureTests {
     let rootURL = URL(fileURLWithPath: "/tmp/multi-repo-workspace")
     let store = TestStore(
       initialState: WorkspaceCreationPromptFeature.State(
-        candidates: repositories,
+        repositories: repositories,
         title: " Multi Repo ",
         rootPath: " /tmp/multi-repo-workspace ",
         selectedRepositoryIDs: [repoRootA, repoRootB]
@@ -672,6 +679,55 @@ struct RepositoriesFeatureTests {
         )
       )
     )
+  }
+
+  @Test func workspaceCreationPromptAddsRemoteAndLocalRepositories() async {
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: []
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+    }
+
+    await store.send(.addBlankRepository(.remote)) {
+      $0.repositories = [
+        ProjectWorkspaceCreationRepository(
+          id: UUID(0).uuidString,
+          name: "",
+          sourceKind: .remote,
+          sourceLocation: ""
+        )
+      ]
+      $0.selectedRepositoryIDs = [UUID(0).uuidString]
+    }
+
+    await store.send(.repositoryNameChanged(UUID(0).uuidString, "App")) {
+      $0.repositories[id: UUID(0).uuidString]?.name = "App"
+    }
+    await store.send(.repositorySourceLocationChanged(UUID(0).uuidString, "git@github.com:onevcat/app.git")) {
+      $0.repositories[id: UUID(0).uuidString]?.sourceLocation = "git@github.com:onevcat/app.git"
+    }
+    await store.send(.repositoryBranchNameChanged(UUID(0).uuidString, "codex/app")) {
+      $0.repositories[id: UUID(0).uuidString]?.branchName = "codex/app"
+    }
+
+    await store.send(.addRepositoryFromURL(.localRepository, "/tmp/local-api")) {
+      $0.repositories.append(
+        ProjectWorkspaceCreationRepository(
+          id: UUID(1).uuidString,
+          name: "local-api",
+          sourceKind: .localRepository,
+          sourceLocation: "/tmp/local-api"
+        )
+      )
+      $0.selectedRepositoryIDs = [UUID(0).uuidString, UUID(1).uuidString]
+    }
   }
 
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {

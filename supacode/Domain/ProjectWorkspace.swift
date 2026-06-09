@@ -10,19 +10,58 @@ nonisolated enum ProjectWorkspaceRepositorySourceKind: String, Codable, Equatabl
 nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Sendable, Identifiable {
   var id: String
   var name: String
-  var rootURL: URL
+  var path: String?
+  var sourceKind: ProjectWorkspaceRepositorySourceKind
+  var sourceLocation: String
   var branchName: String?
+  var baseRef: String?
 
   init(
     id: String,
     name: String,
     rootURL: URL,
-    branchName: String? = nil
+    branchName: String? = nil,
+    path: String? = nil
+  ) {
+    let normalizedURL = rootURL.standardizedFileURL
+    self.id = id
+    self.name = name
+    self.path = path
+    sourceKind = .existingPath
+    sourceLocation = normalizedURL.path(percentEncoded: false)
+    self.branchName = branchName
+    baseRef = nil
+  }
+
+  init(
+    id: String,
+    name: String,
+    sourceKind: ProjectWorkspaceRepositorySourceKind,
+    sourceLocation: String,
+    branchName: String? = nil,
+    baseRef: String? = nil,
+    path: String? = nil
   ) {
     self.id = id
     self.name = name
-    self.rootURL = rootURL.standardizedFileURL
+    self.path = path
+    self.sourceKind = sourceKind
+    self.sourceLocation = sourceLocation
     self.branchName = branchName
+    self.baseRef = baseRef
+  }
+
+  var localSourceURL: URL? {
+    switch sourceKind {
+    case .existingPath, .localRepository, .bareRepository:
+      let trimmed = sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else {
+        return nil
+      }
+      return URL(fileURLWithPath: trimmed).standardizedFileURL
+    case .remote:
+      return nil
+    }
   }
 }
 
@@ -47,14 +86,30 @@ nonisolated struct ProjectWorkspaceCreationRequest: Equatable, Sendable {
   var createdAt: Date
 }
 
+nonisolated struct ProjectWorkspaceGitCommand: Equatable, Sendable {
+  var arguments: [String]
+  var currentDirectoryURL: URL?
+
+  var displayCommand: String {
+    (["git"] + arguments).joined(separator: " ")
+  }
+}
+
+nonisolated struct ProjectWorkspaceGitRunner: Sendable {
+  var run: @Sendable (ProjectWorkspaceGitCommand) async throws -> Void
+}
+
 nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Sendable {
   case missingTitle
   case missingPath
   case notEnoughRepositories
+  case missingRepositoryName
+  case missingRepositorySource(String)
   case destinationIsFile(String)
   case workspaceAlreadyExists(String)
   case repositoryDoesNotExist(String)
   case linkAlreadyExists(String)
+  case gitCommandFailed(command: String, message: String)
 
   var errorDescription: String? {
     switch self {
@@ -64,6 +119,10 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
       return "Workspace folder required."
     case .notEnoughRepositories:
       return "Select at least two repositories."
+    case .missingRepositoryName:
+      return "Repository name required."
+    case .missingRepositorySource(let name):
+      return "Source required for \(name)."
     case .destinationIsFile(let path):
       return "\(path) is a file. Choose a folder path instead."
     case .workspaceAlreadyExists(let path):
@@ -72,6 +131,11 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
       return "\(path) does not exist."
     case .linkAlreadyExists(let path):
       return "\(path) already exists."
+    case .gitCommandFailed(let command, let message):
+      if message.isEmpty {
+        return "Git command failed: \(command)"
+      }
+      return "Git command failed: \(command)\n\(message)"
     }
   }
 }
@@ -259,8 +323,9 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
 
   static func create(
     _ request: ProjectWorkspaceCreationRequest,
-    fileManager: FileManager = .default
-  ) throws -> ProjectWorkspace {
+    fileManager: FileManager = .default,
+    gitRunner: ProjectWorkspaceGitRunner
+  ) async throws -> ProjectWorkspace {
     let title = request.draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !title.isEmpty else {
       throw ProjectWorkspaceCreationError.missingTitle
@@ -277,6 +342,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     var createdRoot = false
     var createdMetadataDirectory = false
     var createdURLs: [URL] = []
+    var cleanupCommands: [ProjectWorkspaceGitCommand] = []
     do {
       var isDirectory = ObjCBool(false)
       if fileManager.fileExists(atPath: rootPath, isDirectory: &isDirectory) {
@@ -300,32 +366,20 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       }
 
       var occupiedNames: Set<String> = []
-      let entries = try request.draft.repositories.map { repository in
-        let repositoryPath = normalizedPath(repository.rootURL, resolvingSymlinks: true)
-        let repositoryURL = URL(fileURLWithPath: repositoryPath, isDirectory: true).standardizedFileURL
-        var repositoryIsDirectory = ObjCBool(false)
-        guard fileManager.fileExists(atPath: repositoryPath, isDirectory: &repositoryIsDirectory),
-          repositoryIsDirectory.boolValue
-        else {
-          throw ProjectWorkspaceCreationError.repositoryDoesNotExist(repositoryPath)
-        }
-
-        let linkName = uniqueRepositoryLinkName(for: repository, occupiedNames: &occupiedNames)
-        let linkURL = rootURL.appending(path: linkName, directoryHint: .isDirectory)
-        let linkPath = linkURL.path(percentEncoded: false)
-        guard !fileManager.fileExists(atPath: linkPath) else {
-          throw ProjectWorkspaceCreationError.linkAlreadyExists(linkPath)
-        }
-        try fileManager.createSymbolicLink(at: linkURL, withDestinationURL: repositoryURL)
-        createdURLs.append(linkURL)
-        return RepositoryEntry(
-          id: repository.id,
-          name: repository.name,
-          path: linkName,
-          sourceKind: .existingPath,
-          sourceLocation: repositoryPath,
-          branchName: repository.branchName
+      var entries: [RepositoryEntry] = []
+      for repository in request.draft.repositories {
+        let prepared = try await materialize(
+          repository,
+          workspaceRootURL: rootURL,
+          occupiedNames: &occupiedNames,
+          fileManager: fileManager,
+          gitRunner: gitRunner
         )
+        createdURLs.append(prepared.createdURL)
+        if let cleanupCommand = prepared.cleanupCommand {
+          cleanupCommands.append(cleanupCommand)
+        }
+        entries.append(prepared.entry)
       }
 
       let workspace = ProjectWorkspace(
@@ -343,6 +397,9 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       createdURLs.append(metadataURL)
       return workspace
     } catch {
+      for command in cleanupCommands.reversed() {
+        try? await gitRunner.run(command)
+      }
       for url in createdURLs.reversed() {
         try? fileManager.removeItem(at: url)
       }
@@ -360,13 +417,168 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     return sanitized.isEmpty ? "workspace" : sanitized
   }
 
-  private static func uniqueRepositoryLinkName(
+  private struct PreparedRepository {
+    var entry: RepositoryEntry
+    var createdURL: URL
+    var cleanupCommand: ProjectWorkspaceGitCommand?
+  }
+
+  private static func materialize(
+    _ repository: ProjectWorkspaceCreationRepository,
+    workspaceRootURL: URL,
+    occupiedNames: inout Set<String>,
+    fileManager: FileManager,
+    gitRunner: ProjectWorkspaceGitRunner
+  ) async throws -> PreparedRepository {
+    let name = repositoryDisplayName(repository)
+    guard !name.isEmpty else {
+      throw ProjectWorkspaceCreationError.missingRepositoryName
+    }
+    let sourceLocation = repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sourceLocation.isEmpty else {
+      throw ProjectWorkspaceCreationError.missingRepositorySource(name)
+    }
+    let workspacePath = uniqueRepositoryPath(for: repository, displayName: name, occupiedNames: &occupiedNames)
+    let destinationURL = workspaceRootURL.appending(path: workspacePath, directoryHint: .isDirectory)
+    let destinationPath = normalizedPath(destinationURL, resolvingSymlinks: false)
+    guard !fileManager.fileExists(atPath: destinationPath) else {
+      throw ProjectWorkspaceCreationError.linkAlreadyExists(destinationPath)
+    }
+
+    let sourceKind = repository.sourceKind
+    let normalizedSourceLocation: String?
+    let cleanupCommand: ProjectWorkspaceGitCommand?
+    switch sourceKind {
+    case .existingPath, .localRepository:
+      let sourcePath = try localRepositoryPath(repository, sourceLocation: sourceLocation, fileManager: fileManager)
+      let sourceURL = URL(fileURLWithPath: sourcePath, isDirectory: true).standardizedFileURL
+      try fileManager.createSymbolicLink(at: destinationURL, withDestinationURL: sourceURL)
+      normalizedSourceLocation = sourcePath
+      cleanupCommand = nil
+
+    case .remote:
+      try await gitRunner.run(
+        ProjectWorkspaceGitCommand(
+          arguments: ["clone", sourceLocation, destinationPath],
+          currentDirectoryURL: workspaceRootURL
+        )
+      )
+      try await checkoutIfNeeded(
+        repository,
+        destinationURL: destinationURL,
+        gitRunner: gitRunner
+      )
+      normalizedSourceLocation = sourceLocation
+      cleanupCommand = nil
+
+    case .bareRepository:
+      let sourcePath = try localRepositoryPath(repository, sourceLocation: sourceLocation, fileManager: fileManager)
+      let command = bareWorktreeCommand(
+        repository,
+        sourcePath: sourcePath,
+        destinationPath: destinationPath
+      )
+      try await gitRunner.run(command)
+      normalizedSourceLocation = sourcePath
+      cleanupCommand = ProjectWorkspaceGitCommand(
+        arguments: ["-C", sourcePath, "worktree", "remove", "--force", destinationPath],
+        currentDirectoryURL: nil
+      )
+    }
+
+    return PreparedRepository(
+      entry: RepositoryEntry(
+        id: repository.id.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? workspacePath,
+        name: name,
+        path: workspacePath,
+        sourceKind: sourceKind,
+        sourceLocation: normalizedSourceLocation,
+        branchName: repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+        baseRef: repository.baseRef?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      ),
+      createdURL: destinationURL,
+      cleanupCommand: cleanupCommand
+    )
+  }
+
+  private static func checkoutIfNeeded(
+    _ repository: ProjectWorkspaceCreationRepository,
+    destinationURL: URL,
+    gitRunner: ProjectWorkspaceGitRunner
+  ) async throws {
+    let destinationPath = normalizedPath(destinationURL, resolvingSymlinks: false)
+    let branchName = repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    let baseRef = repository.baseRef?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    switch (branchName, baseRef) {
+    case (.some(let branchName), .some(let baseRef)):
+      try await gitRunner.run(
+        ProjectWorkspaceGitCommand(
+          arguments: ["-C", destinationPath, "checkout", "-B", branchName, baseRef],
+          currentDirectoryURL: nil
+        )
+      )
+    case (.some(let branchName), .none):
+      try await gitRunner.run(
+        ProjectWorkspaceGitCommand(
+          arguments: ["-C", destinationPath, "checkout", "-B", branchName],
+          currentDirectoryURL: nil
+        )
+      )
+    case (.none, .some(let baseRef)):
+      try await gitRunner.run(
+        ProjectWorkspaceGitCommand(
+          arguments: ["-C", destinationPath, "checkout", baseRef],
+          currentDirectoryURL: nil
+        )
+      )
+    case (.none, .none):
+      break
+    }
+  }
+
+  private static func bareWorktreeCommand(
+    _ repository: ProjectWorkspaceCreationRepository,
+    sourcePath: String,
+    destinationPath: String
+  ) -> ProjectWorkspaceGitCommand {
+    let branchName = repository.branchName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    let baseRef = repository.baseRef?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    var arguments = ["-C", sourcePath, "worktree", "add"]
+    if let branchName, let baseRef {
+      arguments += ["-b", branchName, destinationPath, baseRef]
+    } else if let branchName {
+      arguments += [destinationPath, branchName]
+    } else if let baseRef {
+      arguments += [destinationPath, baseRef]
+    } else {
+      arguments += [destinationPath]
+    }
+    return ProjectWorkspaceGitCommand(arguments: arguments, currentDirectoryURL: nil)
+  }
+
+  private static func localRepositoryPath(
+    _ repository: ProjectWorkspaceCreationRepository,
+    sourceLocation: String,
+    fileManager: FileManager
+  ) throws -> String {
+    let repositoryPath = normalizedPath(URL(fileURLWithPath: sourceLocation), resolvingSymlinks: true)
+    var repositoryIsDirectory = ObjCBool(false)
+    guard fileManager.fileExists(atPath: repositoryPath, isDirectory: &repositoryIsDirectory),
+      repositoryIsDirectory.boolValue
+    else {
+      throw ProjectWorkspaceCreationError.repositoryDoesNotExist(repositoryPath)
+    }
+    return repositoryPath
+  }
+
+  private static func uniqueRepositoryPath(
     for repository: ProjectWorkspaceCreationRepository,
+    displayName: String,
     occupiedNames: inout Set<String>
   ) -> String {
-    var baseName = sanitizedWorkspaceComponent(repository.name)
+    var baseName = sanitizedWorkspaceComponent(repository.path ?? "")
     if baseName.isEmpty {
-      baseName = sanitizedWorkspaceComponent(repository.rootURL.lastPathComponent)
+      baseName = sanitizedWorkspaceComponent(displayName)
     }
     if baseName.isEmpty {
       baseName = "repository"
@@ -380,6 +592,31 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     }
     occupiedNames.insert(candidate.lowercased())
     return candidate
+  }
+
+  private static func repositoryDisplayName(_ repository: ProjectWorkspaceCreationRepository) -> String {
+    let trimmedName = repository.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmedName.isEmpty {
+      return trimmedName
+    }
+    switch repository.sourceKind {
+    case .existingPath, .localRepository, .bareRepository:
+      if let localSourceURL = repository.localSourceURL {
+        return Repository.name(for: localSourceURL)
+      }
+    case .remote:
+      let source = repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+      let lastPathComponent =
+        source
+        .split(separator: "/")
+        .last
+        .map(String.init)?
+        .replacing(".git", with: "")
+      if let lastPathComponent, !lastPathComponent.isEmpty {
+        return lastPathComponent
+      }
+    }
+    return ""
   }
 
   private static func sanitizedWorkspaceComponent(_ value: String) -> String {

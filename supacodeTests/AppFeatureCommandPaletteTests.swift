@@ -373,19 +373,20 @@ struct AppFeatureCommandPaletteTests {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
-    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
-      TextState("Unable to create workspace")
-    } actions: {
-      ButtonState(role: .cancel) {
-        TextState("OK")
-      }
-    } message: {
-      TextState("Open at least two repositories to create a workspace.")
-    }
 
     await store.send(.commandPalette(.delegate(.newWorkspace)))
     await store.receive(\.repositories.workspaceCreation.promptRequested) {
-      $0.repositories.alert = expectedAlert
+      let title = "Workspace"
+      let expectedRootPath = SupacodePaths.workspacesDirectory
+        .appending(path: ProjectWorkspace.defaultWorkspaceFolderName(for: title), directoryHint: .isDirectory)
+        .standardizedFileURL
+        .path(percentEncoded: false)
+      $0.repositories.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+        repositories: [],
+        title: title,
+        rootPath: expectedRootPath,
+        selectedRepositoryIDs: []
+      )
     }
   }
 
