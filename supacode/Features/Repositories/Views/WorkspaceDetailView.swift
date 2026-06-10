@@ -62,46 +62,7 @@ struct WorkspaceDetailView: View {
     VStack(alignment: .leading, spacing: 8) {
       Text("Repositories")
         .font(.headline)
-      if workspace.repositories.isEmpty {
-        Text("No repositories are declared in this workspace metadata.")
-          .font(.callout)
-          .foregroundStyle(.secondary)
-      } else {
-        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-          GridRow {
-            tableHeader("Name")
-            tableHeader("Role")
-            tableHeader("Branch")
-            tableHeader("Path")
-          }
-          Divider()
-            .gridCellUnsizedAxes(.horizontal)
-          ForEach(workspace.repositories) { entry in
-            GridRow(alignment: .firstTextBaseline) {
-              Text(entry.name)
-                .font(.subheadline.weight(.medium))
-              Text(entry.role ?? " ")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-              Text(entry.branchName ?? entry.baseRef ?? " ")
-                .font(.subheadline.monospaced())
-                .foregroundStyle(.secondary)
-              Text(entry.resolvedURL(relativeTo: repository.rootURL).path(percentEncoded: false))
-                .font(.subheadline.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-            }
-          }
-        }
-      }
+      WorkspaceRepositoriesGridView(workspace: workspace, rootURL: repository.rootURL)
     }
-  }
-
-  private func tableHeader(_ title: String) -> some View {
-    Text(title)
-      .font(.caption.weight(.semibold))
-      .foregroundStyle(.tertiary)
   }
 }

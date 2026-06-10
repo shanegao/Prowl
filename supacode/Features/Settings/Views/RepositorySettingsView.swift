@@ -96,6 +96,42 @@ struct RepositorySettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
 
+      if let workspace = store.workspace {
+        Section {
+          VStack(alignment: .leading, spacing: 12) {
+            if !workspace.description.isEmpty {
+              Text(workspace.description)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            }
+            if !workspace.taskLinks.isEmpty {
+              VStack(alignment: .leading, spacing: 4) {
+                ForEach(workspace.taskLinks, id: \.self) { link in
+                  Text(link)
+                    .font(.subheadline.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                }
+              }
+            }
+            WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        } header: {
+          Text("Workspace")
+        } footer: {
+          Text(
+            "Read-only. Defined in "
+              + "\(ProjectWorkspace.metadataURL(for: store.rootURL).path(percentEncoded: false)) "
+              + "— edit that file to change it."
+          )
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+        }
+      }
+
       if store.showsWorktreeSettings {
         Section {
           if store.isBranchDataLoaded {

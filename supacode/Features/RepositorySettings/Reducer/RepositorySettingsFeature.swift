@@ -12,6 +12,7 @@ struct RepositorySettingsFeature {
     /// callers (AppFeature) always pass the canonical `repository.id`.
     var repositoryID: Repository.ID = ""
     var repositoryKind: Repository.Kind
+    var workspace: ProjectWorkspace?
     var settings: RepositorySettings
     var userSettings: UserRepositorySettings
     var appearance: RepositoryAppearance = .empty

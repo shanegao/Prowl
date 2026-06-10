@@ -99,6 +99,10 @@ skipped instead of blocking the deletion.
 
 ## Metadata
 
+The workspace's repository settings page (Settings → the workspace under
+Repositories) shows this metadata read-only; edit `.prowl/workspace.json` to
+change it.
+
 Example `.prowl/workspace.json`:
 
 ```json
