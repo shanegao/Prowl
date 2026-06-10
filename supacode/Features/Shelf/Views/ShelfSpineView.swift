@@ -609,9 +609,6 @@ private struct ShelfSpineTabSlot: View {
         width: ShelfMetrics.agentStatusMarkerSize,
         height: ShelfMetrics.agentStatusMarkerSize
       )
-      .background {
-        Circle().fill(.background)
-      }
       .accessibilityHidden(true)
   }
 
