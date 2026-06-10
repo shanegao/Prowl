@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026.6.11](https://github.com/onevcat/Prowl/releases/tag/v2026.6.11)
+
+This release adds split-pane zoom controls, Shelf agent status badges, and trackpad navigation for the Shelf.
+
+### New
+
+- Hovering a split pane's drag handle now reveals a zoom button in its top-right corner. Clicking it expands that pane to fill the tab; a persistent exit button remains visible while zoomed. Press `⌘⌥⇧F` to toggle zoom from the keyboard, or use "Toggle Split Zoom" from the Command Palette.
+- Shelf spines now overlay agent status badges on their tab icons, so you can see every agent's state at a glance while flipping through the stack. Toggle via "Show agent status in Shelf tabs" in Settings.
+- Hold `⌘` and swipe on a trackpad in the Shelf: horizontal swipes flip between books, vertical swipes cycle the open book's tabs.
+
+### Fixed
+
+- The `⌘⌃←` / `⌘⌃→` keyboard shortcuts for Shelf book navigation wrap around again as expected; this had been silently broken.
+- Command Palette actions that send key bindings into a terminal pane now reliably target the pane that was focused when the palette was invoked, rather than whichever pane AppKit happened to focus by the time the action ran.
+- Agent working/idle detection now resyncs correctly when repositories are added or removed.
+
 ## [2026.6.9](https://github.com/onevcat/Prowl/releases/tag/v2026.6.9)
 
 ### New
