@@ -298,6 +298,9 @@ extension WorktreeTerminalState {
 
     case .equalize:
       updateTree(tree.equalized(), for: tabId)
+
+    case .toggleZoom(let surfaceId):
+      _ = performSplitAction(.toggleSplitZoom, for: surfaceId)
     }
   }
 

@@ -425,10 +425,96 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
 
     // Two effects run in parallel (.merge) — assert both fire without
-    // depending on dispatch order.
+    // depending on dispatch order. With no selected surface available the
+    // dispatch falls back to the focused-surface command.
     #expect(sent.value.count == 2)
     #expect(sent.value.contains(.performBindingAction(worktree, action: "goto_split:right")))
     #expect(sent.value.contains(.focusSelectedTab(worktree)))
+  }
+
+  @Test(.dependencies) func ghosttyCommandTargetsSelectedSurfaceWhenAvailable() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-ghostty/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-ghostty"
+    )
+    let repository = makeRepository(id: "/tmp/repo-ghostty", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let surfaceID = UUID()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+      $0.terminalClient.selectedSurfaceID = { _ in surfaceID }
+    }
+
+    await store.send(.commandPalette(.delegate(.ghosttyCommand("goto_split:right"))))
+    await store.finish()
+
+    #expect(sent.value.count == 2)
+    #expect(
+      sent.value.contains(
+        .performBindingActionOnSurface(worktree, surfaceID: surfaceID, action: "goto_split:right")
+      )
+    )
+    #expect(sent.value.contains(.focusSelectedTab(worktree)))
+  }
+
+  @Test(.dependencies) func ghosttyCommandCapturesSelectedSurfaceBeforeAsyncDispatch() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-ghostty/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-ghostty"
+    )
+    let repository = makeRepository(id: "/tmp/repo-ghostty", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let firstSurface = UUID()
+    let secondSurface = UUID()
+    let currentSurface = LockIsolated(firstSurface)
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+      $0.terminalClient.selectedSurfaceID = { _ in currentSurface.value }
+    }
+
+    let task = await store.send(.commandPalette(.delegate(.ghosttyCommand("toggle_split_zoom"))))
+    // Simulates the palette-dismiss focus drift: by the time the async dispatch
+    // resolves, `selectedSurfaceID` would already point at the leftmost surface.
+    currentSurface.setValue(secondSurface)
+    await task.finish()
+    await store.finish()
+
+    #expect(
+      sent.value.contains(
+        .performBindingActionOnSurface(worktree, surfaceID: firstSurface, action: "toggle_split_zoom")
+      )
+    )
+    #expect(
+      !sent.value.contains(
+        .performBindingActionOnSurface(worktree, surfaceID: secondSurface, action: "toggle_split_zoom")
+      )
+    )
   }
 
   @Test(.dependencies) func viewToggleDelegateRestoresTerminalFocusByDefault() async {

@@ -31,6 +31,7 @@ struct TerminalSplitTreeView: View {
       SubtreeView(
         node: node,
         isRoot: node == tree.root,
+        zoomedNode: tree.zoomed,
         pinnedSize: pinnedSize,
         activeSurfaceID: activeSurfaceID,
         unfocusedSplitOverlay: unfocusedSplitOverlay,
@@ -46,11 +47,13 @@ struct TerminalSplitTreeView: View {
     case resize(node: SplitTree<GhosttySurfaceView>.Node, ratio: Double)
     case drop(payloadId: UUID, destinationId: UUID, zone: DropZone)
     case equalize
+    case toggleZoom(surfaceId: UUID)
   }
 
   struct SubtreeView: View {
     let node: SplitTree<GhosttySurfaceView>.Node
     var isRoot: Bool = false
+    var zoomedNode: SplitTree<GhosttySurfaceView>.Node?
     var pinnedSize: CGSize?
     var activeSurfaceID: UUID?
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
@@ -64,6 +67,7 @@ struct TerminalSplitTreeView: View {
         LeafView(
           surfaceView: leafView,
           isSplit: !isRoot,
+          isZoomed: zoomedNode == node,
           isFocused: leafView.id == activeSurfaceID,
           unfocusedSplitOverlay: unfocusedSplitOverlay,
           hasNotification: hasNotification(leafView.id),
@@ -95,6 +99,7 @@ struct TerminalSplitTreeView: View {
           left: {
             SubtreeView(
               node: split.left,
+              zoomedNode: zoomedNode,
               pinnedSize: leftPinned,
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
@@ -106,6 +111,7 @@ struct TerminalSplitTreeView: View {
           right: {
             SubtreeView(
               node: split.right,
+              zoomedNode: zoomedNode,
               pinnedSize: rightPinned,
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
@@ -136,6 +142,7 @@ struct TerminalSplitTreeView: View {
   struct LeafView: View {
     let surfaceView: GhosttySurfaceView
     let isSplit: Bool
+    var isZoomed: Bool = false
     var isFocused: Bool = true
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
     let hasNotification: Bool
@@ -143,6 +150,8 @@ struct TerminalSplitTreeView: View {
     let action: (Operation) -> Void
 
     @State private var dropState: DropState = .idle
+    @State private var isHandleHovering = false
+    @State private var isZoomButtonHovering = false
     @Shared(.settingsFile) private var settingsFile: SettingsFile
 
     private var shouldDim: Bool {
@@ -180,7 +189,20 @@ struct TerminalSplitTreeView: View {
           }
           .overlay(alignment: .top) {
             if isSplit {
-              DragHandle(surfaceView: surfaceView)
+              DragHandle(surfaceView: surfaceView, isHovering: $isHandleHovering)
+            }
+          }
+          .overlay(alignment: .topTrailing) {
+            // The zoomed pane keeps a persistent exit button; other panes only
+            // reveal the zoom affordance while the drag handle (or the button
+            // itself, to survive the cursor hand-off) is hovered.
+            if isSplit, isZoomed || isHandleHovering || isZoomButtonHovering {
+              SplitZoomButton(isZoomed: isZoomed) {
+                action(.toggleZoom(surfaceId: surfaceView.id))
+              }
+              .onHover { isZoomButtonHovering = $0 }
+              .onDisappear { isZoomButtonHovering = false }
+              .padding(6)
             }
           }
           .background {
@@ -206,10 +228,39 @@ struct TerminalSplitTreeView: View {
 
   }
 
+  struct SplitZoomButton: View {
+    let isZoomed: Bool
+    let action: () -> Void
+    @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+
+    var body: some View {
+      Button(action: action) {
+        Image(
+          systemName: isZoomed
+            ? "arrow.down.right.and.arrow.up.left"
+            : "arrow.up.left.and.arrow.down.right"
+        )
+        .font(.callout.weight(.semibold))
+        .foregroundStyle(.primary)
+        .padding(5)
+        .background(.regularMaterial, in: .rect(cornerRadius: 6))
+      }
+      .buttonStyle(.plain)
+      .help(
+        AppShortcuts.helpText(
+          title: isZoomed ? "Exit Split Zoom" : "Zoom Split",
+          commandID: AppShortcuts.CommandID.toggleSplitZoom,
+          in: resolvedKeybindings
+        )
+      )
+      .accessibilityLabel(isZoomed ? "Exit split zoom" : "Zoom split")
+    }
+  }
+
   struct DragHandle: View {
     let surfaceView: GhosttySurfaceView
+    @Binding var isHovering: Bool
     private let handleHeight: CGFloat = 10
-    @State private var isHovering = false
 
     var body: some View {
       Rectangle()

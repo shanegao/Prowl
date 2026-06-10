@@ -282,6 +282,7 @@ struct AppShortcutsTests {
       "--keybind=alt+super+arrow_down=goto_split:down",
       "--keybind=alt+super+arrow_left=goto_split:left",
       "--keybind=alt+super+arrow_right=goto_split:right",
+      "--keybind=alt+shift+super+f=toggle_split_zoom",
     ] {
       #expect(arguments.contains(argument))
     }

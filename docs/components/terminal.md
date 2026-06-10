@@ -49,12 +49,17 @@ Splitting is handled by Ghostty actions (bind/keys in your Ghostty config):
 | Focus adjacent pane | `goto_split:left/right/up/down`, or the app shortcuts below |
 | Resize split | `resize_split:<dir>:<px>` |
 | Equalize splits | `equalize_splits` |
-| Zoom / maximize a pane | `toggle_split_zoom` |
+| Zoom / maximize a pane | `toggle_split_zoom` (app default `⌘⌥⇧F`) |
 | Close a pane | `close_surface` (Terminal menu → **Close Terminal**) |
 
 App-level pane navigation (works inside the terminal too): `⌘[` / `⌘]` previous /
-next pane, `⌘⌥↑/↓/←/→` for directional pane focus. Shelf spines also expose
-**split vertical / split horizontal** buttons on the open book.
+next pane, `⌘⌥↑/↓/←/→` for directional pane focus, `⌘⌥⇧F` to zoom / unzoom the
+focused pane. Shelf spines also expose **split vertical / split horizontal**
+buttons on the open book.
+
+Zoom also has a mouse affordance: hovering a pane's top drag handle reveals a
+zoom button in the pane's top-right corner, and a zoomed pane keeps a persistent
+exit-zoom button in the same spot so it's always clear how to leave zoom.
 
 ## Tab titles — important caveat
 

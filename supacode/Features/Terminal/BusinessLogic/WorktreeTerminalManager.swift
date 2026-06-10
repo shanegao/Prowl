@@ -140,6 +140,8 @@ final class WorktreeTerminalManager {
     switch command {
     case .performBindingAction(let worktree, let action):
       state(for: worktree).performBindingActionOnFocusedSurface(action)
+    case .performBindingActionOnSurface(let worktree, let surfaceID, let action):
+      state(for: worktree).performBindingAction(action, onSurfaceID: surfaceID)
     default:
       return false
     }

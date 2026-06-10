@@ -86,6 +86,7 @@ pane has focus. The Ghostty action each maps to is shown for reference.
 | Select Pane Down | ⌘⌥↓ | `select_terminal_pane_down` | `goto_split:down` |
 | Select Pane Left | ⌘⌥← | `select_terminal_pane_left` | `goto_split:left` |
 | Select Pane Right | ⌘⌥→ | `select_terminal_pane_right` | `goto_split:right` |
+| Toggle Split Zoom | ⌘⌥⇧F | `toggle_split_zoom` | `toggle_split_zoom` |
 
 ## Terminal engine (Ghostty-managed)
 

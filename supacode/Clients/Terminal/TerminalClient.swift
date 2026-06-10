@@ -5,6 +5,10 @@ struct TerminalClient {
   var send: @MainActor @Sendable (Command) -> Void
   var events: @MainActor @Sendable () -> AsyncStream<Event>
   var canvasFocusedWorktreeID: @MainActor @Sendable () -> Worktree.ID?
+  /// Active surface in the selected tab. Lets the reducer capture the target
+  /// synchronously before an async dispatch races against AppKit focus reshuffle
+  /// (e.g. when a palette dismisses and the leftmost pane reclaims first responder).
+  var selectedSurfaceID: @MainActor @Sendable (Worktree.ID) -> UUID?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
@@ -36,6 +40,7 @@ struct TerminalClient {
     case closeFocusedTab(Worktree)
     case closeFocusedSurface(Worktree)
     case performBindingAction(Worktree, action: String)
+    case performBindingActionOnSurface(Worktree, surfaceID: UUID, action: String)
     case startSearch(Worktree)
     case searchSelection(Worktree)
     case navigateSearchNext(Worktree)
@@ -77,6 +82,7 @@ extension TerminalClient: DependencyKey {
     send: { _ in fatalError("TerminalClient.send not configured") },
     events: { fatalError("TerminalClient.events not configured") },
     canvasFocusedWorktreeID: { nil },
+    selectedSurfaceID: { _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
@@ -87,6 +93,7 @@ extension TerminalClient: DependencyKey {
     send: { _ in },
     events: { AsyncStream { $0.finish() } },
     canvasFocusedWorktreeID: { nil },
+    selectedSurfaceID: { _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },

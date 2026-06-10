@@ -151,6 +151,7 @@ enum AppShortcuts {
     static let selectTerminalPaneDown = "select_terminal_pane_down"
     static let selectTerminalPaneLeft = "select_terminal_pane_left"
     static let selectTerminalPaneRight = "select_terminal_pane_right"
+    static let toggleSplitZoom = "toggle_split_zoom"
   }
 
   enum Scope: String {
@@ -287,6 +288,9 @@ enum AppShortcuts {
   static let selectTerminalPaneRight = AppShortcut(
     keyEquivalent: .rightArrow, ghosttyKeyName: "arrow_right", modifiers: [.command, .option]
   )
+  // ⌘⌃F is the system fullscreen toggle and ⌘⇧F is reserved for a future
+  // focus mode, so split zoom takes the heavier chord on purpose.
+  static let toggleSplitZoom = AppShortcut(key: "f", modifiers: [.command, .option, .shift])
   static let renameBranch = AppShortcut(key: "m", modifiers: [.command, .shift])
   static let selectAllCanvasCards = AppShortcut(key: "a", modifiers: [.command, .option])
   static let arrangeCanvasCards = AppShortcut(key: "r", modifiers: [.command, .option])
@@ -370,6 +374,7 @@ enum AppShortcuts {
     .init(actionTitle: "Select Pane Down", shortcut: selectTerminalPaneDown),
     .init(actionTitle: "Select Pane Left", shortcut: selectTerminalPaneLeft),
     .init(actionTitle: "Select Pane Right", shortcut: selectTerminalPaneRight),
+    .init(actionTitle: "Toggle Split Zoom", shortcut: toggleSplitZoom),
   ]
 
   static let bindings: [Binding] = [
@@ -734,6 +739,12 @@ enum AppShortcuts {
       shortcut: selectTerminalPaneRight
     ),
     .init(
+      id: CommandID.toggleSplitZoom,
+      title: "Toggle Split Zoom",
+      scope: .configurableAppAction,
+      shortcut: toggleSplitZoom
+    ),
+    .init(
       id: CommandID.commandPalette,
       title: "Command Palette",
       scope: .configurableAppAction,
@@ -884,6 +895,7 @@ enum AppShortcuts {
     (CommandID.selectTerminalPaneDown, "goto_split:down"),
     (CommandID.selectTerminalPaneLeft, "goto_split:left"),
     (CommandID.selectTerminalPaneRight, "goto_split:right"),
+    (CommandID.toggleSplitZoom, "toggle_split_zoom"),
   ]
 
   static func ghosttyCLIKeybindArguments(from resolvedKeybindings: ResolvedKeybindingMap) -> [String] {
@@ -981,6 +993,7 @@ enum AppShortcuts {
     selectTerminalPaneDown,
     selectTerminalPaneLeft,
     selectTerminalPaneRight,
+    toggleSplitZoom,
   ]
 }
 
