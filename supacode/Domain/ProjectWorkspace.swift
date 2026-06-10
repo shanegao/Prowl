@@ -70,22 +70,13 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     }
   }
 
-  nonisolated static let commonRemoteBaseRefOptions = ["main", "master", "origin/main", "origin/master"]
-
   nonisolated static func baseRefOptions(
     automaticBaseRef: String?,
-    refs: [String],
-    sourceKind: ProjectWorkspaceRepositorySourceKind
+    refs: [String]
   ) -> [String] {
     var values: [String] = []
     if let automaticBaseRef {
       values.append(automaticBaseRef)
-    }
-    switch sourceKind {
-    case .remote:
-      values += commonRemoteBaseRefOptions
-    case .existingPath, .localRepository, .bareRepository:
-      values += ["main", "master", "origin/main", "origin/master"]
     }
     values += refs
     return normalizedBaseRefOptions(values)

@@ -83,10 +83,7 @@ struct WorkspaceCreationPromptFeature {
             id: id,
             name: "",
             sourceKind: sourceKind,
-            sourceLocation: "",
-            baseRefOptions: sourceKind == .remote
-              ? ProjectWorkspaceCreationRepository.commonRemoteBaseRefOptions
-              : []
+            sourceLocation: ""
           )
         )
         state.selectedRepositoryIDs.insert(id)
@@ -133,10 +130,9 @@ struct WorkspaceCreationPromptFeature {
           return .none
         }
         repository.sourceKind = sourceKind
+        repository.baseRef = nil
         if sourceKind == .remote {
           repository.sourceLocation = ""
-          repository.baseRef = nil
-          repository.baseRefOptions = ProjectWorkspaceCreationRepository.commonRemoteBaseRefOptions
         } else {
           repository.baseRefOptions = []
         }
@@ -170,6 +166,7 @@ struct WorkspaceCreationPromptFeature {
         if repository.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
           repository.name = Repository.name(for: URL(fileURLWithPath: rootPath))
         }
+        repository.baseRef = nil
         repository.baseRefOptions = []
         state.repositories[id: repositoryID] = repository
         state.validationMessage = nil
@@ -186,7 +183,15 @@ struct WorkspaceCreationPromptFeature {
         return .none
 
       case .repositoryBaseRefChanged(let repositoryID, let baseRef):
-        state.repositories[id: repositoryID]?.baseRef = baseRef
+        guard var repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        let trimmed = baseRef.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty || repository.baseRefOptions.contains(trimmed) else {
+          return .none
+        }
+        repository.baseRef = trimmed.isEmpty ? nil : trimmed
+        state.repositories[id: repositoryID] = repository
         state.validationMessage = nil
         return .none
 

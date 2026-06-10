@@ -604,10 +604,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.workspaceCreation.baseRefsLoaded) {
       $0.workspaceCreationPrompt?.repositories[id: "/tmp/repo-a"]?.baseRef = "master"
       $0.workspaceCreationPrompt?.repositories[id: "/tmp/repo-a"]?.baseRefOptions = [
-        "master",
-        "main",
-        "origin/main",
-        "origin/master",
+        "master"
       ]
     }
   }
@@ -662,17 +659,13 @@ struct RepositoriesFeatureTests {
       $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRef = "main"
       $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRefOptions = [
         "main",
-        "master",
         "origin/main",
-        "origin/master",
       ]
     }
     await store.receive(\.workspaceCreation.baseRefsLoaded) {
       $0.workspaceCreationPrompt?.repositories[id: repoRootB]?.baseRef = "master"
       $0.workspaceCreationPrompt?.repositories[id: repoRootB]?.baseRefOptions = [
         "master",
-        "main",
-        "origin/main",
         "origin/master",
       ]
     }
@@ -740,8 +733,7 @@ struct RepositoriesFeatureTests {
           id: UUID(0).uuidString,
           name: "",
           sourceKind: .remote,
-          sourceLocation: "",
-          baseRefOptions: ProjectWorkspaceCreationRepository.commonRemoteBaseRefOptions
+          sourceLocation: ""
         )
       ]
       $0.selectedRepositoryIDs = [UUID(0).uuidString]
@@ -769,6 +761,39 @@ struct RepositoriesFeatureTests {
       $0.selectedRepositoryIDs = [UUID(0).uuidString, UUID(1).uuidString]
     }
     await store.receive(.delegate(.baseRefSourceChanged(UUID(1).uuidString)))
+  }
+
+  @Test func workspaceCreationPromptRejectsUnknownBaseRef() async {
+    let repoRootA = "/tmp/repo-a"
+    let repoRootB = "/tmp/repo-b"
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [
+          ProjectWorkspaceCreationRepository(
+            id: repoRootA,
+            name: "Repo A",
+            rootURL: URL(fileURLWithPath: repoRootA),
+            baseRefOptions: ["main"]
+          ),
+          ProjectWorkspaceCreationRepository(
+            id: repoRootB,
+            name: "Repo B",
+            rootURL: URL(fileURLWithPath: repoRootB),
+            baseRefOptions: ["master"]
+          ),
+        ],
+        title: "Workspace",
+        rootPath: "/tmp/workspace",
+        selectedRepositoryIDs: [repoRootA, repoRootB]
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.repositoryBaseRefChanged(repoRootA, "missing-branch"))
+    await store.send(.repositoryBaseRefChanged(repoRootA, "main")) {
+      $0.repositories[id: repoRootA]?.baseRef = "main"
+    }
   }
 
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {

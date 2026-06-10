@@ -252,27 +252,21 @@ struct WorkspaceCreationPromptView: View {
       .textFieldStyle(.roundedBorder)
       .disabled(store.isCreating)
 
-      TextField(
+      Picker(
         "Base ref",
-        text: Binding(
+        selection: Binding(
           get: { repository.baseRef ?? "" },
           set: { store.send(.repositoryBaseRefChanged(repository.id, $0)) }
         )
-      )
-      .textFieldStyle(.roundedBorder)
-      .disabled(store.isCreating)
-
-      Menu {
+      ) {
+        Text("Base ref").tag("")
         ForEach(repository.baseRefOptions, id: \.self) { option in
-          Button(option) {
-            store.send(.repositoryBaseRefChanged(repository.id, option))
-          }
+          Text(option).tag(option)
         }
-      } label: {
-        Image(systemName: "chevron.down")
-          .accessibilityLabel("Choose Base Ref")
       }
-      .buttonStyle(.borderless)
+      .pickerStyle(.menu)
+      .labelsHidden()
+      .frame(maxWidth: .infinity, alignment: .leading)
       .help("Choose Base Ref")
       .disabled(store.isCreating || repository.baseRefOptions.isEmpty)
     }

@@ -47,9 +47,10 @@ Repository sources can be mixed in one workspace:
 
 The creation prompt detects base-ref candidates for already opened, local, and
 bare repositories by reading local git refs, preferring the detected default
-branch such as `main` or `master`. Remote clone entries show common base-ref
-candidates (`main`, `master`, `origin/main`, `origin/master`) without probing
-the network; you can choose one from the menu or type any ref manually.
+branch such as `main` or `master`. Base refs are selected from detected refs so
+workspace creation does not try to checkout an arbitrary, nonexistent branch.
+Remote clone entries can be created without a base ref; after cloning, a branch
+name without an explicit base is created from the repository's default checkout.
 
 ## Metadata
 
