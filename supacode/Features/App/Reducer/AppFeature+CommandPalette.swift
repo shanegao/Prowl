@@ -42,6 +42,9 @@ extension AppFeature {
     if let effect = reduceCommandPaletteWorktreeActionDelegate(delegate, state: &state) {
       return effect
     }
+    if let effect = reduceCommandPaletteHandoffDelegate(delegate, state: &state) {
+      return effect
+    }
     if let effect = reduceCommandPalettePullRequestDelegate(delegate) {
       return effect
     }
@@ -272,6 +275,40 @@ extension AppFeature {
 
     default:
       return nil
+    }
+  }
+
+  func reduceCommandPaletteHandoffDelegate(
+    _ delegate: CommandPaletteFeature.Delegate,
+    state: inout State
+  ) -> Effect<Action>? {
+    guard case .handoffToAgent(let agent) = delegate else { return nil }
+    // Hand off the current workspace task to the other agent: refresh + archive
+    // the handoff artifact, then launch the receiving agent in a new tab whose
+    // kickoff points at `.prowl/handoff/current.md`. Mirrors `prowl handoff to`.
+    guard let worktree = state.repositories.selectedTerminalWorktree else {
+      return .none
+    }
+    let outgoing = state.repositories.activeAgents.entries
+      .first { $0.worktreeID == worktree.id }?.agent.rawValue
+    let kickoff = HandoffCommandHandler.kickoff(for: agent)
+    let rootURL = worktree.workingDirectory
+    return .run { _ in
+      let store = HandoffStore(rootURL: rootURL)
+      let now = Date()
+      _ = try? store.save(outgoingAgent: outgoing, note: nil, now: now)
+      _ = try? store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
+      try? store.appendLog("\(outgoing ?? "agent") → \(agent)  (command palette)", now: now)
+      await terminalClient.send(
+        .createTabWithInput(
+          worktree,
+          input: kickoff,
+          runSetupScriptIfNew: false,
+          autoCloseOnSuccess: false,
+          customCommandName: "Hand off → \(agent)",
+          customCommandIcon: nil
+        )
+      )
     }
   }
 

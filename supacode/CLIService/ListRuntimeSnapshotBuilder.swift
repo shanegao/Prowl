@@ -34,7 +34,8 @@ enum ListRuntimeSnapshotBuilder {
           ListRuntimeSnapshot.Pane(
             id: paneSnapshot.id,
             title: paneSnapshot.title,
-            cwd: normalizeAbsolutePath(paneSnapshot.cwd)
+            cwd: normalizeAbsolutePath(paneSnapshot.cwd),
+            agent: paneSnapshot.agent
           )
         }
 

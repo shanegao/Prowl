@@ -172,6 +172,55 @@ public struct TabInput: Codable, Sendable {
   }
 }
 
+public enum HandoffAction: String, Codable, Sendable {
+  case save
+  case toAgent = "to"
+  case status
+}
+
+public struct HandoffInput: Codable, Sendable {
+  public let action: HandoffAction
+  public let selector: TargetSelector
+  /// Target agent for `to` (e.g. "claude", "codex"). Required for `.to`, nil otherwise.
+  public let toAgent: String?
+  /// Optional free-text note appended to the handoff log.
+  public let note: String?
+  /// When false, `to` refreshes + archives the handoff but does not launch the
+  /// receiving agent (the human takes over manually).
+  public let launch: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case action
+    case selector
+    case toAgent = "to_agent"
+    case note
+    case launch
+  }
+
+  public init(
+    action: HandoffAction,
+    selector: TargetSelector = .none,
+    toAgent: String? = nil,
+    note: String? = nil,
+    launch: Bool = true
+  ) {
+    self.action = action
+    self.selector = selector
+    self.toAgent = toAgent
+    self.note = note
+    self.launch = launch
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.action = try container.decode(HandoffAction.self, forKey: .action)
+    self.selector = try container.decode(TargetSelector.self, forKey: .selector)
+    self.toAgent = try container.decodeIfPresent(String.self, forKey: .toAgent)
+    self.note = try container.decodeIfPresent(String.self, forKey: .note)
+    self.launch = try container.decodeIfPresent(Bool.self, forKey: .launch) ?? true
+  }
+}
+
 public enum PaneAction: String, Codable, Sendable {
   case close
 }

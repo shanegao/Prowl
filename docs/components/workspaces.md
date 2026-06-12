@@ -211,3 +211,11 @@ git -C shared-package status
 
 Use the metadata as the contract: it tells the agent which repos are in scope,
 where they are on disk, and what role each repo plays in the task.
+
+## Handing off between agents
+
+A workspace is the natural unit for handing a task from Codex to Claude Code (or
+back). Prowl keeps a durable handoff artifact under
+`.prowl/handoff/current.md` and ships `prowl handoff to <claude|codex>` plus
+command-palette actions to refresh it and launch the receiving agent. See
+[handoff](handoff.md).

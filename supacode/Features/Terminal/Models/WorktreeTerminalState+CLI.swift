@@ -18,6 +18,7 @@ struct CLITerminalPaneSnapshot: Sendable {
   let id: UUID
   let title: String
   let cwd: String?
+  let agent: String?
 }
 
 extension WorktreeTerminalState {
@@ -33,7 +34,8 @@ extension WorktreeTerminalState {
         ).workingDirectory?.path(percentEncoded: false)
 
         let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.displayTitle)
-        return CLITerminalPaneSnapshot(id: paneID, title: title, cwd: cwd)
+        let agent = surfaceAgentStates[paneID]?.detectedAgent?.rawValue
+        return CLITerminalPaneSnapshot(id: paneID, title: title, cwd: cwd, agent: agent)
       }
 
       return CLITerminalTabSnapshot(

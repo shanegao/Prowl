@@ -612,6 +612,55 @@ struct SupacodeApp: App {
         )
       }
     )
+    let handoffHandler = HandoffCommandHandler(
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+        return resolver.resolve(selector).map { resolved in
+          let agent = terminalManager.stateIfExists(for: resolved.worktreeID)?
+            .surfaceAgentStates[resolved.paneID]?.detectedAgent?.rawValue
+          return HandoffResolvedTarget(
+            worktreeID: resolved.worktreeID,
+            worktreeName: resolved.worktreeName,
+            rootPath: resolved.worktreeRootPath,
+            paneID: resolved.paneID.uuidString,
+            outgoingAgent: agent
+          )
+        }
+      },
+      launchProvider: { target, kickoff in
+        let repositories = Array(appStore.state.repositories.repositories)
+        guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
+          return nil
+        }
+        selectCLIWorktreeContext(
+          worktreeID: target.worktreeID,
+          appStore: appStore,
+          terminalManager: terminalManager
+        )
+        let state = terminalManager.state(for: worktree)
+        guard let tabID = state.createTab(initialInput: kickoff) else {
+          return nil
+        }
+        let resolver = makeTargetResolver(appStore: appStore, terminalManager: terminalManager)
+        switch resolver.resolve(.tab(tabID.rawValue.uuidString)) {
+        case .success(let resolved):
+          return HandoffLaunchedPane(
+            worktreeID: resolved.worktreeID,
+            worktreeName: resolved.worktreeName,
+            tabID: resolved.tabID.uuidString,
+            paneID: resolved.paneID.uuidString,
+            paneTitle: resolved.paneTitle
+          )
+        case .failure:
+          return nil
+        }
+      }
+    )
     return CLICommandRouter(
       openHandler: openHandler,
       listHandler: listHandler,
@@ -621,7 +670,8 @@ struct SupacodeApp: App {
       keyHandler: keyHandler,
       readHandler: readHandler,
       tabHandler: tabHandler,
-      paneHandler: paneHandler
+      paneHandler: paneHandler,
+      handoffHandler: handoffHandler
     )
   }
 

@@ -76,12 +76,16 @@ public struct ListCommandPane: Codable, Equatable {
   public let title: String
   public let cwd: String?
   public let focused: Bool
+  /// The coding agent detected in this pane (e.g. "claude", "codex"), or nil if none.
+  /// Stable machine token (`DetectedAgent.rawValue`); useful for handoff orchestration.
+  public let agent: String?
 
-  public init(id: String, title: String, cwd: String?, focused: Bool) {
+  public init(id: String, title: String, cwd: String?, focused: Bool, agent: String? = nil) {
     self.id = id
     self.title = title
     self.cwd = cwd
     self.focused = focused
+    self.agent = agent
   }
 }
 

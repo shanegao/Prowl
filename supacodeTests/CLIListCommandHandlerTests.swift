@@ -27,12 +27,14 @@ struct CLIListCommandHandlerTests {
                   .init(
                     id: UUID(uuidString: "1344AEF5-3BA6-4B75-A07E-1F36C63A34B0")!,
                     title: "tests",
-                    cwd: "/Users/onevcat/Projects/Prowl"
+                    cwd: "/Users/onevcat/Projects/Prowl",
+                    agent: "codex"
                   ),
                   .init(
                     id: UUID(uuidString: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764")!,
                     title: "build",
-                    cwd: "/Users/onevcat/Projects/Prowl"
+                    cwd: "/Users/onevcat/Projects/Prowl",
+                    agent: nil
                   ),
                 ]
               )
@@ -55,7 +57,8 @@ struct CLIListCommandHandlerTests {
                   .init(
                     id: UUID(uuidString: "EF65FF31-1B72-40B2-80DA-3AA87B7B6858")!,
                     title: "notes",
-                    cwd: "/Users/onevcat/Projects/Notes"
+                    cwd: "/Users/onevcat/Projects/Notes",
+                    agent: nil
                   )
                 ]
               )
@@ -90,6 +93,10 @@ struct CLIListCommandHandlerTests {
 
     #expect(payload.items[0].task.status == .running)
     #expect(payload.items[2].task.status == .idle)
+
+    // Detected agent flows through to the payload.
+    #expect(payload.items[0].pane.agent == "codex")
+    #expect(payload.items[1].pane.agent == nil)
   }
 
   @Test func returnsListFailedWhenSnapshotProviderThrows() async {

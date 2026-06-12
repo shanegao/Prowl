@@ -23,6 +23,7 @@ struct ListRuntimeSnapshot: Sendable {
     let id: UUID
     let title: String
     let cwd: String?
+    let agent: String?
   }
 
   let worktrees: [Worktree]
@@ -97,7 +98,8 @@ final class ListCommandHandler: CommandHandler {
                 id: pane.id.uuidString,
                 title: pane.title,
                 cwd: pane.cwd,
-                focused: isFocused
+                focused: isFocused,
+                agent: pane.agent
               ),
               task: ListCommandTask(status: worktree.taskStatus)
             )
