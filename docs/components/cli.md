@@ -224,23 +224,24 @@ launch the receiving agent. Centred on [workspaces](workspaces.md), but works fo
 any runnable target. Three subcommands:
 
 ```bash
-prowl handoff save   [target] [--note "…"]              # refresh the auto context appendix
-prowl handoff to <claude|codex> [target] [--note "…"] [--no-launch]
-prowl handoff status [target]
+prowl handoff save       [target] [--note "…"]              # refresh appendix + session excerpt
+prowl handoff to <agent> [target] [--note "…"] [--no-launch]
+prowl handoff status     [target]
 ```
 
 - **`save`** — refresh the `## Context Appendix (auto)` block in
   `.prowl/handoff/current.md` from live git state (per-repo branch + change
-  counts, changed-file list, detected outgoing agent) and append a line to
-  `.prowl/handoff/log.md`. It only rewrites the auto block between the
-  `PROWL AUTOGEN` markers; the agent-authored prose sections are left untouched.
-  Seeds `current.md` from a template on first run.
-- **`to <claude|codex>`** — `save`, then archive the current artifact to
+  counts, changed-file list, detected outgoing agent, and captured session
+  excerpt) and append a line to `.prowl/handoff/log.md`. It only rewrites the
+  auto block between the `PROWL AUTOGEN` markers; the agent-authored prose
+  sections are left untouched. Seeds `current.md` from a template on first run.
+- **`to <agent>`** — `save`, then archive the current artifact to
   `.prowl/handoff/archive/<ts>-<from>-to-<to>.md`, then launch the receiving
   agent in a **new tab** whose kickoff prompt points it at
   `.prowl/handoff/current.md`. Returns the launched `pane`. `--no-launch`
-  archives + saves only (you take over manually). Only `claude` and `codex` are
-  accepted.
+  archives + saves only (you take over manually). Accepted tokens match Prowl's
+  detected-agent list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`,
+  `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`.
 - **`status`** — report the artifact path, whether it exists, the agent
   currently detected in the target, and the last handoff-log line.
 
@@ -252,7 +253,7 @@ prowl handoff save --note "ui done, api next" --json
 The outgoing agent is whatever Prowl detects in the target's pane (see
 `pane.agent` in [`list`](#prowl-list)). Response payload includes `action`,
 `artifact_path`, `outgoing_agent`, `to_agent`, `repos`, `changed_file_count`,
-`archived_path`, and `launched_pane`. Full feature guide:
+`archived_path`, `session_context`, and `launched_pane`. Full feature guide:
 [handoff](handoff.md).
 
 ## Transport & app launch

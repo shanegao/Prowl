@@ -45,7 +45,7 @@ struct HandoffToCommand: ParsableCommand {
     abstract: "Save + archive the handoff, then launch the receiving agent in a new tab."
   )
 
-  @Argument(help: "The agent to hand off to: claude or codex.")
+  @Argument(help: "The agent to hand off to. Supported: \(HandoffAgentSupport.supportedAgentsDescription).")
   var agent: String
 
   @OptionGroup var selector: SelectorOptions
@@ -59,11 +59,11 @@ struct HandoffToCommand: ParsableCommand {
 
   mutating func run() throws {
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
-      let normalizedAgent = agent.lowercased()
-      guard ["claude", "codex"].contains(normalizedAgent) else {
+      let rawAgent = agent.lowercased()
+      guard let normalizedAgent = HandoffAgentSupport.normalize(rawAgent) else {
         throw ExitError(
           code: CLIErrorCode.invalidArgument,
-          message: "handoff to requires an agent of: claude, codex."
+          message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
         )
       }
       let envelope = CommandEnvelope(

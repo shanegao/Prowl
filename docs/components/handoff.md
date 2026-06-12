@@ -1,8 +1,8 @@
-# Handoff — Codex ↔ Claude Code
+# Handoff — Agent To Agent
 
 > How to hand a task off between coding agents inside a Prowl workspace: a durable
-> artifact both agents read and write, the `prowl handoff` command, and a
-> command-palette action.
+> artifact agents read and write, an auto-captured session excerpt, the
+> `prowl handoff` command, and a command-palette action.
 
 **Keywords:** handoff, hand off, codex, claude, switch agent, takeover, `.prowl/handoff`, current.md, prowl handoff, cross-agent, workspace
 
@@ -10,11 +10,11 @@
 
 ## Why
 
-Codex and Claude Code are independent processes; each keeps its own conversation
-context. When you switch from one to the other, the first agent's in-memory
-context is **not** visible to the second. The only durable channel between them is
-the filesystem. Handoff makes that channel a first-class, structured artifact so
-the receiving agent (or you) can resume cold.
+Coding agents are independent processes; each keeps its own conversation
+context. When you switch from one to another, the first agent's in-memory context
+is **not** visible to the second. The only durable channel between them is the
+filesystem. Handoff makes that channel a first-class, structured artifact so the
+receiving agent (or you) can resume cold.
 
 Handoff is centred on [workspaces](workspaces.md) — one task, several repos, a
 shared root — but works for any runnable target.
@@ -28,6 +28,7 @@ Everything lives under the target's `.prowl/handoff/` directory:
   current.md            active handoff artifact (the cross-agent contract)
   log.md                append-only handoff history
   archive/<ts>-<from>-to-<to>.md
+  sessions/<ts>-<pane>.md
 ```
 
 `current.md` has two parts:
@@ -37,9 +38,13 @@ Everything lives under the target's `.prowl/handoff/` directory:
   outgoing agent maintains these; they carry intent and decisions.
 - **A Prowl-generated `## Context Appendix (auto)`** between
   `<!-- BEGIN PROWL AUTOGEN … -->` / `<!-- END PROWL AUTOGEN -->` markers — the
-  detected outgoing agent, each repo's branch and change counts, and the changed
-  files. Prowl regenerates *only* this block on every `save`; it never touches
-  the prose.
+  detected outgoing agent, a pointer to the captured session excerpt, each
+  repo's branch and change counts, and the changed files. Prowl regenerates
+  *only* this block on every `save`; it never touches the prose.
+
+`sessions/<ts>-<pane>.md` is a normalized excerpt from the outgoing pane. Today it
+captures the current terminal screen/scrollback and records the detected agent,
+pane, source, confidence, and native transcript path when one is available.
 
 ## The protocol
 
@@ -51,7 +56,7 @@ reads it):
 ## Handoff protocol (this is a Prowl workspace)
 - On start: read `.prowl/handoff/current.md` and `.prowl/workspace.json`. Continue from "Next Steps".
 - Before you stop or hand off: update `.prowl/handoff/current.md` so another agent can resume cold.
-- To hand the task to the other agent, run:  `prowl handoff to claude`  (or `codex`).
+- To hand the task to another agent, run:  `prowl handoff to <agent>`.
 - Never commit/push or run destructive git unless asked. Do not put secrets in the handoff file.
 ```
 
@@ -61,16 +66,17 @@ step — the receiving agent then opens in a new tab pointed at the artifact.
 ## The `prowl handoff` command
 
 ```bash
-prowl handoff save   [target] [--note "…"]              # refresh the auto appendix + log
-prowl handoff to <claude|codex> [target] [--note "…"] [--no-launch]
-prowl handoff status [target]
+prowl handoff save       [target] [--note "…"]              # refresh appendix + session excerpt + log
+prowl handoff to <agent> [target] [--note "…"] [--no-launch]
+prowl handoff status     [target]
 ```
 
 - **`save`** refreshes the auto appendix from live git state and logs a line.
 - **`to <agent>`** does `save`, archives the current artifact, then launches the
   receiving agent in a **new tab** whose kickoff prompt points it at
-  `.prowl/handoff/current.md`. `--no-launch` archives + saves only. Only `claude`
-  and `codex` are accepted.
+  `.prowl/handoff/current.md`. `--no-launch` archives + saves only. Accepted
+  tokens follow Prowl's detected-agent list: `pi`, `claude`, `codex`, `gemini`,
+  `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`.
 - **`status`** reports the artifact path, whether it exists, the detected current
   agent, and the last log line.
 
@@ -96,6 +102,9 @@ a workspace.
   if the launch is interrupted.
 - Keep secrets/tokens out of the handoff file (the protocol asks agents not to
   write them).
+- Add `.prowl/handoff/` to the workspace's `.gitignore`; session excerpts can
+  contain terminal context that belongs in local handoff state, not source
+  control.
 
 ## Gotchas
 

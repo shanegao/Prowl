@@ -10,6 +10,7 @@ struct HandoffResolvedTarget: Sendable, Equatable {
   let rootPath: String
   let paneID: String
   let outgoingAgent: String?
+  let sessionContext: HandoffStore.SessionContext?
 }
 
 /// The pane the receiving agent was launched into.
@@ -27,7 +28,7 @@ final class HandoffCommandHandler: CommandHandler {
   typealias LaunchProvider = @MainActor (HandoffResolvedTarget, String) -> HandoffLaunchedPane?
 
   /// Agents this command can launch (it injects an agent-specific kickoff command).
-  static let supportedAgents = ["claude", "codex"]
+  static let supportedAgents = HandoffAgentSupport.supportedAgents
 
   private let resolveProvider: ResolveProvider
   private let launchProvider: LaunchProvider
@@ -49,10 +50,10 @@ final class HandoffCommandHandler: CommandHandler {
     }
 
     if input.action == .toAgent {
-      guard let toAgent = input.toAgent, Self.supportedAgents.contains(toAgent) else {
+      guard let rawAgent = input.toAgent, let toAgent = HandoffAgentSupport.normalize(rawAgent) else {
         return errorResponse(
           code: CLIErrorCode.invalidArgument,
-          message: "handoff to requires an agent of: \(Self.supportedAgents.joined(separator: ", "))."
+          message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
         )
       }
       _ = toAgent
@@ -91,7 +92,12 @@ final class HandoffCommandHandler: CommandHandler {
     let note = input.note
     do {
       let result = try await Task.detached {
-        try store.save(outgoingAgent: outgoing, note: note, now: timestamp)
+        try store.save(
+          outgoingAgent: outgoing,
+          sessionContext: target.sessionContext,
+          note: note,
+          now: timestamp
+        )
       }.value
       return success(payload: makePayload(action: .save, save: result))
     } catch {
@@ -110,7 +116,7 @@ final class HandoffCommandHandler: CommandHandler {
     store: HandoffStore,
     timestamp: Date
   ) async -> CommandResponse {
-    guard let toAgent = input.toAgent else {
+    guard let rawAgent = input.toAgent, let toAgent = HandoffAgentSupport.normalize(rawAgent) else {
       return errorResponse(code: CLIErrorCode.invalidArgument, message: "handoff to requires an agent.")
     }
     let outgoing = target.outgoingAgent
@@ -121,7 +127,12 @@ final class HandoffCommandHandler: CommandHandler {
     do {
       // Refresh the appendix, then archive the current artifact before launching.
       saveResult = try await Task.detached {
-        try store.save(outgoingAgent: outgoing, note: nil, now: timestamp)
+        try store.save(
+          outgoingAgent: outgoing,
+          sessionContext: target.sessionContext,
+          note: nil,
+          now: timestamp
+        )
       }.value
       archivedPath = try await Task.detached {
         try store.archiveCurrent(from: from, toAgent: toAgent, now: timestamp)
@@ -168,6 +179,16 @@ final class HandoffCommandHandler: CommandHandler {
         action: .status,
         artifactPath: status.artifactPath,
         outgoingAgent: target.outgoingAgent,
+        sessionContext: target.sessionContext.map {
+          HandoffSessionPayload(
+            agent: $0.agent,
+            paneID: $0.paneID,
+            paneTitle: $0.paneTitle,
+            source: $0.source,
+            confidence: $0.confidence,
+            transcriptPath: $0.transcriptPath
+          )
+        },
         exists: status.exists,
         lastLog: status.lastLogLine
       )
@@ -180,6 +201,7 @@ final class HandoffCommandHandler: CommandHandler {
     let instruction =
       "Take over this Prowl workspace task. Read .prowl/handoff/current.md (the full handoff) "
       + "and .prowl/workspace.json (repo layout, if present), then continue from Next Steps. "
+      + "If current.md lists a Session Context excerpt, read that file before changing code. "
       + "Ask before any commit/push or destructive git."
     return "\(agent) \"\(instruction)\""
   }
@@ -210,6 +232,7 @@ final class HandoffCommandHandler: CommandHandler {
       },
       changedFileCount: save.totalChangedFiles,
       archivedPath: archivedPath,
+      sessionContext: save.sessionContext,
       launchedPane: launched.map {
         HandoffPanePayload(
           worktreeID: $0.worktreeID,

@@ -297,6 +297,7 @@ enum OutputRenderer {
     case .save:
       lines.append("Handoff \("saved".green.bold)  \("changed:".dim) \(payload.changedFileCount) files")
       lines.append("  \("artifact:".dim) \(payload.artifactPath)")
+      lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
       lines.append(contentsOf: renderHandoffRepos(payload.repos))
     case .toAgent:
       let to = payload.toAgent ?? "?"
@@ -306,6 +307,7 @@ enum OutputRenderer {
       if let archived = payload.archivedPath {
         lines.append("  \("archived:".dim) \(archived)")
       }
+      lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
       if let pane = payload.launchedPane {
         lines.append("  \("launched:".dim) \(to.green) → \(pane.paneTitle.green)  \(pane.paneID.dim)")
       } else {
@@ -325,6 +327,13 @@ enum OutputRenderer {
       }
       return "  \("repo:".dim) \(repo.name)  \("(not a git repo)".dim)"
     }
+  }
+
+  private static func renderHandoffSession(_ session: HandoffSessionPayload?) -> [String] {
+    guard let session, let excerptPath = session.excerptPath else { return [] }
+    return [
+      "  \("session:".dim) \(excerptPath)  \(session.confidence.dim)"
+    ]
   }
 
   private static func renderPane(_ payload: PaneCommandPayload) -> String {

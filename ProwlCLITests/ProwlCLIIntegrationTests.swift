@@ -1614,8 +1614,33 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     }
   }
 
+  func testHandoffToAcceptsDetectedAgentToken() throws {
+    let socketPath = temporarySocketPath(suffix: "handoff-to-gemini")
+    let response = try CommandResponse(
+      ok: true,
+      command: "handoff",
+      schemaVersion: "prowl.cli.handoff.v1",
+      data: RawJSON(encoding: makeHandoffPayload(action: .toAgent))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["handoff", "to", "gemini", "--no-launch", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .handoff(let input) = envelope.command {
+      XCTAssertEqual(input.toAgent, "gemini")
+      XCTAssertFalse(input.launch)
+    } else {
+      XCTFail("Expected handoff command envelope")
+    }
+  }
+
   func testHandoffToRejectsUnknownAgentBeforeTransport() throws {
-    let result = try runProwl(args: ["handoff", "to", "gemini", "--json"])
+    let result = try runProwl(args: ["handoff", "to", "unknown-agent", "--json"])
 
     XCTAssertNotEqual(result.exitCode, 0)
     let payload = try jsonObject(from: result.stdout)
@@ -1672,6 +1697,14 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         ],
         changedFileCount: 3,
         archivedPath: "handoff/archive/2026-06-12T1430-codex-to-claude.md",
+        sessionContext: HandoffSessionPayload(
+          agent: "codex",
+          paneID: "pane-0",
+          paneTitle: "codex",
+          source: "terminal-scrollback",
+          confidence: "fallback",
+          excerptPath: "handoff/sessions/2026-06-12T1430-pane-0.md"
+        ),
         launchedPane: HandoffPanePayload(
           worktreeID: "App:/Projects/App",
           worktreeName: "App",
@@ -1691,6 +1724,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(result.exitCode, 0)
     XCTAssertTrue(result.stdout.contains("codex → claude"), "Missing transition header: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("artifact:"), "Missing artifact line: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("session:"), "Missing session line: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("launched:"), "Missing launched line: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("pane-9"), "Missing launched pane id: \(result.stdout)")
   }

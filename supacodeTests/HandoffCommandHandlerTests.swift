@@ -22,6 +22,14 @@ struct HandoffCommandHandlerTests {
   private func makeHandler(
     root: URL,
     outgoingAgent: String?,
+    sessionContext: HandoffStore.SessionContext? = HandoffStore.SessionContext(
+      agent: "codex",
+      paneID: "pane-0",
+      paneTitle: "codex",
+      source: "terminal-scrollback",
+      confidence: "fallback",
+      excerptText: "working on handoff"
+    ),
     launched: HandoffLaunchedPane? = HandoffLaunchedPane(
       worktreeID: "ws", worktreeName: "Workspace", tabID: "tab-1", paneID: "pane-1", paneTitle: "claude"
     ),
@@ -35,7 +43,8 @@ struct HandoffCommandHandlerTests {
             worktreeName: "Workspace",
             rootPath: root.path(percentEncoded: false),
             paneID: "pane-0",
-            outgoingAgent: outgoingAgent
+            outgoingAgent: outgoingAgent,
+            sessionContext: sessionContext
           )
         )
       },
@@ -63,9 +72,14 @@ struct HandoffCommandHandlerTests {
     let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
     #expect(payload.action == .save)
     #expect(payload.outgoingAgent == "codex")
+    let session = try #require(payload.sessionContext)
+    #expect(session.excerptPath?.hasPrefix("handoff/sessions/") == true)
 
     let store = HandoffStore(rootURL: root)
     #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
+    let content = try String(contentsOf: store.currentURL, encoding: .utf8)
+    #expect(content.contains("Session Context:"))
+    #expect(content.contains(".prowl/handoff/sessions/"))
   }
 
   @Test func toRefreshesArchivesAndLaunches() async throws {
@@ -93,6 +107,7 @@ struct HandoffCommandHandlerTests {
     // The launched agent's kickoff command targets the handoff artifact.
     #expect(launchedKickoff?.hasPrefix("claude ") == true)
     #expect(launchedKickoff?.contains(".prowl/handoff/current.md") == true)
+    #expect(launchedKickoff?.contains("Session Context excerpt") == true)
 
     // Log records the transition.
     let store = HandoffStore(rootURL: root)
@@ -122,17 +137,35 @@ struct HandoffCommandHandlerTests {
     #expect(launchCalled == false)
   }
 
-  @Test func toRejectsUnsupportedAgent() async throws {
+  @Test func toAcceptsDetectedAgentToken() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let handler = makeHandler(root: root, outgoingAgent: "codex")
 
     let response = await handler.handle(
-      envelope: envelope(HandoffInput(action: .toAgent, toAgent: "gemini"))
+      envelope: envelope(HandoffInput(action: .toAgent, toAgent: "gemini", launch: false))
+    )
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    #expect(payload.toAgent == "gemini")
+  }
+
+  @Test func toRejectsUnknownAgent() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let handler = makeHandler(root: root, outgoingAgent: "codex")
+
+    let response = await handler.handle(
+      envelope: envelope(HandoffInput(action: .toAgent, toAgent: "unknown-agent"))
     )
 
     #expect(response.ok == false)
     #expect(response.error?.code == CLIErrorCode.invalidArgument)
+  }
+
+  @Test func supportedAgentsMatchDetectedAgents() {
+    #expect(HandoffAgentSupport.supportedAgents == DetectedAgent.allCases.map(\.rawValue))
   }
 
   @Test func toReportsFailureWhenLaunchReturnsNil() async throws {

@@ -214,8 +214,8 @@ where they are on disk, and what role each repo plays in the task.
 
 ## Handing off between agents
 
-A workspace is the natural unit for handing a task from Codex to Claude Code (or
-back). Prowl keeps a durable handoff artifact under
-`.prowl/handoff/current.md` and ships `prowl handoff to <claude|codex>` plus
-command-palette actions to refresh it and launch the receiving agent. See
+A workspace is the natural unit for handing a task from one detected agent to
+another. Prowl keeps a durable handoff artifact under
+`.prowl/handoff/current.md` and ships `prowl handoff to <agent>` plus
+command-palette actions for the common Claude Code/Codex path. See
 [handoff](handoff.md).

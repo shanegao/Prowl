@@ -11,6 +11,8 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
   public let changedFileCount: Int
   /// Archived copy of the previous artifact, relative to the handoff dir (for `to`).
   public let archivedPath: String?
+  /// Auto-captured outgoing session context saved alongside `current.md`.
+  public let sessionContext: HandoffSessionPayload?
   /// The pane the receiving agent was launched into (for `to` with launch).
   public let launchedPane: HandoffPanePayload?
   /// Whether `current.md` exists (for `status`).
@@ -26,6 +28,7 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     case repos
     case changedFileCount = "changed_file_count"
     case archivedPath = "archived_path"
+    case sessionContext = "session_context"
     case launchedPane = "launched_pane"
     case exists
     case lastLog = "last_log"
@@ -39,6 +42,7 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     repos: [HandoffRepoPayload] = [],
     changedFileCount: Int = 0,
     archivedPath: String? = nil,
+    sessionContext: HandoffSessionPayload? = nil,
     launchedPane: HandoffPanePayload? = nil,
     exists: Bool? = nil,
     lastLog: String? = nil
@@ -50,9 +54,48 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     self.repos = repos
     self.changedFileCount = changedFileCount
     self.archivedPath = archivedPath
+    self.sessionContext = sessionContext
     self.launchedPane = launchedPane
     self.exists = exists
     self.lastLog = lastLog
+  }
+}
+
+public struct HandoffSessionPayload: Codable, Sendable, Equatable {
+  public let agent: String?
+  public let paneID: String
+  public let paneTitle: String?
+  public let source: String
+  public let confidence: String
+  public let excerptPath: String?
+  public let transcriptPath: String?
+
+  enum CodingKeys: String, CodingKey {
+    case agent
+    case paneID = "pane_id"
+    case paneTitle = "pane_title"
+    case source
+    case confidence
+    case excerptPath = "excerpt_path"
+    case transcriptPath = "transcript_path"
+  }
+
+  public nonisolated init(
+    agent: String?,
+    paneID: String,
+    paneTitle: String?,
+    source: String,
+    confidence: String,
+    excerptPath: String? = nil,
+    transcriptPath: String? = nil
+  ) {
+    self.agent = agent
+    self.paneID = paneID
+    self.paneTitle = paneTitle
+    self.source = source
+    self.confidence = confidence
+    self.excerptPath = excerptPath
+    self.transcriptPath = transcriptPath
   }
 }
 

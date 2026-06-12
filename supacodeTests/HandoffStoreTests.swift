@@ -107,6 +107,39 @@ struct HandoffStoreTests {
     #expect(result.totalChangedFiles == 0)
   }
 
+  @Test func saveWritesSessionContextExcerpt() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+    let sessionContext = HandoffStore.SessionContext(
+      agent: "codex",
+      paneID: "pane-123",
+      paneTitle: "codex",
+      source: "terminal-scrollback",
+      confidence: "fallback",
+      excerptText: "Implemented handoff session context.\nNext: run tests."
+    )
+
+    let result = try store.save(
+      outgoingAgent: "codex",
+      sessionContext: sessionContext,
+      note: nil,
+      now: fixedDate
+    )
+
+    let session = try #require(result.sessionContext)
+    #expect(session.excerptPath?.hasPrefix("handoff/sessions/") == true)
+    let excerptPath = try #require(session.excerptPath?.replacing("handoff/", with: ""))
+    let excerptURL = store.handoffDirectory.appending(path: excerptPath)
+    let excerpt = try String(contentsOf: excerptURL, encoding: .utf8)
+    #expect(excerpt.contains("# Handoff Session Context"))
+    #expect(excerpt.contains("Implemented handoff session context."))
+
+    let current = try String(contentsOf: store.currentURL, encoding: .utf8)
+    #expect(current.contains("Session Context:"))
+    #expect(current.contains(".prowl/handoff/sessions/"))
+  }
+
   @Test func saveTwiceDoesNotDuplicateAutogenBlock() throws {
     let root = try makeTempRoot()
     defer { remove(root) }

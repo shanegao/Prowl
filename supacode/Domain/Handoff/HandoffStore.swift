@@ -9,6 +9,7 @@ import Foundation
 ///   current.md            active handoff artifact (the cross-agent contract)
 ///   log.md                append-only handoff history
 ///   archive/<ts>-<from>-to-<to>.md
+///   sessions/<ts>-<pane>.md
 /// ```
 ///
 /// The artifact has two parts: agent-maintained semantic sections (Objective,
@@ -37,6 +38,7 @@ nonisolated struct HandoffStore: Sendable {
   var currentURL: URL { handoffDirectory.appending(path: "current.md") }
   var logURL: URL { handoffDirectory.appending(path: "log.md") }
   var archiveDirectory: URL { handoffDirectory.appending(path: "archive", directoryHint: .isDirectory) }
+  var sessionDirectory: URL { handoffDirectory.appending(path: "sessions", directoryHint: .isDirectory) }
 
   // MARK: - Markers
 
@@ -87,12 +89,41 @@ nonisolated struct HandoffStore: Sendable {
     let deletions: Int
   }
 
-  struct SaveResult: Sendable, Equatable {
+  struct SaveResult: Sendable {
     let artifactPath: String
     let outgoingAgent: String?
+    let sessionContext: HandoffSessionPayload?
     let repos: [RepoSummary]
     let changedFiles: [String]
     var totalChangedFiles: Int { repos.reduce(0) { $0 + $1.changedFileCount } }
+  }
+
+  struct SessionContext: Sendable, Equatable {
+    let agent: String?
+    let paneID: String
+    let paneTitle: String?
+    let source: String
+    let confidence: String
+    let transcriptPath: String?
+    let excerptText: String?
+
+    init(
+      agent: String?,
+      paneID: String,
+      paneTitle: String?,
+      source: String,
+      confidence: String,
+      transcriptPath: String? = nil,
+      excerptText: String?
+    ) {
+      self.agent = agent
+      self.paneID = paneID
+      self.paneTitle = paneTitle
+      self.source = source
+      self.confidence = confidence
+      self.transcriptPath = transcriptPath
+      self.excerptText = excerptText
+    }
   }
 
   struct StatusResult: Sendable, Equatable {
@@ -109,6 +140,7 @@ nonisolated struct HandoffStore: Sendable {
   func ensureScaffold() throws {
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
+    try fileManager.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
     if !fileManager.fileExists(atPath: currentURL.path(percentEncoded: false)) {
       try Self.template.write(to: currentURL, atomically: true, encoding: .utf8)
     }
@@ -119,13 +151,20 @@ nonisolated struct HandoffStore: Sendable {
   /// Refresh the AUTOGEN appendix in `current.md` from live git state and append
   /// a `save` line to the log. Leaves the agent-authored prose untouched.
   @discardableResult
-  func save(outgoingAgent: String?, note: String?, now: Date) throws -> SaveResult {
+  func save(
+    outgoingAgent: String?,
+    sessionContext: SessionContext? = nil,
+    note: String?,
+    now: Date
+  ) throws -> SaveResult {
     try ensureScaffold()
 
     let repos = repoSummaries()
     let changedFiles = changedFilePaths(for: repos)
+    let savedSessionContext = try writeSessionContext(sessionContext, now: now)
     let appendix = buildAppendix(
       outgoingAgent: outgoingAgent,
+      sessionContext: savedSessionContext,
       repos: repos,
       changedFiles: changedFiles,
       now: now
@@ -142,6 +181,7 @@ nonisolated struct HandoffStore: Sendable {
     return SaveResult(
       artifactPath: currentURL.path(percentEncoded: false),
       outgoingAgent: outgoingAgent,
+      sessionContext: savedSessionContext,
       repos: repos,
       changedFiles: changedFiles
     )
@@ -261,10 +301,72 @@ nonisolated struct HandoffStore: Sendable {
     return files
   }
 
+  // MARK: - Session context
+
+  private func writeSessionContext(_ context: SessionContext?, now: Date) throws -> HandoffSessionPayload? {
+    guard let context else { return nil }
+
+    let fileName = "\(Self.fileStamp(now))-\(Self.slug(context.paneID)).md"
+    let destination = sessionDirectory.appending(path: fileName)
+    let relativePath = "handoff/sessions/\(fileName)"
+    let payload = HandoffSessionPayload(
+      agent: context.agent,
+      paneID: context.paneID,
+      paneTitle: context.paneTitle,
+      source: context.source,
+      confidence: context.confidence,
+      excerptPath: relativePath,
+      transcriptPath: context.transcriptPath
+    )
+
+    let markdown = Self.renderSessionContext(context, payload: payload, now: now)
+    try markdown.write(to: destination, atomically: true, encoding: .utf8)
+    return payload
+  }
+
+  private static func renderSessionContext(
+    _ context: SessionContext,
+    payload: HandoffSessionPayload,
+    now: Date
+  ) -> String {
+    let text = trimmedSessionExcerpt(context.excerptText)
+    var lines: [String] = []
+    lines.append("# Handoff Session Context")
+    lines.append("")
+    lines.append("- Captured: \(iso(now))")
+    lines.append("- Agent: \(payload.agent ?? "unknown")")
+    lines.append("- Pane: \(payload.paneID)\(payload.paneTitle.map { " (\($0))" } ?? "")")
+    lines.append("- Source: \(payload.source)")
+    lines.append("- Confidence: \(payload.confidence)")
+    lines.append("- Native transcript: \(payload.transcriptPath ?? "unknown")")
+    lines.append("")
+    lines.append("## Terminal Excerpt")
+    lines.append("")
+    if text.isEmpty {
+      lines.append("_No terminal text was captured._")
+    } else {
+      lines.append("````text")
+      lines.append(text)
+      lines.append("````")
+    }
+    lines.append("")
+    return lines.joined(separator: "\n")
+  }
+
+  private static func trimmedSessionExcerpt(_ text: String?) -> String {
+    guard let text else { return "" }
+    let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    let lineLimited = lines.suffix(240).joined(separator: "\n")
+    guard lineLimited.count > 20_000 else { return lineLimited }
+    let suffix = String(lineLimited.suffix(20_000))
+    return "[... earlier terminal content truncated ...]\n" + suffix
+  }
+
   // MARK: - Appendix builder (pure)
 
   func buildAppendix(
     outgoingAgent: String?,
+    sessionContext: HandoffSessionPayload?,
     repos: [RepoSummary],
     changedFiles: [String],
     now: Date
@@ -275,6 +377,17 @@ nonisolated struct HandoffStore: Sendable {
     lines.append("- Generated: \(Self.iso(now))")
     lines.append("- Outgoing agent (detected): \(outgoingAgent ?? "unknown")")
     lines.append("- Workspace: \(workspaceTitle ?? "(none)")  (\(rootURL.path(percentEncoded: false)))")
+    lines.append("- Session Context:")
+    if let sessionContext {
+      lines.append("  - Agent: \(sessionContext.agent ?? "unknown")")
+      lines.append("  - Source: \(sessionContext.source)")
+      lines.append("  - Confidence: \(sessionContext.confidence)")
+      lines.append("  - Pane: \(sessionContext.paneID)")
+      lines.append("  - Context excerpt: .prowl/\(sessionContext.excerptPath ?? "handoff/sessions/unknown.md")")
+      lines.append("  - Native transcript: \(sessionContext.transcriptPath ?? "unknown")")
+    } else {
+      lines.append("  - (not captured)")
+    }
     lines.append("- Repos & branches:")
     if repos.isEmpty {
       lines.append("  - (none)")
