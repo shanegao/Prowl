@@ -117,9 +117,10 @@ struct GithubSettingsView: View {
                         .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if let state = account.state {
-                      Text(state)
-                        .foregroundStyle(.secondary)
+                    if let status = GithubAuthAccountStatusDisplay(account.state) {
+                      Text(status.title)
+                        .foregroundStyle(status.style)
+                        .help(status.help)
                     }
                   }
                   .font(.body)
@@ -181,6 +182,32 @@ struct GithubSettingsView: View {
       Task {
         await viewModel.load()
       }
+    }
+  }
+}
+
+private struct GithubAuthAccountStatusDisplay {
+  let title: String
+  let help: String
+  let style: Color
+
+  init?(_ state: String?) {
+    guard let state else { return nil }
+    switch state.lowercased() {
+    case "success":
+      return nil
+    case "timeout":
+      title = "Timed out"
+      help = "gh could not verify this account in time."
+      style = .orange
+    case "error":
+      title = "Needs attention"
+      help = "gh could not verify this account."
+      style = .red
+    default:
+      title = "Check failed"
+      help = "gh reported an authentication issue."
+      style = .orange
     }
   }
 }
