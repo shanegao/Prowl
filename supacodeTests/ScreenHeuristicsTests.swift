@@ -10,6 +10,9 @@ struct ScreenHeuristicsTests {
 
   @Test func piDetection() {
     #expect(DetectedAgent.pi.detectState(in: "Working...") == .working)
+    #expect(DetectedAgent.pi.detectState(in: "Working… ⟦esc⟧") == .working)
+    #expect(DetectedAgent.pi.detectState(in: "Reading files ⟨esc⟩") == .working)
+    #expect(DetectedAgent.pi.detectState(in: "Interrupting…") == .working)
     #expect(DetectedAgent.pi.detectState(in: "Done") == .idle)
   }
 

@@ -52,7 +52,32 @@ nonisolated private func recentLines(_ content: String, limit: Int) -> String {
 }
 
 nonisolated private func detectPi(_ content: String) -> AgentRawState {
-  content.contains("Working...") ? .working : .idle
+  let lower = content.lowercased()
+  if lower.contains("working...")
+    || content.contains("Working…")
+    || content.contains("Interrupting…")
+    || hasPiInterruptHint(content)
+  {
+    return .working
+  }
+  return .idle
+}
+
+nonisolated private func hasPiInterruptHint(_ content: String) -> Bool {
+  let interruptHints = ["⟦esc⟧", "⟨esc⟩", "[esc]"]
+  let bottomLines =
+    content
+    .split(separator: "\n", omittingEmptySubsequences: false)
+    .map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+    .suffix(5)
+
+  return bottomLines.contains { line in
+    interruptHints.contains { hint in
+      guard line.hasSuffix(hint) else { return false }
+      return !line.dropLast(hint.count).trimmingCharacters(in: .whitespaces).isEmpty
+    }
+  }
 }
 
 nonisolated private func detectClaude(_ content: String) -> AgentRawState {

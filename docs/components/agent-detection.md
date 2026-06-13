@@ -17,8 +17,9 @@ running and what state it's in. That signal drives the
 ## Agents it recognizes
 
 Claude (Claude Code), Codex, Gemini, Cursor, Cline, OpenCode, GitHub Copilot,
-Kimi, Droid, Amp, and Pi. Detection covers common wrappers (node, python, bun,
-bash, etc.) so agents launched indirectly are still found.
+Kimi, Droid, Amp, and Pi / Oh My Pi (`pi`, `omp`, `oh-my-pi`). Detection covers
+common wrappers (node, python, bun, bash, etc.) so agents launched indirectly are
+still found.
 
 ## How detection works (two stages)
 
@@ -26,10 +27,10 @@ bash, etc.) so agents launched indirectly are still found.
    process names / argv against known agent executables, scoring argv[0] highest,
    then process name, then command-line tokens.
 2. **Screen heuristics.** It scans the last ~24 non-blank lines of the pane for
-   agent-specific UI cues — e.g. "Esc to interrupt" (working), confirmation/
-   permission prompts (blocked), idle prompts. Each agent has its own patterns
-   (including spinner glyphs: braille frames, symbol cycles, Cursor's hexagons,
-   Kimi's moon phases, etc.).
+   agent-specific UI cues — e.g. "Esc to interrupt" or Oh My Pi's `Working… ⟦esc⟧`
+   loader (working), confirmation/permission prompts (blocked), idle prompts. Each
+   agent has its own patterns (including spinner glyphs: braille frames, symbol cycles,
+   Cursor's hexagons, Kimi's moon phases, etc.).
 
 To avoid flicker, detection **stabilizes**: it tolerates several consecutive
 misses before declaring an agent gone, and a working agent gets a short (~3s)
