@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.6.13](https://github.com/onevcat/Prowl/releases/tag/v2026.6.13)
+
+This release improves multi-account GitHub workflows, expands editor support in the Open In menu, and stabilizes agent status detection.
+
+### New
+
+- **Per-repo GitHub identity**: You can now assign a specific GitHub CLI account to each repository in its settings. Prowl will use that identity automatically when fetching pull requests, so multi-account setups (e.g. work and personal) work without manual `gh auth switch`.
+- GitHub Settings now lists all authenticated hosts and accounts instead of showing only a single entry, making it easier to see which identities are available.
+- **Project-aware Automatic editor**: The "Automatic" option in the Open In menu now detects the project type (Swift/Xcode, Android, .NET, Go, Rust, and more) and prefers a matching specialist IDE when one is installed — Xcode for Swift packages, Android Studio for Gradle projects, Rider for .NET solutions, and so on. An explicit per-repo or global editor choice is always respected as-is.
+- **New editors**: iTerm2, Sublime Text, Tower, and the full JetBrains family (Rider, GoLand, CLion, PhpStorm, RubyMine) are now available in the Open In menu and the Default Editor picker.
+- Added an "Automatic" entry to the Open In dropdown that clears any pinned app for the current repo and returns to automatic selection.
+
+### Fixed
+
+- Agent status no longer flickers between Working and Done during brief pauses between steps. The stabilization hold is now 3 seconds and applies to all detected agents (Claude, Codex, Gemini, and others), not just Claude.
+- Opening the transcript viewer (`ctrl+r`) or search overlay while an agent is working no longer briefly flashes the agent's status to Done.
+- Conversation text that quotes Claude viewer hint strings (e.g. "ctrl+r to toggle") no longer causes the agent to appear idle while it is still working.
+
 ## [2026.6.11](https://github.com/onevcat/Prowl/releases/tag/v2026.6.11)
 
 This release adds split-pane zoom controls, Shelf agent status badges, and trackpad navigation for the Shelf.
