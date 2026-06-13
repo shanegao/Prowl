@@ -52,32 +52,36 @@ nonisolated private func recentLines(_ content: String, limit: Int) -> String {
 }
 
 nonisolated private func detectPi(_ content: String) -> AgentRawState {
-  let lower = content.lowercased()
-  if lower.contains("working...")
-    || content.contains("Working…")
-    || content.contains("Interrupting…")
-    || hasPiInterruptHint(content)
-  {
-    return .working
-  }
-  return .idle
+  hasPiWorkingLine(content) ? .working : .idle
 }
 
-nonisolated private func hasPiInterruptHint(_ content: String) -> Bool {
-  let interruptHints = ["⟦esc⟧", "⟨esc⟩", "[esc]"]
-  let bottomLines =
-    content
-    .split(separator: "\n", omittingEmptySubsequences: false)
-    .map { $0.trimmingCharacters(in: .whitespaces) }
-    .filter { !$0.isEmpty }
-    .suffix(5)
-
-  return bottomLines.contains { line in
-    interruptHints.contains { hint in
-      guard line.hasSuffix(hint) else { return false }
-      return !line.dropLast(hint.count).trimmingCharacters(in: .whitespaces).isEmpty
-    }
+nonisolated private func hasPiWorkingLine(_ content: String) -> Bool {
+  content.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return isPiWorkingText(trimmed)
+      || hasPiInterruptHint(trimmed)
+      || hasPiBrailleSpinner(trimmed)
   }
+}
+
+nonisolated private func isPiWorkingText(_ line: String) -> Bool {
+  line == "Working..." || line == "Working…" || line == "Interrupting…"
+}
+
+nonisolated private func hasPiInterruptHint(_ line: String) -> Bool {
+  let interruptHints = ["⟦esc⟧", "⟨esc⟩", "[esc]"]
+  return interruptHints.contains { hint in
+    guard line.hasSuffix(hint) else { return false }
+    return !line.dropLast(hint.count).trimmingCharacters(in: .whitespaces).isEmpty
+  }
+}
+
+nonisolated private func hasPiBrailleSpinner(_ line: String) -> Bool {
+  guard let first = line.unicodeScalars.first else { return false }
+  let rest = String(line.unicodeScalars.dropFirst())
+  return (0x2800...0x28FF).contains(Int(first.value))
+    && rest.hasPrefix(" ")
+    && rest.contains(where: \.isLetter)
 }
 
 nonisolated private func detectClaude(_ content: String) -> AgentRawState {
