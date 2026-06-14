@@ -92,7 +92,7 @@ nonisolated struct ExternalDiffSettings: Equatable, Sendable {
   var customCommand: String
 
   var tool: ExternalDiffTool {
-    ExternalDiffTool.fromSettingsID(toolID)
+    ExternalDiffTool(rawValue: toolID) ?? .builtIn
   }
 }
 

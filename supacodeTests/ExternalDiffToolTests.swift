@@ -19,6 +19,10 @@ struct ExternalDiffToolTests {
     #expect(ExternalDiffTool.custom.launchMode == .gui)
   }
 
+  @Test func explicitSettingsResolveWithoutCheckingInstallation() {
+    #expect(ExternalDiffSettings(toolID: ExternalDiffTool.hunk.settingsID, customCommand: "").tool == .hunk)
+  }
+
   @Test func commandTemplateReplacesPlaceholdersWithShellQuotedValues() {
     let context = ExternalDiffCommandContext(
       worktreePath: "/tmp/My Repo/work tree",
