@@ -7,6 +7,7 @@ import Foundation
 final class CLICommandRouter {
   private let openHandler: any CommandHandler
   private let listHandler: any CommandHandler
+  private let agentsHandler: any CommandHandler
   private let focusHandler: any CommandHandler
   private let sendHandler: any CommandHandler
   private let keyHandler: any CommandHandler
@@ -17,6 +18,7 @@ final class CLICommandRouter {
   init(
     openHandler: any CommandHandler = StubCommandHandler(command: "open"),
     listHandler: any CommandHandler = StubCommandHandler(command: "list"),
+    agentsHandler: any CommandHandler = StubCommandHandler(command: "agents"),
     focusHandler: any CommandHandler = StubCommandHandler(command: "focus"),
     sendHandler: any CommandHandler = StubCommandHandler(command: "send"),
     keyHandler: any CommandHandler = StubCommandHandler(command: "key"),
@@ -26,6 +28,7 @@ final class CLICommandRouter {
   ) {
     self.openHandler = openHandler
     self.listHandler = listHandler
+    self.agentsHandler = agentsHandler
     self.focusHandler = focusHandler
     self.sendHandler = sendHandler
     self.keyHandler = keyHandler
@@ -39,6 +42,7 @@ final class CLICommandRouter {
     switch envelope.command {
     case .open: handler = openHandler
     case .list: handler = listHandler
+    case .agents: handler = agentsHandler
     case .focus: handler = focusHandler
     case .send: handler = sendHandler
     case .key: handler = keyHandler

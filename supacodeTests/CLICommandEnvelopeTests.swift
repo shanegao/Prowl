@@ -56,6 +56,21 @@ struct CLICommandEnvelopeTests {
     }
   }
 
+  @Test func envelopeAgentsRoundTrips() throws {
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .agents(AgentsInput())
+    )
+    let data = try JSONEncoder().encode(envelope)
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
+    #expect(decoded.output == .json)
+    if case .agents = decoded.command {
+      // expected
+    } else {
+      Issue.record("Expected .agents command")
+    }
+  }
+
   @Test func envelopeSendWithSelectorRoundTrips() throws {
     let envelope = CommandEnvelope(
       output: .json,
@@ -231,6 +246,7 @@ struct CLICommandEnvelopeTests {
     let commands: [(Command, String)] = [
       (.open(OpenInput(path: nil)), "open"),
       (.list(ListInput()), "list"),
+      (.agents(AgentsInput()), "agents"),
       (.focus(FocusInput()), "focus"),
       (.send(SendInput(text: "x")), "send"),
       (.key(KeyInput(rawToken: "tab", token: "tab")), "key"),
@@ -249,6 +265,7 @@ struct CLICommandEnvelopeTests {
     let commands: [Command] = [
       .open(OpenInput(path: "/tmp")),
       .list(ListInput()),
+      .agents(AgentsInput()),
       .focus(FocusInput()),
       .send(SendInput(text: "test")),
       .key(KeyInput(rawToken: "enter", token: "enter")),

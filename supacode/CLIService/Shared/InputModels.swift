@@ -26,6 +26,10 @@ public struct ListInput: Codable, Sendable {
   public init() {}
 }
 
+public struct AgentsInput: Codable, Sendable {
+  public init() {}
+}
+
 public struct FocusInput: Codable, Sendable {
   public let selector: TargetSelector
 

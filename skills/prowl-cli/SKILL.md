@@ -18,6 +18,14 @@ prowl list --json
 
 Pick the target by `pane.id`, `tab.id`, `worktree.id`, `worktree.path`, `pane.cwd`, and `pane.focused`. Do not trust tab titles: they are free-form and can lag or lie.
 
+When you specifically need active agent status, prefer the agent roster:
+
+```bash
+prowl agents --json
+```
+
+`prowl agents` lists detected agent panes only. It is the right starting point for "which agents are blocked/working/done?", while `prowl list` remains the all-pane inventory, including ordinary shells.
+
 If your session was launched from a Prowl pane, the focused pane is often you. Treat focused pane IDs as something to identify and avoid unless you intentionally want to operate on yourself.
 
 ```bash
@@ -92,6 +100,42 @@ prowl tab close --tab "$tab" --json
 prowl pane close --pane "$pane" --force --json
 ```
 
+## Parsing JSON Output
+
+Do not guess field names. Every `--json` response is `{ "ok", "command", "schema_version", "data": {...} }`, and the terminal text lives at `.data.text` — not `.content`, `.output`, or `.stdout`. Always parse with `jq` against the fields below; the authoritative, per-command field reference lives in `docs/components/cli.md`.
+
+When JSON is stored in a shell variable, use `printf '%s\n' "$json" | jq ...`. Do not use `echo "$json" | jq`: zsh can interpret JSON escape sequences such as `\u001B` and turn them back into raw control characters.
+
+```bash
+# read: rendered terminal text is .data.text
+prowl read --pane "$pane" --last 80 --wait-stable --json | jq -r '.data.text'
+
+# send --capture: captured output is .data.capture.text; exit code is .data.wait.exit_code
+out="$(prowl send --pane "$pane" 'git status --short' --capture --timeout 30 --json)"
+printf '%s\n' "$out" | jq -r '.data.capture.text'
+printf '%s\n' "$out" | jq -r '.data.wait.exit_code'
+
+# tab create / open: new pane and tab ids
+created="$(prowl tab create --worktree "$worktree" --json)"
+printf '%s\n' "$created" | jq -r '.data.target.pane.id'
+printf '%s\n' "$created" | jq -r '.data.target.tab.id'
+
+# list / agents: ids and status
+prowl list --json   | jq -r '.data.items[].pane.id'
+prowl list --json   | jq -r '.data.items[] | select(.pane.focused) | .pane.id'
+prowl agents --json | jq -r '.data.agents[] | "\(.status)\t\(.pane.id)"'
+
+# guard before trusting data: bail if ok is not true
+prowl list --json | jq -e '.ok == true' >/dev/null || echo "command failed"
+```
+
+Key fields by command (see `docs/components/cli.md` for the full contract):
+
+- `read` → `.data.text`, `.data.line_count`, `.data.truncated`, `.data.mode` (`snapshot`|`last`), `.data.source` (`screen`|`scrollback`|`mixed`), plus `.data.stabilized` / `.data.waited_ms` / `.data.samples` when `--wait-stable`.
+- `send` → `.data.input` (source/characters/bytes/trailing_enter_sent); `.data.wait.exit_code` and `.data.wait.duration_ms` when waiting; `.data.capture.text` / `.data.capture.line_count` / `.data.capture.truncated` when `--capture`.
+- `list` / `agents` → `.data.items[]` / `.data.agents[]`, each with `.pane.id`, `.tab.id`, `.worktree.{id,name,path}`, `.task.status`.
+- `tab create` / `open` → `.data.target.{pane,tab,worktree}`.
+
 ## Reading Agent Output
 
 `task.status` is useful for coordination but is not enough to prove the screen finished rendering. `idle` can arrive before a TUI has painted its final response.
@@ -150,6 +194,25 @@ Human scan:
 prowl list --no-color
 ```
 
+Find active agents, prioritizing prompts that need attention:
+
+```bash
+prowl agents --no-color
+```
+
+Get the first blocked agent pane and inspect it:
+
+```bash
+pane="$(prowl agents --json | jq -r '
+  .data.agents[]
+  | select(.status == "blocked")
+  | .pane.id
+' | head -n 1)"
+prowl read --pane "$pane" --last 120 --wait-stable --json
+```
+
+When no agent is blocked, use the same pattern with `working`, `done`, or `idle` depending on the task. The JSON payload also includes `.project.name`, `.project.branch`, `.worktree.path`, `.tab.title`, and `.pane.focused`, so automation can filter by human project label while still targeting the concrete pane.
+
 `-t/--target` can auto-resolve pane UUID, tab UUID, or worktree id/name/path, but explicit `--pane <uuid>` is safer for automation.
 
 ## Argument Rules
@@ -184,15 +247,19 @@ Avoid outer double quotes around payloads containing `$PWD`, `$VAR`, backticks, 
 
 - Never target by tab title alone; use `pane.id` plus path/cwd.
 - Never omit `--pane` for `send`, `key`, `read`, or `focus` in automation.
+- Use `prowl agents --json` for detected agent status; use `prowl list --json` for all panes and worktree-level `task.status`.
 - `open /path` is a project/path navigation command. It may refocus an existing pane and is not a deterministic create command.
 - Use `tab create` when automation needs a fresh shell, and capture the returned `pane.id` before sending input.
 - Focused pane is not stable; `open` and `focus` change it.
 - `read --wait-stable` sees rendered screen only. It cannot recover content folded by a TUI.
 - `read` returning fewer lines than `--last` requested is normally `truncated: false` — the pane simply has less history and you already have it all, so do not retry for more. `truncated: true` flags a possibly-incomplete result (the full scrollback could not be read).
 - `send --capture` captures a screen diff; multiline input may include command echo.
+- Do not guess JSON field names. Terminal text is `.data.text` (read) and `.data.capture.text` (`send --capture`); see "Parsing JSON Output" and `docs/components/cli.md`.
 - `prowl list --json | jq ...` snippets should pass shell values with `--arg`.
 - In zsh, do not name variables `status`; it is readonly.
 - Parser errors are not JSON even if `--json` is present, because parsing happens before command execution.
+- The CLI talks to one socket owner by default. If two Prowl app instances are running, the default `prowl` command reaches whichever app owns the standard socket. For a manually launched dev instance, start the app and every CLI command with the same `PROWL_CLI_SOCKET=/tmp/name.sock`.
+- A newer CLI command sent to an older app can fail at transport level. If `prowl agents` returns `TRANSPORT_FAILED`, confirm the running app instance was built with the command.
 - `cmd-w` can close a temporary tab, but double-check the pane first.
 
 ## Error Handling
@@ -206,6 +273,7 @@ In `--json` mode, command-level failures look like:
 Common codes and recovery:
 
 - `APP_NOT_RUNNING`: Prowl is not reachable. Ask before restarting the app.
+- `TRANSPORT_FAILED`: the socket connection broke or the running app could not decode the command. Recheck which Prowl instance owns the socket.
 - `TARGET_NOT_FOUND` / `TARGET_NOT_UNIQUE`: run `prowl list --json` again and choose an explicit pane UUID.
 - `EMPTY_INPUT`: `send` got neither argv text nor stdin.
 - `NO_ACTIVE_PANE`: no pane resolved for positional (focused-pane) targeting; pass an explicit `--pane`.
@@ -219,4 +287,4 @@ Always check the exit code before piping output into `jq`; parser-level errors p
 
 ## Command Set
 
-Current commands: `list`, `read`, `send`, `key`, `focus`, `tab create`, `tab close`, `pane close`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with explicit `tab close` / `pane close` targets.
+Current commands: `list`, `agents`, `read`, `send`, `key`, `focus`, `tab create`, `tab close`, `pane close`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with explicit `tab close` / `pane close` targets.

@@ -368,6 +368,15 @@ struct SupacodeApp: App {
         terminalManager: terminalManager
       )
     }
+    let agentsHandler = AgentsCommandHandler {
+      AgentsRuntimeSnapshot(
+        repositoriesState: appStore.state.repositories,
+        listSnapshot: ListRuntimeSnapshotBuilder.makeSnapshot(
+          repositoriesState: appStore.state.repositories,
+          terminalManager: terminalManager
+        )
+      )
+    }
     let sendHandler = SendCommandHandler(
       resolveProvider: { selector in
         let resolver = TargetResolver {
@@ -546,6 +555,7 @@ struct SupacodeApp: App {
     return CLICommandRouter(
       openHandler: openHandler,
       listHandler: listHandler,
+      agentsHandler: agentsHandler,
       focusHandler: focusHandler,
       sendHandler: sendHandler,
       keyHandler: keyHandler,

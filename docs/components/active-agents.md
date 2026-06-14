@@ -5,7 +5,7 @@
 
 **Keywords:** active agents, agents panel, running agents, status list, working, blocked, done, idle, jump to agent, roster
 
-**Related:** [agent-detection](agent-detection.md) · [notifications](notifications.md) · [command-palette](command-palette.md) · [canvas](canvas.md)
+**Related:** [agent-detection](agent-detection.md) · [cli](cli.md) · [notifications](notifications.md) · [command-palette](command-palette.md) · [canvas](canvas.md)
 
 ## What it is
 
@@ -66,6 +66,10 @@ When nothing is running: "New agents will appear here".
 ## Relationship to other features
 
 - **Agent detection** ([agent-detection](agent-detection.md)) feeds this panel.
+- **CLI** ([cli](cli.md)) exposes the same roster through `prowl agents` and
+  `prowl agents --json`. The command is read-only; use the returned
+  `pane.id` with `prowl focus --pane`, `prowl read --pane`, or
+  `prowl send --pane` for follow-up actions.
 - **Notifications** ([notifications](notifications.md)) are driven by a separate
   signal — terminal bell / OSC desktop notifications and command-finished
   events — which usually coincides with, but is not the same as, a detected finish.
@@ -81,5 +85,6 @@ When nothing is running: "New agents will appear here".
 - "Blocked" is the actionable state — it means an agent is **waiting on a human**
   (a permission/confirmation prompt). Surface these first.
 - This panel reflects **detected** agents; detection is best-effort (see
-  [agent-detection](agent-detection.md)). For programmatic certainty about a
-  pane's task status, use [`prowl list`](cli.md) → `task.status`.
+  [agent-detection](agent-detection.md)). For the same detected roster in
+  automation, use [`prowl agents --json`](cli.md). For an all-pane inventory,
+  including non-agent shells, use [`prowl list --json`](cli.md).

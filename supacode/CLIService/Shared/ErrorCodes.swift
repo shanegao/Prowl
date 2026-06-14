@@ -20,6 +20,9 @@ public enum CLIErrorCode {
   // List
   public static let listFailed = "LIST_FAILED"
 
+  // Agents
+  public static let agentsFailed = "AGENTS_FAILED"
+
   // Focus
   public static let focusFailed = "FOCUS_FAILED"
 

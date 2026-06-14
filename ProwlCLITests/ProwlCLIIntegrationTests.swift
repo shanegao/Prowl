@@ -14,6 +14,21 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       .deletingLastPathComponent()
   }
 
+  /// Backstop cleanup for mock-server socket files. `MockSocketServer.stop()`
+  /// (run via `defer`) covers the normal and throwing paths, but a test process
+  /// killed mid-run (timeout, Ctrl-C) skips both `defer` and `deinit` and leaks
+  /// the bound socket. Sweep any leftover `prowl-cli-*` from the socket
+  /// directory after each test so they cannot accumulate. Matched by prefix
+  /// only (no `.sock` suffix), so a truncated name would still be caught.
+  override func tearDownWithError() throws {
+    let dir = Self.socketDirectory
+    for name in (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+    where name.hasPrefix("prowl-cli-") {
+      unlink((dir as NSString).appendingPathComponent(name))
+    }
+    try super.tearDownWithError()
+  }
+
   func testHelpAndVersionSmoke() throws {
     let version = try runProwl(args: ["--version"])
     XCTAssertEqual(version.exitCode, 0)
@@ -36,6 +51,34 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(payload["ok"] as? Bool, false)
     let error = try XCTUnwrap(payload["error"] as? [String: Any])
     XCTAssertEqual(error["code"] as? String, CLIErrorCode.appNotRunning)
+  }
+
+  func testAgentsCommandRoundTripsOverSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "agents")
+    let response = try CommandResponse(
+      ok: true,
+      command: "agents",
+      schemaVersion: "prowl.cli.agents.v1",
+      data: RawJSON(encoding: AgentsResponseData(count: 0, agents: []))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["agents", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .agents = envelope.command {
+      // expected
+    } else {
+      XCTFail("Expected agents command envelope")
+    }
+
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, true)
+    XCTAssertEqual(payload["command"] as? String, "agents")
   }
 
   func testJSONModePreservesEscapedControlCharactersFromAppResponse() throws {
@@ -416,6 +459,80 @@ final class ProwlCLIIntegrationTests: XCTestCase {
 
     XCTAssertEqual(result.exitCode, 0)
     XCTAssertTrue(result.stdout.contains("No panes found."), "Expected empty message: \(result.stdout)")
+  }
+
+  func testAgentsCommandTextRenderingFromSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "agents-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "agents",
+      schemaVersion: "prowl.cli.agents.v1",
+      data: RawJSON(encoding: AgentsResponseData(
+        count: 3,
+        agents: [
+          makeAgentResponse(
+            id: "done-pane",
+            name: "codex",
+            status: "done",
+            projectName: "Prowl",
+            branch: "main",
+            tabTitle: "Done tab"
+          ),
+          makeAgentResponse(
+            id: "blocked-pane",
+            name: "omp",
+            status: "blocked",
+            projectName: "Prowl",
+            branch: "feature/cli-agents",
+            tabTitle: "issue 330"
+          ),
+          makeAgentResponse(
+            id: "working-pane",
+            name: "claude",
+            status: "working",
+            projectName: "Notes",
+            branch: "main",
+            tabTitle: "review"
+          ),
+        ]
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["agents"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let lines = result.stdout.split(separator: "\n").map(String.init)
+    XCTAssertEqual(lines.count, 3, "Unexpected agents output: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("Blocked"), "Expected blocked first: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("omp"), "Missing agent name: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("Prowl:feature/cli-agents"), "Missing project label: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("issue 330"), "Missing tab title: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("blocked-pane"), "Missing pane id: \(result.stdout)")
+    XCTAssertTrue(lines[1].contains("Working"), "Expected working second: \(result.stdout)")
+    XCTAssertTrue(lines[2].contains("Done"), "Expected done third: \(result.stdout)")
+  }
+
+  func testAgentsEmptyPayloadShowsNoAgentsFound() throws {
+    let socketPath = temporarySocketPath(suffix: "agents-empty")
+    let response = try CommandResponse(
+      ok: true,
+      command: "agents",
+      schemaVersion: "prowl.cli.agents.v1",
+      data: RawJSON(encoding: AgentsResponseData(count: 0, agents: []))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["agents"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("No agents found."), "Expected empty message: \(result.stdout)")
   }
 
   func testListMultipleWorktreesGroupedWithBlankLine() throws {
@@ -1373,6 +1490,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     args: [String]
   ) throws -> (Data, CommandResult) {
     let server = try MockSocketServer(socketPath: socketPath, responseData: responseData)
+    defer { server.stop() }
     try server.start()
 
     let result = try runProwl(
@@ -1390,6 +1508,34 @@ final class ProwlCLIIntegrationTests: XCTestCase {
 
   private func makePanePayload(action: PaneAction) -> PaneCommandPayload {
     PaneCommandPayload(action: action, target: makeTabTarget())
+  }
+
+  private func makeAgentResponse(
+    id: String,
+    name: String,
+    status: String,
+    projectName: String,
+    branch: String,
+    tabTitle: String
+  ) -> AgentsResponseAgent {
+    AgentsResponseAgent(
+      id: id,
+      type: name,
+      name: name,
+      status: status,
+      rawState: status,
+      lastChangedAt: "2026-06-13T04:12:25Z",
+      project: AgentsResponseProject(name: projectName, branch: branch, path: "/Projects/\(projectName)"),
+      worktree: ListWorktree(
+        id: "\(projectName):/Projects/\(projectName)",
+        name: branch,
+        path: "/Projects/\(projectName)",
+        rootPath: "/Projects/\(projectName)",
+        kind: "git"
+      ),
+      tab: ListTab(id: "\(id)-tab", title: tabTitle, selected: true),
+      pane: AgentsResponsePane(id: id, index: 1, title: name, cwd: "/Projects/\(projectName)", focused: false)
+    )
   }
 
   private func makeTabTarget() -> TabTarget {
@@ -1503,10 +1649,22 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     }
   }
 
+  /// Directory for mock-server socket files, kept deliberately short. AF_UNIX
+  /// `sun_path` is capped at ~104 bytes; `NSTemporaryDirectory()` alone is ~49,
+  /// so `prowl-cli-<suffix>-<uuid>.sock` overflows and `bind()` silently
+  /// truncates the path. A truncated path would not match the string we pass to
+  /// `unlink()`, leaking the socket file. `/tmp` keeps the full path well under
+  /// the limit (and matches the CLI's own socket convention).
+  private static let socketDirectory = "/tmp"
+
   private func temporarySocketPath(suffix: String) -> String {
     let uuid = UUID().uuidString.lowercased()
     let filename = "prowl-cli-\(suffix)-\(uuid).sock"
-    return (NSTemporaryDirectory() as NSString).appendingPathComponent(filename)
+    let path = (Self.socketDirectory as NSString).appendingPathComponent(filename)
+    // Fail fast if a future suffix pushes the path past the sun_path limit,
+    // rather than letting bind() truncate and leak the socket again.
+    precondition(path.utf8.count <= 103, "Socket path exceeds AF_UNIX sun_path limit: \(path)")
+    return path
   }
 }
 
@@ -1574,6 +1732,52 @@ private struct ListPane: Encodable {
 
 private struct ListTask: Encodable {
   let status: String?
+}
+
+private struct AgentsResponseData: Encodable {
+  let count: Int
+  let agents: [AgentsResponseAgent]
+}
+
+private struct AgentsResponseAgent: Encodable {
+  let id: String
+  let type: String
+  let name: String
+  let status: String
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case type
+    case name
+    case status
+    case rawState = "raw_state"
+    case lastChangedAt = "last_changed_at"
+    case project
+    case worktree
+    case tab
+    case pane
+  }
+
+  let rawState: String
+  let lastChangedAt: String
+  let project: AgentsResponseProject
+  let worktree: ListWorktree
+  let tab: ListTab
+  let pane: AgentsResponsePane
+}
+
+private struct AgentsResponseProject: Encodable {
+  let name: String
+  let branch: String
+  let path: String
+}
+
+private struct AgentsResponsePane: Encodable {
+  let id: String
+  let index: Int
+  let title: String
+  let cwd: String?
+  let focused: Bool
 }
 
 private struct FocusResponseData: Encodable {
@@ -1796,9 +2000,16 @@ private final class MockSocketServer: @unchecked Sendable {
     self.responseData = responseData
   }
 
-  deinit {
+  deinit { stop() }
+
+  /// Idempotent teardown: closes the listening socket and removes its file.
+  /// Invoked via `defer` from the test helper so cleanup does not rely on
+  /// non-deterministic `deinit` timing — the accept loop runs on a background
+  /// queue, which can delay ARC release and leave the bound socket file behind.
+  func stop() {
     if serverFD >= 0 {
       close(serverFD)
+      serverFD = -1
     }
     unlink(socketPath)
   }

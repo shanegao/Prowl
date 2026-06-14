@@ -57,6 +57,14 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "agents",
+         let data = response.data,
+         let payload = try? data.decode(as: AgentsCommandPayload.self)
+      {
+        print(renderAgents(payload))
+        return
+      }
+
       if response.command == "focus",
          let data = response.data,
          let payload = try? data.decode(as: FocusCommandPayload.self)
@@ -193,6 +201,47 @@ enum OutputRenderer {
     }
 
     return lines.joined(separator: "\n")
+  }
+
+  private static func renderAgents(_ payload: AgentsCommandPayload) -> String {
+    guard !payload.agents.isEmpty else {
+      return "No agents found."
+    }
+
+    let order: [AgentsCommandStatus: Int] = [
+      .blocked: 0,
+      .working: 1,
+      .done: 2,
+      .idle: 3,
+    ]
+    let indexedAgents = payload.agents.enumerated()
+    let sortedAgents = indexedAgents.sorted { left, right in
+      let leftRank = order[left.element.status] ?? Int.max
+      let rightRank = order[right.element.status] ?? Int.max
+      if leftRank != rightRank {
+        return leftRank < rightRank
+      }
+      return left.offset < right.offset
+    }.map(\.element)
+
+    return sortedAgents.map { agent in
+      let statusLabel = agentStatusLabel(agent.status)
+      let projectLabel = "\(agent.project.name):\(agent.project.branch)"
+      return "\(statusLabel)  \(agent.name)  \(projectLabel)  \(agent.tab.title)  \(agent.pane.id)"
+    }.joined(separator: "\n")
+  }
+
+  private static func agentStatusLabel(_ status: AgentsCommandStatus) -> String {
+    switch status {
+    case .blocked:
+      return "Blocked".red.bold
+    case .working:
+      return "Working".green
+    case .done:
+      return "Done".dim
+    case .idle:
+      return "Idle".dim
+    }
   }
 
   private static func renderTab(_ payload: TabCommandPayload) -> String {

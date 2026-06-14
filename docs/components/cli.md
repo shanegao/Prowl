@@ -4,9 +4,9 @@
 > an agent) can list panes, read their screens, run commands and capture output,
 > send keystrokes, focus, and open/close tabs and panes programmatically.
 
-**Keywords:** prowl cli, command line, prowl list, prowl read, prowl send, prowl key, prowl focus, prowl tab, prowl pane, prowl open, pane id, automation, json, capture, socket
+**Keywords:** prowl cli, command line, prowl list, prowl agents, prowl read, prowl send, prowl key, prowl focus, prowl tab, prowl pane, prowl open, pane id, automation, json, capture, socket
 
-**Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [agent-detection](agent-detection.md) · the bundled **`prowl-cli` skill** (`skills/prowl-cli/SKILL.md`)
+**Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [active-agents](active-agents.md) · [agent-detection](agent-detection.md) · the bundled **`prowl-cli` skill** (`skills/prowl-cli/SKILL.md`)
 
 > This is the reference for the `prowl` binary. For an opinionated, safety-first
 > *workflow* guide (recipes, pitfalls, quoting), the repository also ships the
@@ -79,6 +79,37 @@ Find your own pane (to avoid operating on yourself):
 ```bash
 self_pane="$(prowl list --json | jq -r '.data.items[] | select(.pane.focused==true) | .pane.id')"
 ```
+
+### `prowl agents`
+Snapshot of detected agent panes, matching the Active Agents roster. No
+selectors.
+
+```bash
+prowl agents --json
+```
+Each agent contains:
+- `id`: the pane/surface UUID, suitable for `--pane`.
+- `type`, `name`: normalized detector type and displayed command name. Aliases
+  such as `omp` are preserved in `name`.
+- `status`, `raw_state`: detected agent state. `status` is one of `blocked`,
+  `working`, `done`, `idle`; `raw_state` is the lower-level detector state.
+- `last_changed_at`: ISO-8601 timestamp for the most recent state change.
+- `project`: display-oriented `name`, `branch`, `path` resolved from the
+  agent's working directory.
+- `worktree`, `tab`, `pane`: the actual terminal owner and pane metadata for
+  automation.
+
+`prowl agents` is read-only. To jump to or operate on an agent, resolve
+`.data.agents[].pane.id`, then use existing commands:
+
+```bash
+pane="$(prowl agents --json | jq -r '.data.agents[] | select(.status=="blocked") | .pane.id' | head -n1)"
+prowl focus --pane "$pane"
+prowl read --pane "$pane" --last 120 --wait-stable
+```
+
+Text output is sorted for triage: `Blocked`, `Working`, `Done`, then `Idle`.
+Empty output prints `No agents found.`.
 
 ### `prowl read [target]`
 Read a pane's content.
@@ -203,7 +234,7 @@ inside-root / new-root), `app_launched`, `brought_to_front`, `created_tab`, and 
 | `UNSUPPORTED_KEY` / `INVALID_REPEAT` | Check `prowl key --help`. |
 | `PATH_NOT_FOUND` / `PATH_NOT_DIRECTORY` / `PATH_NOT_ALLOWED` | Fix the `open`/`tab create` path. |
 | `LAUNCH_FAILED` | App launch or socket wait failed. |
-| `*_FAILED` (`LIST_FAILED`, `FOCUS_FAILED`, `SEND_FAILED`, `READ_FAILED`, `TAB_FAILED`, `PANE_FAILED`, `OPEN_FAILED`) | The action itself failed. |
+| `*_FAILED` (`LIST_FAILED`, `AGENTS_FAILED`, `FOCUS_FAILED`, `SEND_FAILED`, `READ_FAILED`, `TAB_FAILED`, `PANE_FAILED`, `OPEN_FAILED`) | The action itself failed. |
 
 ## Safety & self-targeting
 
@@ -228,6 +259,8 @@ prowl pane close --pane "$pane" --json
 
 - Resolve a `pane.id` before `read`/`send`/`key`/`focus`/close — never trust tab
   titles.
+- Use `prowl agents --json` when you need agent status; use `prowl list --json`
+  when you need all panes, including ordinary shells.
 - `--capture` needs shell integration; otherwise `read --wait-stable` or file
   redirection.
 - `open` is navigation, not a guaranteed new pane — use `tab create`.
