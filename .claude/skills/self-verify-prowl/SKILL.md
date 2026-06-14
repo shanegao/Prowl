@@ -40,32 +40,20 @@ Concretely: invoke the `prowl-cli` skill (or read its SKILL.md) before proceedin
 
 The debug app uses a fixed socket at `/tmp/prowl-self-verify.sock`. This path is stable across shell invocations, so every step can reference it directly without intermediate files or re-sourcing.
 
-Clean up any stale socket from a previous run, then start the debug app:
+Clean up any stale socket from a previous run, then start the debug app in a persistent shell session:
 
 ```bash
 rm -f /tmp/prowl-self-verify.sock /tmp/prowl-self-verify.sock.lock
 PROWL_CLI_SOCKET=/tmp/prowl-self-verify.sock make run-app
 ```
 
-Keep that command running in its own shell session. If plain `make run-app` reports a socket ownership problem, relaunch with a custom `PROWL_CLI_SOCKET`; the installed app may already own the standard socket.
+Keep that command running in its own shell or PTY session for the whole validation run.
 
-**Agent mode** — CLI agents do not have a persistent foreground shell, so `make run-app` cannot block. After building, launch the binary directly in the background:
+Do not launch the built `ProwlApp` binary directly in the background from an agent shell. Once that shell exits, the app can exit and leave a stale socket behind.
 
-```bash
-rm -f /tmp/prowl-self-verify.sock /tmp/prowl-self-verify.sock.lock
-make build-app
-app_bin="$(xcodebuild -project supacode.xcodeproj -scheme supacode \
-  -configuration Debug -showBuildSettings -json 2>/dev/null \
-  | jq -er '.[0].buildSettings.BUILT_PRODUCTS_DIR + "/" +
-            .[0].buildSettings.FULL_PRODUCT_NAME + "/Contents/MacOS/" +
-            .[0].buildSettings.EXECUTABLE_NAME')"
-PROWL_CLI_SOCKET=/tmp/prowl-self-verify.sock "$app_bin" &
-disown
-```
+If plain `make run-app` reports a socket ownership problem, relaunch with the custom `PROWL_CLI_SOCKET`; the installed app may already own the standard socket.
 
-Then wait for the socket in the reusable setup block as usual.
-
-If the socket appears but `prowl_debug list --json` returns `APP_NOT_RUNNING`, the app likely exited and left a stale socket/lock behind. Remove both socket files, confirm no debug `ProwlApp` PID is still alive, then relaunch. In agent sessions where the direct binary exits immediately, use a PTY-backed `PROWL_CLI_SOCKET=/tmp/prowl-self-verify.sock make run-app` session instead.
+If the socket appears but `prowl_debug list --json` returns `APP_NOT_RUNNING`, the app likely exited and left a stale socket/lock behind. Remove both socket files, confirm no debug `ProwlApp` PID is still alive, then relaunch with `PROWL_CLI_SOCKET=/tmp/prowl-self-verify.sock make run-app` in a persistent shell session.
 
 When `PROWL_CLI_SOCKET` is set, CLI auto-launch is disabled. The debug app and every CLI invocation must use the same socket value.
 
