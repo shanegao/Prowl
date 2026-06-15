@@ -61,15 +61,17 @@ struct GitRemoteInfoTests {
     let fork = GithubRemoteInfo(host: "github.com", owner: "fork", repo: "project")
     let upstream = GithubRemoteInfo(host: "github.com", owner: "upstream", repo: "project")
     let team = GithubRemoteInfo(host: "github.com", owner: "team", repo: "project")
+    let zed = GithubRemoteInfo(host: "github.com", owner: "zed", repo: "project")
     let duplicateTeam = GithubRemoteInfo(host: "github.com", owner: "TEAM", repo: "project")
 
     let infos = GitClient.prioritizedGithubRemoteInfos([
+      (name: "zed", info: zed),
+      (name: "upstream", info: upstream),
       (name: "origin", info: fork),
       (name: "team", info: team),
-      (name: "upstream", info: upstream),
-      (name: "backup", info: duplicateTeam),
+      (name: "zz-team", info: duplicateTeam),
     ])
 
-    #expect(infos == [upstream, team, fork])
+    #expect(infos == [fork, upstream, team, zed])
   }
 }

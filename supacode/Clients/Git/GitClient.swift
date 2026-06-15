@@ -544,6 +544,10 @@ struct GitClient {
         if lhsPriority != rhsPriority {
           return lhsPriority < rhsPriority
         }
+        let nameComparison = lhs.element.name.localizedStandardCompare(rhs.element.name)
+        if nameComparison != .orderedSame {
+          return nameComparison == .orderedAscending
+        }
         return lhs.offset < rhs.offset
       }
       .compactMap { entry in
@@ -562,12 +566,12 @@ struct GitClient {
 
   nonisolated private static func githubPullRequestRemotePriority(_ name: String) -> Int {
     switch name.lowercased() {
-    case "upstream":
-      0
     case "origin":
-      2
-    default:
+      0
+    case "upstream":
       1
+    default:
+      2
     }
   }
 

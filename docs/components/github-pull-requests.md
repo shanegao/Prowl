@@ -15,9 +15,9 @@ with a worktree's branch and exposes its status and actions. It works through th
 itself.
 
 If a repository has multiple GitHub remotes, Prowl checks each remote for a PR on
-the worktree branch. `upstream` is preferred, other named remotes come next, and
-`origin` is used as the fallback, so fork-based worktrees can show upstream PRs
-without changing `origin` or restarting the app.
+the worktree branch. `origin` is preferred, `upstream` comes next, and other
+named remotes are used alphabetically, so fork-based worktrees can show upstream
+PRs without changing `origin` or restarting the app.
 
 ## What it shows
 
