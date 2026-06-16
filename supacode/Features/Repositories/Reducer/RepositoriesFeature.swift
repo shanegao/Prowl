@@ -185,6 +185,7 @@ struct RepositoriesFeature {
     case refreshGithubIntegrationAvailability
     case githubIntegrationAvailabilityUpdated(Bool)
     case repositoryPullRequestRefreshCompleted(Repository.ID)
+    case pullRequestRefreshBatchCountResolved(repositoryID: Repository.ID, count: Int)
     case repositoryPullRequestsLoaded(
       repositoryID: Repository.ID,
       pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?]
@@ -192,7 +193,6 @@ struct RepositoriesFeature {
     case setGithubIntegrationEnabled(Bool)
     case setMergedWorktreeAction(MergedWorktreeAction?)
     case pullRequestAction(Worktree.ID, PullRequestAction)
-    case cacheRemoteInfo(repositoryID: Repository.ID, remoteInfo: GithubRemoteInfo)
     case pullRequestRefreshBatchOutcome(PullRequestRefreshCoordinator.Outcome)
   }
 
@@ -263,8 +263,9 @@ struct RepositoriesFeature {
     var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
+    var prRefreshBatchCountsByRepositoryID: [Repository.ID: Int] = [:]
+    var prRefreshResultsByRepositoryID: [Repository.ID: [String: GithubPullRequest]] = [:]
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
-    var remoteInfoByRepositoryID: [Repository.ID: GithubRemoteInfo] = [:]
     var codeHostByRepositoryID: [Repository.ID: CodeHost] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
     @Shared(.appStorage("prowlCreatedWorktreeIDs")) var prowlCreatedWorktreeIDs: [Worktree.ID] = []

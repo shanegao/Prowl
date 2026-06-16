@@ -178,6 +178,8 @@ extension RepositoriesFeature {
         }
         state.queuedPullRequestRefreshByRepositoryID.removeAll()
         state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+        state.prRefreshBatchCountsByRepositoryID.removeAll()
+        state.prRefreshResultsByRepositoryID.removeAll()
         return .run { send in
           while !Task.isCancelled {
             try? await ContinuousClock().sleep(for: githubIntegrationRecoveryInterval)
@@ -212,6 +214,8 @@ extension RepositoriesFeature {
 
     case .repositoryPullRequestRefreshCompleted(let repositoryID):
       state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
+      state.prRefreshBatchCountsByRepositoryID.removeValue(forKey: repositoryID)
+      state.prRefreshResultsByRepositoryID.removeValue(forKey: repositoryID)
       guard state.githubIntegrationAvailability == .available,
         let pending = state.queuedPullRequestRefreshByRepositoryID.removeValue(
           forKey: repositoryID
@@ -227,6 +231,13 @@ extension RepositoriesFeature {
           )
         )
       )
+
+    case .pullRequestRefreshBatchCountResolved(let repositoryID, let count):
+      guard state.inFlightPullRequestRefreshRepositoryIDs.contains(repositoryID) else {
+        return .none
+      }
+      state.prRefreshBatchCountsByRepositoryID[repositoryID] = max(1, count)
+      return .none
 
     case .repositoryPullRequestsLoaded(let repositoryID, let pullRequestsByWorktreeID):
       guard let repository = state.repositories[id: repositoryID] else {
@@ -675,6 +686,8 @@ extension RepositoriesFeature {
         state.pendingPullRequestRefreshByRepositoryID.removeAll()
         state.queuedPullRequestRefreshByRepositoryID.removeAll()
         state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+        state.prRefreshBatchCountsByRepositoryID.removeAll()
+        state.prRefreshResultsByRepositoryID.removeAll()
         return .merge(
           .cancel(id: CancelID.githubIntegrationRecovery),
           .send(.githubIntegration(.refreshGithubIntegrationAvailability))
@@ -684,6 +697,8 @@ extension RepositoriesFeature {
       state.pendingPullRequestRefreshByRepositoryID.removeAll()
       state.queuedPullRequestRefreshByRepositoryID.removeAll()
       state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+      state.prRefreshBatchCountsByRepositoryID.removeAll()
+      state.prRefreshResultsByRepositoryID.removeAll()
       let worktreeIDs = Array(state.worktreeInfoByID.keys)
       for worktreeID in worktreeIDs {
         updateWorktreePullRequest(
@@ -701,10 +716,6 @@ extension RepositoriesFeature {
       state.mergedWorktreeAction = action
       return .none
 
-    case .cacheRemoteInfo(let repositoryID, let remoteInfo):
-      state.remoteInfoByRepositoryID[repositoryID] = remoteInfo
-      return .none
-
     case .pullRequestRefreshBatchOutcome(let outcome):
       return reduceBatchOutcome(state: &state, outcome: outcome)
     }
@@ -718,14 +729,27 @@ extension RepositoriesFeature {
     case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch):
       guard let repository = state.repositories[id: repositoryID] else {
         state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
+        state.prRefreshBatchCountsByRepositoryID.removeValue(forKey: repositoryID)
+        state.prRefreshResultsByRepositoryID.removeValue(forKey: repositoryID)
         return .none
       }
-      var prsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
-      for worktreeID in worktreeIDs {
-        if let worktree = repository.worktrees[id: worktreeID] {
-          prsByWorktreeID[worktreeID] = prsByBranch[worktree.name]
-        }
+      mergePullRequestRefreshResults(
+        repositoryID: repositoryID,
+        prsByBranch: prsByBranch,
+        state: &state
+      )
+      guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
+        return .none
       }
+      let mergedPRsByBranch =
+        state.prRefreshResultsByRepositoryID.removeValue(
+          forKey: repositoryID
+        ) ?? [:]
+      let prsByWorktreeID = pullRequestsByWorktreeID(
+        repository: repository,
+        worktreeIDs: worktreeIDs,
+        prsByBranch: mergedPRsByBranch
+      )
       return .merge(
         .send(
           .githubIntegration(
@@ -737,9 +761,77 @@ extension RepositoriesFeature {
         ),
         .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
       )
-    case .failed(let repositoryID, _, _):
-      return .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
+    case .failed(let repositoryID, let worktreeIDs, _):
+      guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
+        return .none
+      }
+      let mergedPRsByBranch =
+        state.prRefreshResultsByRepositoryID.removeValue(
+          forKey: repositoryID
+        ) ?? [:]
+      guard !mergedPRsByBranch.isEmpty,
+        let repository = state.repositories[id: repositoryID]
+      else {
+        return .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
+      }
+      return .merge(
+        .send(
+          .githubIntegration(
+            .repositoryPullRequestsLoaded(
+              repositoryID: repositoryID,
+              pullRequestsByWorktreeID: pullRequestsByWorktreeID(
+                repository: repository,
+                worktreeIDs: worktreeIDs,
+                prsByBranch: mergedPRsByBranch
+              )
+            )
+          )
+        ),
+        .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
+      )
     }
+  }
+
+  private func mergePullRequestRefreshResults(
+    repositoryID: Repository.ID,
+    prsByBranch: [String: GithubPullRequest],
+    state: inout State
+  ) {
+    guard !prsByBranch.isEmpty else {
+      return
+    }
+    var merged = state.prRefreshResultsByRepositoryID[repositoryID] ?? [:]
+    for (branch, pullRequest) in prsByBranch where merged[branch] == nil {
+      merged[branch] = pullRequest
+    }
+    state.prRefreshResultsByRepositoryID[repositoryID] = merged
+  }
+
+  private func consumePullRequestRefreshBatch(
+    repositoryID: Repository.ID,
+    state: inout State
+  ) -> Bool {
+    let remaining = (state.prRefreshBatchCountsByRepositoryID[repositoryID] ?? 1) - 1
+    guard remaining > 0 else {
+      state.prRefreshBatchCountsByRepositoryID.removeValue(forKey: repositoryID)
+      return true
+    }
+    state.prRefreshBatchCountsByRepositoryID[repositoryID] = remaining
+    return false
+  }
+
+  private func pullRequestsByWorktreeID(
+    repository: Repository,
+    worktreeIDs: [Worktree.ID],
+    prsByBranch: [String: GithubPullRequest]
+  ) -> [Worktree.ID: GithubPullRequest?] {
+    var prsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
+    for worktreeID in worktreeIDs {
+      if let worktree = repository.worktrees[id: worktreeID] {
+        prsByWorktreeID[worktreeID] = prsByBranch[worktree.name]
+      }
+    }
+    return prsByWorktreeID
   }
 
   func enqueueBatchedPullRequestRefresh(
@@ -764,6 +856,14 @@ extension RepositoriesFeature {
       }
       @Shared(.repositorySettings(repositoryRootURL)) var repositorySettings
       let remoteInfosByHost = Dictionary(grouping: remoteInfos, by: \.host)
+      await send(
+        .githubIntegration(
+          .pullRequestRefreshBatchCountResolved(
+            repositoryID: repositoryID,
+            count: remoteInfosByHost.count
+          )
+        )
+      )
       for (host, hostRemoteInfos) in remoteInfosByHost {
         coordinatorClient.enqueue(
           PullRequestRefreshCoordinator.Request(
