@@ -200,7 +200,7 @@ extension RepositoriesFeature {
   static func workspaceGitRunner(shellClient: ShellClient) -> ProjectWorkspaceGitRunner {
     ProjectWorkspaceGitRunner { command in
       do {
-        _ = try await shellClient.run(
+        _ = try await shellClient.runLogin(
           URL(fileURLWithPath: "/usr/bin/env"),
           ["git"] + command.arguments,
           command.currentDirectoryURL

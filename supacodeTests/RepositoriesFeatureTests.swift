@@ -1373,7 +1373,7 @@ struct RepositoriesFeatureTests {
       $0.repositoryPersistence.loadRepositoryEntries = { [] }
       $0.repositoryPersistence.saveRepositoryEntries = { _ in }
       $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
-      $0.shellClient.run = { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      $0.shellClient.runLoginImpl = { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
       $0.gitClient.deleteLocalBranch = { name, url, force in
         deleteCalls.withValue {
           $0.append(
@@ -1430,7 +1430,7 @@ struct RepositoriesFeatureTests {
       $0.repositoryPersistence.loadRepositoryEntries = { [] }
       $0.repositoryPersistence.saveRepositoryEntries = { _ in }
       $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
-      $0.shellClient.run = { _, _, _ in
+      $0.shellClient.runLoginImpl = { _, _, _, _ in
         throw ShellClientError(command: "git", stdout: "", stderr: "broken", exitCode: 1)
       }
     }
@@ -1488,7 +1488,7 @@ struct RepositoriesFeatureTests {
       $0.repositoryPersistence.loadRepositoryEntries = { [] }
       $0.repositoryPersistence.saveRepositoryEntries = { _ in }
       $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
-      $0.shellClient.run = { _, _, _ in
+      $0.shellClient.runLoginImpl = { _, _, _, _ in
         throw ShellClientError(command: "git", stdout: "", stderr: "broken", exitCode: 1)
       }
     }
@@ -1564,6 +1564,51 @@ struct RepositoriesFeatureTests {
     await store.receive(\.showToast, .warning("Workspace creation canceled"))
   }
 
+  @Test func workspaceGitRunnerUsesLoginShellForGitCommands() async throws {
+    struct LoginCall: Equatable, Sendable {
+      let executablePath: String
+      let arguments: [String]
+      let currentDirectoryPath: String?
+    }
+    let directRunCalls = LockIsolated(0)
+    let loginCalls = LockIsolated<[LoginCall]>([])
+    let runner = RepositoriesFeature.workspaceGitRunner(
+      shellClient: ShellClient(
+        run: { _, _, _ in
+          directRunCalls.withValue { $0 += 1 }
+          throw ShellClientError(command: "git", stdout: "", stderr: "direct run used", exitCode: 1)
+        },
+        runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
+          loginCalls.withValue {
+            $0.append(
+              LoginCall(
+                executablePath: executableURL.path(percentEncoded: false),
+                arguments: arguments,
+                currentDirectoryPath: currentDirectoryURL?.path(percentEncoded: false)
+              ))
+          }
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+      )
+    )
+
+    try await runner.run(
+      ProjectWorkspaceGitCommand(
+        arguments: ["-C", "/tmp/repo", "worktree", "add", "/tmp/workspace/repo"],
+        currentDirectoryURL: URL(fileURLWithPath: "/tmp/repo")
+      ))
+
+    #expect(directRunCalls.value == 0)
+    #expect(
+      loginCalls.value == [
+        LoginCall(
+          executablePath: "/usr/bin/env",
+          arguments: ["git", "-C", "/tmp/repo", "worktree", "add", "/tmp/workspace/repo"],
+          currentDirectoryPath: "/tmp/repo"
+        )
+      ])
+  }
+
   @Test func workspaceCreationSuccessOpensWorkspaceAndShowsToast() async throws {
     let rootURL = FileManager.default.temporaryDirectory
       .appending(path: "prowl-feature-success-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -1579,7 +1624,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 1_700_000_000)
-      $0.shellClient.run = { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      $0.shellClient.runLoginImpl = { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
       $0.repositoryPersistence.loadRepositoryEntries = { [] }
       $0.repositoryPersistence.saveRepositoryEntries = { _ in }
       $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
