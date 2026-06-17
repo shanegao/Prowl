@@ -1699,11 +1699,13 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         archivedPath: "handoff/archive/2026-06-12T1430-codex-to-claude.md",
         sessionContext: HandoffSessionPayload(
           agent: "codex",
+          sessionID: "codex-session",
           paneID: "pane-0",
           paneTitle: "codex",
           source: "terminal-scrollback",
           confidence: "fallback",
-          excerptPath: "handoff/sessions/2026-06-12T1430-pane-0.md"
+          excerptPath: "handoff/sessions/2026-06-12T1430-pane-0.md",
+          transcriptPath: "/tmp/codex.jsonl"
         ),
         launchedPane: HandoffPanePayload(
           worktreeID: "App:/Projects/App",

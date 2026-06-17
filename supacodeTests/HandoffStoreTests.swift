@@ -113,10 +113,12 @@ struct HandoffStoreTests {
     let store = HandoffStore(rootURL: root)
     let sessionContext = HandoffStore.SessionContext(
       agent: "codex",
+      sessionID: "codex-session",
       paneID: "pane-123",
       paneTitle: "codex",
       source: "terminal-scrollback",
       confidence: "fallback",
+      transcriptPath: "/tmp/codex.jsonl",
       excerptText: "Implemented handoff session context.\nNext: run tests."
     )
 
@@ -133,10 +135,13 @@ struct HandoffStoreTests {
     let excerptURL = store.handoffDirectory.appending(path: excerptPath)
     let excerpt = try String(contentsOf: excerptURL, encoding: .utf8)
     #expect(excerpt.contains("# Handoff Session Context"))
+    #expect(excerpt.contains("Session ID: codex-session"))
+    #expect(excerpt.contains("Native transcript: /tmp/codex.jsonl"))
     #expect(excerpt.contains("Implemented handoff session context."))
 
     let current = try String(contentsOf: store.currentURL, encoding: .utf8)
     #expect(current.contains("Session Context:"))
+    #expect(current.contains("Session ID: codex-session"))
     #expect(current.contains(".prowl/handoff/sessions/"))
   }
 

@@ -63,6 +63,7 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
 
 public struct HandoffSessionPayload: Codable, Sendable, Equatable {
   public let agent: String?
+  public let sessionID: String?
   public let paneID: String
   public let paneTitle: String?
   public let source: String
@@ -72,6 +73,7 @@ public struct HandoffSessionPayload: Codable, Sendable, Equatable {
 
   enum CodingKeys: String, CodingKey {
     case agent
+    case sessionID = "session_id"
     case paneID = "pane_id"
     case paneTitle = "pane_title"
     case source
@@ -82,6 +84,7 @@ public struct HandoffSessionPayload: Codable, Sendable, Equatable {
 
   public nonisolated init(
     agent: String?,
+    sessionID: String? = nil,
     paneID: String,
     paneTitle: String?,
     source: String,
@@ -90,6 +93,7 @@ public struct HandoffSessionPayload: Codable, Sendable, Equatable {
     transcriptPath: String? = nil
   ) {
     self.agent = agent
+    self.sessionID = sessionID
     self.paneID = paneID
     self.paneTitle = paneTitle
     self.source = source

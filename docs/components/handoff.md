@@ -44,7 +44,12 @@ Everything lives under the target's `.prowl/handoff/` directory:
 
 `sessions/<ts>-<pane>.md` is a normalized excerpt from the outgoing pane. Today it
 captures the current terminal screen/scrollback and records the detected agent,
-pane, source, confidence, and native transcript path when one is available.
+session id, pane, source, confidence, and native transcript path when one is
+available. Claude Code sessions are resolved from
+`~/.claude/projects/<encoded-cwd>/*.jsonl`; Codex sessions are resolved from
+`~/.codex/sessions/**/rollout-*.jsonl` by matching the rollout `cwd`. When native
+metadata is found, `confidence` is `high`; otherwise Prowl still writes the
+terminal excerpt with fallback confidence.
 
 ## The protocol
 

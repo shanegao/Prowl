@@ -339,6 +339,7 @@ struct SupacodeApp: App {
           let surfaceID = state.activeSurfaceID(for: tabID)
         else { return nil }
         return makeHandoffSessionContext(
+          rootURL: state.worktree.workingDirectory,
           worktreeID: worktreeID,
           paneID: surfaceID,
           paneTitle: nil,
@@ -418,6 +419,7 @@ struct SupacodeApp: App {
   }
 
   private static func makeHandoffSessionContext(
+    rootURL: URL,
     worktreeID: Worktree.ID,
     paneID: UUID,
     paneTitle: String?,
@@ -430,14 +432,17 @@ struct SupacodeApp: App {
     }
 
     let detectedAgent = state.surfaceAgentStates[paneID]?.detectedAgent?.rawValue
+    let transcript = HandoffTranscriptResolver().resolve(agent: detectedAgent, rootURL: rootURL)
     let title = paneTitle ?? state.paneTitle(surfaceID: paneID, fallbackTabTitle: "")
     let screenText = surface.readScreenContentsForCLI() ?? surface.readViewportContentsForCLI()
     return HandoffStore.SessionContext(
       agent: detectedAgent,
+      sessionID: transcript?.sessionID,
       paneID: paneID.uuidString,
       paneTitle: title.isEmpty ? nil : title,
-      source: screenText == nil ? "terminal-unavailable" : "terminal-scrollback",
-      confidence: "fallback",
+      source: transcript?.source ?? (screenText == nil ? "terminal-unavailable" : "terminal-scrollback"),
+      confidence: transcript?.confidence ?? "fallback",
+      transcriptPath: transcript?.transcriptPath,
       excerptText: screenText
     )
   }
@@ -667,6 +672,7 @@ struct SupacodeApp: App {
             paneID: resolved.paneID.uuidString,
             outgoingAgent: agent,
             sessionContext: makeHandoffSessionContext(
+              rootURL: URL(fileURLWithPath: resolved.worktreeRootPath, isDirectory: true),
               worktreeID: resolved.worktreeID,
               paneID: resolved.paneID,
               paneTitle: resolved.paneTitle,

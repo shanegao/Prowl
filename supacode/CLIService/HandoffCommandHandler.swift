@@ -182,6 +182,7 @@ final class HandoffCommandHandler: CommandHandler {
         sessionContext: target.sessionContext.map {
           HandoffSessionPayload(
             agent: $0.agent,
+            sessionID: $0.sessionID,
             paneID: $0.paneID,
             paneTitle: $0.paneTitle,
             source: $0.source,

@@ -331,8 +331,10 @@ enum OutputRenderer {
 
   private static func renderHandoffSession(_ session: HandoffSessionPayload?) -> [String] {
     guard let session, let excerptPath = session.excerptPath else { return [] }
+    let sessionID = session.sessionID.map { "  id=\($0)" } ?? ""
+    let transcript = session.transcriptPath.map { "  transcript=\($0)" } ?? ""
     return [
-      "  \("session:".dim) \(excerptPath)  \(session.confidence.dim)"
+      "  \("session:".dim) \(excerptPath)  \(session.confidence.dim)\(sessionID.dim)\(transcript.dim)"
     ]
   }
 

@@ -253,7 +253,9 @@ prowl handoff save --note "ui done, api next" --json
 The outgoing agent is whatever Prowl detects in the target's pane (see
 `pane.agent` in [`list`](#prowl-list)). Response payload includes `action`,
 `artifact_path`, `outgoing_agent`, `to_agent`, `repos`, `changed_file_count`,
-`archived_path`, `session_context`, and `launched_pane`. Full feature guide:
+`archived_path`, `session_context`, and `launched_pane`. `session_context` includes
+the generated excerpt path plus native `session_id` / `transcript_path` when
+Prowl can resolve Claude Code or Codex JSONL metadata. Full feature guide:
 [handoff](handoff.md).
 
 ## Transport & app launch

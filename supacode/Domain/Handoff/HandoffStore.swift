@@ -100,6 +100,7 @@ nonisolated struct HandoffStore: Sendable {
 
   struct SessionContext: Sendable, Equatable {
     let agent: String?
+    let sessionID: String?
     let paneID: String
     let paneTitle: String?
     let source: String
@@ -109,6 +110,7 @@ nonisolated struct HandoffStore: Sendable {
 
     init(
       agent: String?,
+      sessionID: String? = nil,
       paneID: String,
       paneTitle: String?,
       source: String,
@@ -117,6 +119,7 @@ nonisolated struct HandoffStore: Sendable {
       excerptText: String?
     ) {
       self.agent = agent
+      self.sessionID = sessionID
       self.paneID = paneID
       self.paneTitle = paneTitle
       self.source = source
@@ -311,6 +314,7 @@ nonisolated struct HandoffStore: Sendable {
     let relativePath = "handoff/sessions/\(fileName)"
     let payload = HandoffSessionPayload(
       agent: context.agent,
+      sessionID: context.sessionID,
       paneID: context.paneID,
       paneTitle: context.paneTitle,
       source: context.source,
@@ -335,6 +339,7 @@ nonisolated struct HandoffStore: Sendable {
     lines.append("")
     lines.append("- Captured: \(iso(now))")
     lines.append("- Agent: \(payload.agent ?? "unknown")")
+    lines.append("- Session ID: \(payload.sessionID ?? "unknown")")
     lines.append("- Pane: \(payload.paneID)\(payload.paneTitle.map { " (\($0))" } ?? "")")
     lines.append("- Source: \(payload.source)")
     lines.append("- Confidence: \(payload.confidence)")
@@ -380,6 +385,7 @@ nonisolated struct HandoffStore: Sendable {
     lines.append("- Session Context:")
     if let sessionContext {
       lines.append("  - Agent: \(sessionContext.agent ?? "unknown")")
+      lines.append("  - Session ID: \(sessionContext.sessionID ?? "unknown")")
       lines.append("  - Source: \(sessionContext.source)")
       lines.append("  - Confidence: \(sessionContext.confidence)")
       lines.append("  - Pane: \(sessionContext.paneID)")
