@@ -193,8 +193,8 @@ struct CLIAgentsCommandHandlerTests {
               selected: true,
               focusedPaneID: tabPaneID,
               panes: [
-                .init(id: otherPaneID, title: "zsh", cwd: "/tmp/tab-repo"),
-                .init(id: tabPaneID, title: "omp", cwd: "/tmp/project-repo/Sources"),
+                .init(id: otherPaneID, title: "zsh", cwd: "/tmp/tab-repo", agent: nil),
+                .init(id: tabPaneID, title: "omp", cwd: "/tmp/project-repo/Sources", agent: nil),
               ]
             )
           ]
