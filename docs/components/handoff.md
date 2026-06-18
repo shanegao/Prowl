@@ -81,13 +81,20 @@ prowl handoff status     [target]
   receiving agent in a **new tab** whose kickoff prompt points it at
   `.prowl/handoff/current.md`. `--no-launch` archives + saves only. Accepted
   tokens follow Prowl's detected-agent list: `pi`, `claude`, `codex`, `gemini`,
-  `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`.
+  `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`,
+  `qwen`.
 - **`status`** reports the artifact path, whether it exists, the detected current
   agent, and the last log line.
 
 The outgoing agent is detected automatically (the same signal as
 [`prowl list`](cli.md)'s `pane.agent`). Full flag/payload reference:
 [cli](cli.md#prowl-handoff).
+
+Prowl also auto-saves an initialized handoff artifact from the same detection
+chain. Once `.prowl/handoff/current.md` exists for a runnable target, Prowl
+refreshes it when a detected agent moves from **working** to **done** or
+**blocked**. Auto-save is throttled per pane and does not create handoff files
+for targets that have never run `prowl handoff save` or `prowl handoff to`.
 
 ## From the command palette
 
@@ -101,6 +108,8 @@ a workspace.
 
 - Handoff never commits, pushes, or runs destructive git — `save` only **reads**
   git state (`status` / `diff --stat`).
+- Auto-save uses the same read-only `save` path and only updates targets with an
+  existing `.prowl/handoff/current.md`.
 - `to` only **adds** a tab; it never closes the outgoing agent's session, so you
   can still read or roll back from it.
 - It always saves + archives **before** launching, so a fresh artifact exists even

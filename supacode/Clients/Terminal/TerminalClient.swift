@@ -10,6 +10,7 @@ struct TerminalClient {
   /// (e.g. when a palette dismisses and the leftmost pane reclaims first responder).
   var selectedSurfaceID: @MainActor @Sendable (Worktree.ID) -> UUID?
   var handoffSessionContext: @MainActor @Sendable (Worktree.ID) -> HandoffStore.SessionContext?
+  var handoffSessionContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffStore.SessionContext?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
@@ -85,6 +86,7 @@ extension TerminalClient: DependencyKey {
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
     handoffSessionContext: { _ in nil },
+    handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
@@ -97,6 +99,7 @@ extension TerminalClient: DependencyKey {
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
     handoffSessionContext: { _ in nil },
+    handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },

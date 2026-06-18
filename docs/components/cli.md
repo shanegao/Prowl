@@ -241,7 +241,7 @@ prowl handoff status     [target]
   `.prowl/handoff/current.md`. Returns the launched `pane`. `--no-launch`
   archives + saves only (you take over manually). Accepted tokens match Prowl's
   detected-agent list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`,
-  `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`.
+  `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`.
 - **`status`** — report the artifact path, whether it exists, the agent
   currently detected in the target, and the last handoff-log line.
 
@@ -257,6 +257,12 @@ The outgoing agent is whatever Prowl detects in the target's pane (see
 the generated excerpt path plus native `session_id` / `transcript_path` when
 Prowl can resolve Claude Code or Codex JSONL metadata. Full feature guide:
 [handoff](handoff.md).
+
+After a target has an existing `.prowl/handoff/current.md`, the app also
+auto-runs the same save path when Prowl sees the detected agent move from
+**working** to **done** or **blocked**. This auto-save is throttled per pane and
+does not initialize handoff files by itself; use `prowl handoff save` or
+`prowl handoff to` once to opt the target in.
 
 ## Transport & app launch
 

@@ -13,6 +13,7 @@ public enum HandoffAgentSupport {
     "kimi",
     "droid",
     "amp",
+    "qwen",
   ]
 
   public static var supportedAgentsDescription: String {

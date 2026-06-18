@@ -21,7 +21,7 @@ extension AppFeature {
     if let effect = reduceTerminalTabEvent(event, state: state) {
       return effect
     }
-    if let effect = reduceTerminalAgentEvent(event, state: state) {
+    if let effect = reduceTerminalAgentEvent(event, state: &state) {
       return effect
     }
     return .none
@@ -140,19 +140,25 @@ extension AppFeature {
 
   func reduceTerminalAgentEvent(
     _ event: TerminalClient.Event,
-    state: State
+    state: inout State
   ) -> Effect<Action>? {
     switch event {
     case .agentEntryChanged(let entry):
-      return .send(
-        .repositories(
-          .activeAgents(
-            .agentEntryChanged(entry, autoShowPanel: state.settings.autoShowActiveAgentsPanel)
+      let autoSaveEffect = handoffAutoSaveEffect(for: entry, state: &state)
+      return .merge(
+        autoSaveEffect,
+        .send(
+          .repositories(
+            .activeAgents(
+              .agentEntryChanged(entry, autoShowPanel: state.settings.autoShowActiveAgentsPanel)
+            )
           )
         )
       )
 
     case .agentEntryRemoved(let id):
+      state.handoffAutoSaveDisplayStates.removeValue(forKey: id)
+      state.handoffAutoSaveLastSavedAt.removeValue(forKey: id)
       return .send(.repositories(.activeAgents(.agentEntryRemoved(id))))
 
     default:
@@ -168,6 +174,80 @@ extension AppFeature {
     /// The surface is the one the user is actively looking at, so the mute
     /// setting can suppress the redundant banner/sound/bounce for it.
     let isViewed: Bool
+  }
+
+  private func handoffAutoSaveEffect(
+    for entry: ActiveAgentEntry,
+    state: inout State
+  ) -> Effect<Action> {
+    let previous = state.handoffAutoSaveDisplayStates[entry.id]
+    state.handoffAutoSaveDisplayStates[entry.id] = entry.displayState
+
+    guard previous == .working,
+      entry.displayState == .done || entry.displayState == .blocked,
+      let rootURL = handoffAutoSaveRootURL(for: entry.worktreeID, state: state)
+    else {
+      return .none
+    }
+    let store = HandoffStore(rootURL: rootURL)
+    guard store.hasCurrentArtifact,
+      shouldAutoSaveHandoff(for: entry, state: &state)
+    else {
+      return .none
+    }
+
+    let agent = entry.agent.rawValue
+    let displayState = entry.displayState
+    let note = "auto-save: \(agent) \(displayState.rawValue)"
+    let sessionContext = terminalClient.handoffSessionContextForSurface(entry.worktreeID, entry.surfaceID)
+    let saveDate = now
+    return .run { _ in
+      do {
+        _ = try store.save(
+          outgoingAgent: agent,
+          sessionContext: sessionContext,
+          note: note,
+          now: saveDate
+        )
+      } catch {
+        await MainActor.run {
+          appLogger.warning("[HandoffAutoSave] failed for \(rootURL.path(percentEncoded: false)): \(error)")
+        }
+      }
+    }
+  }
+
+  private func shouldAutoSaveHandoff(
+    for entry: ActiveAgentEntry,
+    state: inout State
+  ) -> Bool {
+    let minimumInterval: TimeInterval = 30
+    let currentTime = now
+    if let lastSavedAt = state.handoffAutoSaveLastSavedAt[entry.id],
+      currentTime.timeIntervalSince(lastSavedAt) < minimumInterval
+    {
+      return false
+    }
+    state.handoffAutoSaveLastSavedAt[entry.id] = currentTime
+    return true
+  }
+
+  private func handoffAutoSaveRootURL(
+    for worktreeID: Worktree.ID,
+    state: State
+  ) -> URL? {
+    for repository in state.repositories.repositories {
+      if let worktree = repository.worktrees[id: worktreeID] {
+        return worktree.repositoryRootURL
+      }
+      if repository.id == worktreeID,
+        repository.capabilities.supportsRunnableFolderActions,
+        !repository.capabilities.supportsWorktrees
+      {
+        return repository.rootURL
+      }
+    }
+    return nil
   }
 
   func terminalNotificationReceivedEffect(

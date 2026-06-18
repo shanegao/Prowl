@@ -13,17 +13,22 @@ struct AppFeatureHandoffTests {
       .appending(path: "handoff-app-tests", directoryHint: .isDirectory)
       .appending(path: UUID().uuidString, directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    return url
+    return url.standardizedFileURL
   }
 
   private func remove(_ url: URL) {
     try? FileManager.default.removeItem(at: url)
   }
 
+  private func uuid(_ value: UInt8) -> UUID {
+    UUID(uuid: (value, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+  }
+
   private func makeWorkspaceState(root: URL) -> RepositoriesFeature.State {
-    let workspace = ProjectWorkspace(id: root.path, title: "Checkout Flow")
+    let root = root.standardizedFileURL
+    let workspace = ProjectWorkspace(id: root.path(percentEncoded: false), title: "Checkout Flow")
     let repo = Repository(
-      id: root.path,
+      id: root.path(percentEncoded: false),
       rootURL: root,
       name: "Checkout Flow",
       worktrees: IdentifiedArray(uniqueElements: []),
@@ -31,6 +36,7 @@ struct AppFeatureHandoffTests {
     )
     var state = RepositoriesFeature.State()
     state.repositories = [repo]
+    state.repositoryRoots = [root]
     state.selection = .repository(repo.id)
     return state
   }
@@ -114,5 +120,137 @@ struct AppFeatureHandoffTests {
     // The handoff artifact was materialized in the workspace root.
     let store2 = HandoffStore(rootURL: root)
     #expect(FileManager.default.fileExists(atPath: store2.currentURL.path(percentEncoded: false)))
+  }
+
+  @Test(.dependencies) func agentDoneAutoSavesExistingHandoffArtifact() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let handoffStore = HandoffStore(rootURL: root)
+    try handoffStore.ensureScaffold()
+
+    let surfaceID = uuid(7)
+    let tabID = TerminalTabID(rawValue: uuid(8))
+    var state = AppFeature.State(
+      repositories: makeWorkspaceState(root: root),
+      settings: SettingsFeature.State()
+    )
+    state.settings.autoShowActiveAgentsPanel = false
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.terminalClient.handoffSessionContextForSurface = { _, _ in
+        HandoffStore.SessionContext(
+          agent: "codex",
+          sessionID: "session-1",
+          paneID: surfaceID.uuidString,
+          paneTitle: "codex",
+          source: "terminal-scrollback",
+          confidence: "fallback",
+          transcriptPath: "/tmp/codex.jsonl",
+          excerptText: "finished implementation"
+        )
+      }
+    }
+    store.exhaustivity = .off
+
+    let working = activeAgentEntry(
+      id: surfaceID,
+      worktreeID: root.path(percentEncoded: false),
+      tabID: tabID,
+      surfaceID: surfaceID,
+      displayState: .working
+    )
+    let done = activeAgentEntry(
+      id: surfaceID,
+      worktreeID: root.path(percentEncoded: false),
+      tabID: tabID,
+      surfaceID: surfaceID,
+      displayState: .done
+    )
+
+    await store.send(.terminalEvent(.agentEntryChanged(working)))
+    #expect(store.state.handoffAutoSaveDisplayStates[surfaceID] == .working)
+
+    await store.send(.terminalEvent(.agentEntryChanged(done)))
+    #expect(store.state.handoffAutoSaveDisplayStates[surfaceID] == .done)
+    #expect(store.state.handoffAutoSaveLastSavedAt[surfaceID] == Date(timeIntervalSince1970: 1_760_000_000))
+    await store.finish()
+
+    let current = try String(contentsOf: handoffStore.currentURL, encoding: .utf8)
+    #expect(current.contains("Session ID: session-1"))
+    #expect(current.contains(".prowl/handoff/sessions/"))
+    let sessionFiles = try FileManager.default.contentsOfDirectory(
+      at: handoffStore.sessionDirectory,
+      includingPropertiesForKeys: nil
+    )
+    let sessionFile = try #require(sessionFiles.first)
+    let session = try String(contentsOf: sessionFile, encoding: .utf8)
+    #expect(session.contains("finished implementation"))
+    let log = try String(contentsOf: handoffStore.logURL, encoding: .utf8)
+    #expect(log.contains("auto-save: codex done"))
+  }
+
+  @Test(.dependencies) func agentDoneDoesNotCreateHandoffArtifact() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let handoffStore = HandoffStore(rootURL: root)
+
+    let surfaceID = uuid(9)
+    let state = AppFeature.State(
+      repositories: makeWorkspaceState(root: root),
+      settings: SettingsFeature.State()
+    )
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    let working = activeAgentEntry(
+      id: surfaceID,
+      worktreeID: root.path(percentEncoded: false),
+      surfaceID: surfaceID,
+      displayState: .working
+    )
+    let done = activeAgentEntry(
+      id: surfaceID,
+      worktreeID: root.path(percentEncoded: false),
+      surfaceID: surfaceID,
+      displayState: .done
+    )
+
+    await store.send(.terminalEvent(.agentEntryChanged(working)))
+    #expect(store.state.handoffAutoSaveDisplayStates[surfaceID] == .working)
+
+    await store.send(.terminalEvent(.agentEntryChanged(done)))
+    #expect(store.state.handoffAutoSaveDisplayStates[surfaceID] == .done)
+    await store.finish()
+
+    #expect(handoffStore.hasCurrentArtifact == false)
+  }
+
+  private func activeAgentEntry(
+    id: UUID,
+    worktreeID: Worktree.ID,
+    tabID: TerminalTabID = TerminalTabID(rawValue: UUID()),
+    surfaceID: UUID,
+    displayState: AgentDisplayState
+  ) -> ActiveAgentEntry {
+    ActiveAgentEntry(
+      id: id,
+      worktreeID: worktreeID,
+      worktreeName: "Checkout Flow",
+      workingDirectory: nil,
+      tabID: tabID,
+      tabTitle: "codex",
+      surfaceID: surfaceID,
+      paneIndex: 1,
+      iconLookupToken: DetectedAgent.codex.iconLookupToken,
+      agent: .codex,
+      rawState: displayState == .working ? .working : .idle,
+      displayState: displayState,
+      lastChangedAt: Date(timeIntervalSince1970: 1_760_000_000)
+    )
   }
 }

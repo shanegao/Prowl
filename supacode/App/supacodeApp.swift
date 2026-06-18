@@ -346,6 +346,16 @@ struct SupacodeApp: App {
           terminalManager: terminalManager
         )
       },
+      handoffSessionContextForSurface: { worktreeID, surfaceID in
+        guard let state = terminalManager.stateIfExists(for: worktreeID) else { return nil }
+        return makeHandoffSessionContext(
+          rootURL: state.worktree.workingDirectory,
+          worktreeID: worktreeID,
+          paneID: surfaceID,
+          paneTitle: nil,
+          terminalManager: terminalManager
+        )
+      },
       latestUnreadNotification: {
         terminalManager.latestUnreadNotificationLocation()
       },
