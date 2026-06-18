@@ -28,6 +28,14 @@ xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platf
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation
 ```
 
+**Swift Testing vs XCTest `-only-testing` format**: Swift Testing (`@Test`) requires trailing `()` in the test identifier. Without it, `xcodebuild` silently matches nothing and reports `TEST SUCCEEDED` with zero tests run.
+```bash
+# XCTest (func testFoo)
+-only-testing:supacodeTests/FooTests/testBar
+# Swift Testing (@Test func bar)
+-only-testing:"supacodeTests/FooTests/bar()"
+```
+
 Requires [mise](https://mise.jdx.dev/) for zig, swiftlint, and xcsift tooling.
 
 ## Architecture
