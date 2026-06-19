@@ -95,23 +95,6 @@ from a long command). For the agent's finer state use the
 [Active Agents panel](active-agents.md) or [`prowl agents`](cli.md). Expect up to
 ~2 s before it lights on a warm pane, and the ~3 s working-hold before it clears.
 
-### Optional: a lower-latency signal via a Claude Code hook
-
-Footer detection is zero-config but Claude-specific and depends on that footer's
-wording. For a faster, restyle-proof signal, have Claude Code emit an **OSC 9;4**
-progress sequence while background work runs — Prowl already treats OSC 9;4
-progress as *running*, with no extra setup on its side. Add a hook to
-`~/.claude/settings.json` that returns the bytes via the `terminalSequence` output
-field (Claude Code ≥ 2.1.141; hooks have no controlling terminal, so
-`terminalSequence` is the only path to the terminal):
-
-- **start** (e.g. `PreToolUse` on a backgrounded `Bash`, or `SubagentStart`):
-  emit `printf '\e]9;4;3\e\\'` (indeterminate progress)
-- **stop** (e.g. `SubagentStop`): emit `printf '\e]9;4;0\e\\'` (clear)
-
-A plain backgrounded `Bash` has no completion hook, so the clear is best-effort;
-Prowl auto-clears a stale progress bar after ~15 s.
-
 ## Settings
 
 Agent detection is on by default. Related toggles live in the Active Agents and
