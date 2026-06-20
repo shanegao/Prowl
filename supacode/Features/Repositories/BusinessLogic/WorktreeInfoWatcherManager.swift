@@ -83,6 +83,7 @@ final class WorktreeInfoWatcherManager {
   private var selectedWorktreeID: Worktree.ID?
   private var pullRequestTrackingEnabled = true
   private var pullRequestSelectionCooldownTasksByRepo: [URL: PullRequestSelectionCooldownTask] = [:]
+  private var lastSelectedWorktreeIDByRepo: [URL: Worktree.ID] = [:]
   private var eventContinuation: AsyncStream<WorktreeInfoWatcherClient.Event>.Continuation?
 
   init<C: Clock<Duration>>(
@@ -220,21 +221,39 @@ final class WorktreeInfoWatcherManager {
       emitLineChangesChanged(worktreeID: worktreeID)
       syncLineChangesActivity(for: worktreeID)
     }
+    // When switching to a different worktree within the same repo, cancel any active cooldown
+    // so the PR refresh fires immediately. Re-selecting the same worktree still respects the cooldown.
     if let previousRepository, previousRepository == nextRepository {
+      let lastWorktreeForRepo = lastSelectedWorktreeIDByRepo[previousRepository]
+      let isDifferentWorktree = lastWorktreeForRepo != worktreeID
+      if isDifferentWorktree {
+        cancelPullRequestSelectionCooldown(for: previousRepository)
+      }
       updatePullRequestSchedule(
         repositoryRootURL: previousRepository,
         immediate: shouldImmediatelyRefreshPullRequests(repositoryRootURL: previousRepository)
       )
+      if let worktreeID {
+        lastSelectedWorktreeIDByRepo[previousRepository] = worktreeID
+      }
       return
     }
     if let previousRepository {
       updatePullRequestSchedule(repositoryRootURL: previousRepository, immediate: false)
     }
     if let nextRepository {
+      let lastWorktreeForRepo = lastSelectedWorktreeIDByRepo[nextRepository]
+      let isDifferentWorktree = lastWorktreeForRepo != worktreeID
+      if isDifferentWorktree {
+        cancelPullRequestSelectionCooldown(for: nextRepository)
+      }
       updatePullRequestSchedule(
         repositoryRootURL: nextRepository,
         immediate: shouldImmediatelyRefreshPullRequests(repositoryRootURL: nextRepository)
       )
+      if let worktreeID {
+        lastSelectedWorktreeIDByRepo[nextRepository] = worktreeID
+      }
     }
   }
 
@@ -413,6 +432,7 @@ final class WorktreeInfoWatcherManager {
     openedWorktreeIDs.removeAll()
     hasCompletedInitialWorktreeLoad = false
     cancelAllPullRequestSelectionCooldownTasks()
+    lastSelectedWorktreeIDByRepo.removeAll()
     worktrees.removeAll()
     selectedWorktreeID = nil
     pullRequestTrackingEnabled = true
