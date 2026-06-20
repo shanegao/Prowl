@@ -12,60 +12,47 @@ struct WorkspaceChildRowsView: View {
   var body: some View {
     ForEach(rows) { row in
       let isSelected = row.id == selectedID
-      WorkspaceChildRowButton(row: row, isSelected: isSelected, onSelect: onSelect)
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .background {
-          if isSelected {
-            RoundedRectangle(cornerRadius: 8)
-              .fill(Color.accentColor.opacity(0.18))
-              .padding(.horizontal, 6)
-          }
+      WorktreeRow(
+        name: row.branchName ?? row.repositoryName,
+        worktreeName: row.branchName == nil ? "" : row.repositoryName,
+        info: row.info,
+        iconSystemName: nil,
+        showsPullRequestInfo: true,
+        isHovered: false,
+        isPinned: false,
+        isMainWorktree: false,
+        isLoading: false,
+        taskStatus: nil,
+        isRunScriptRunning: false,
+        showsNotificationIndicator: false,
+        notifications: [],
+        onFocusNotification: { _ in },
+        shortcutHint: nil,
+        showsShortcutHint: false,
+        pinAction: nil,
+        isSelected: isSelected,
+        archiveAction: nil,
+        onDiffTap: nil,
+        onStopRunScript: nil,
+      )
+      .padding(.leading, 14)
+      .padding(.trailing, 8)
+      .background {
+        if isSelected {
+          RoundedRectangle(cornerRadius: 8)
+            .fill(Color.accentColor.opacity(0.18))
+            .padding(.horizontal, 6)
         }
-        .padding(.vertical, 2)
-        .id(row.id)
+      }
+      .padding(.vertical, 2)
+      .contentShape(.interaction, .rect)
+      .contentShape(.rect)
+      .onTapGesture {
+        onSelect(row.id)
+      }
+      .accessibilityAddTraits(.isButton)
+      .help("Focus Terminal in \(row.repositoryName)")
+      .id(row.id)
     }
-  }
-}
-
-private struct WorkspaceChildRowButton: View {
-  let row: WorkspaceChildRowModel
-  let isSelected: Bool
-  let onSelect: (String) -> Void
-
-  var body: some View {
-    Button {
-      onSelect(row.id)
-    } label: {
-      content
-    }
-    .buttonStyle(.plain)
-    .help("Focus Terminal in \(row.repositoryName)")
-  }
-
-  private var content: some View {
-    WorktreeRow(
-      name: row.branchName ?? row.repositoryName,
-      worktreeName: row.branchName == nil ? "" : row.repositoryName,
-      info: row.info,
-      iconSystemName: nil,
-      showsPullRequestInfo: true,
-      isHovered: false,
-      isPinned: false,
-      isMainWorktree: false,
-      isLoading: false,
-      taskStatus: nil,
-      isRunScriptRunning: false,
-      showsNotificationIndicator: false,
-      notifications: [],
-      onFocusNotification: { _ in },
-      shortcutHint: nil,
-      showsShortcutHint: false,
-      pinAction: nil,
-      isSelected: isSelected,
-      archiveAction: nil,
-      onDiffTap: nil,
-      onStopRunScript: nil,
-    )
   }
 }

@@ -503,7 +503,7 @@ struct SidebarListView: View {
   ) -> Set<Repository.ID> where Repositories.Element == Repository {
     Set(
       repositories
-        .filter(\.capabilities.supportsWorktrees)
+        .filter { $0.capabilities.supportsWorktrees || $0.isWorkspace }
         .map(\.id)
     )
   }
