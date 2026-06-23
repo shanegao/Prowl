@@ -69,7 +69,10 @@ struct TerminalCommands: Commands {
         startSearchAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "start_search"))
+        KeyboardShortcutModifier(
+          shortcut: ghosttyShortcuts.keyboardShortcut(for: "start_search")
+            ?? KeyboardShortcut("f", modifiers: .command)
+        )
       )
       .disabled(startSearchAction == nil)
 
@@ -77,7 +80,10 @@ struct TerminalCommands: Commands {
         navigateSearchNextAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "navigate_search:previous"))
+        KeyboardShortcutModifier(
+          shortcut: ghosttyShortcuts.keyboardShortcut(for: "navigate_search:previous")
+            ?? KeyboardShortcut("g", modifiers: .command)
+        )
       )
       .disabled(navigateSearchNextAction == nil)
 
@@ -85,7 +91,10 @@ struct TerminalCommands: Commands {
         navigateSearchPreviousAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "navigate_search:next"))
+        KeyboardShortcutModifier(
+          shortcut: ghosttyShortcuts.keyboardShortcut(for: "navigate_search:next")
+            ?? KeyboardShortcut("g", modifiers: [.command, .shift])
+        )
       )
       .disabled(navigateSearchPreviousAction == nil)
 
@@ -95,7 +104,10 @@ struct TerminalCommands: Commands {
         endSearchAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "end_search"))
+        KeyboardShortcutModifier(
+          shortcut: ghosttyShortcuts.keyboardShortcut(for: "end_search")
+            ?? KeyboardShortcut(.escape, modifiers: [])
+        )
       )
       .disabled(endSearchAction == nil)
 
@@ -105,7 +117,10 @@ struct TerminalCommands: Commands {
         searchSelectionAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "search_selection"))
+        KeyboardShortcutModifier(
+          shortcut: ghosttyShortcuts.keyboardShortcut(for: "search_selection")
+            ?? KeyboardShortcut("e", modifiers: .command)
+        )
       )
       .disabled(searchSelectionAction == nil)
     }
