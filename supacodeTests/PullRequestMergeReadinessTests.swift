@@ -123,6 +123,42 @@ struct PullRequestMergeReadinessTests {
     #expect(readiness.label == "1 check running")
   }
 
+  @Test func mergeReadinessTreatsExpectedChecksAsPending() {
+    // A required commit-status context that has not reported yet shows up as an
+    // `expected` check. It is still in flight, so the PR must not fall through to
+    // a green "Mergeable" label.
+    let pullRequest = makePullRequest(
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      checks: [
+        GithubPullRequestStatusCheck(status: nil, conclusion: nil, state: "EXPECTED")
+      ]
+    )
+
+    let readiness = PullRequestMergeReadiness(pullRequest: pullRequest)
+
+    #expect(readiness.blockingReason == .checksPending(1))
+    #expect(readiness.label == "1 check running")
+    #expect(readiness.isBlocking)
+  }
+
+  @Test func mergeReadinessCountsInProgressAndExpectedChecksTogether() {
+    let pullRequest = makePullRequest(
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      checks: [
+        GithubPullRequestStatusCheck(status: "IN_PROGRESS", conclusion: nil, state: nil),
+        GithubPullRequestStatusCheck(status: nil, conclusion: nil, state: "EXPECTED"),
+        GithubPullRequestStatusCheck(status: "COMPLETED", conclusion: "SUCCESS", state: nil),
+      ]
+    )
+
+    let readiness = PullRequestMergeReadiness(pullRequest: pullRequest)
+
+    #expect(readiness.blockingReason == .checksPending(2))
+    #expect(readiness.label == "2 checks running")
+  }
+
   @Test func mergeReadinessChecksFailedTakesPriorityOverPending() {
     // When there are both failed and in-progress checks,
     // failed should take priority

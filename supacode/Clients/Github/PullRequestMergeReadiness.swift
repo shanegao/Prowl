@@ -30,8 +30,12 @@ nonisolated struct PullRequestMergeReadiness: Equatable, Hashable {
       self.blockingReason = .checksFailed(breakdown.failed)
       return
     }
-    if breakdown.inProgress > 0 {
-      self.blockingReason = .checksPending(breakdown.inProgress)
+    // `expected` checks (legacy commit-status required contexts that have not
+    // reported yet) are still in flight, so treat them like in-progress checks
+    // rather than letting the PR fall through to a green "Mergeable".
+    let pendingChecks = breakdown.inProgress + breakdown.expected
+    if pendingChecks > 0 {
+      self.blockingReason = .checksPending(pendingChecks)
       return
     }
 
