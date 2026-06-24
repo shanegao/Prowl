@@ -1,3 +1,4 @@
+import AppKit
 import ComposableArchitecture
 import Sparkle
 
@@ -98,13 +99,17 @@ final class SilentUpdateDriver: NSObject, SPUUserDriver {
     reply: @escaping @Sendable (SPUUserUpdateChoice) -> Void
   ) {
     if state.userInitiated {
+      if shouldConfirmInstallAndRelaunchImmediately(for: state.stage) {
+        reply(confirmInstallAndRelaunchChoice())
+        return
+      }
       standard.showUpdateFound(with: appcastItem, state: state, reply: reply)
       return
     }
     // Background check: surface the availability silently, then defer so Sparkle
     // will re-offer the same update on the next (user-initiated) check.
     continuation?.yield(.silentUpdateFound(version: appcastItem.displayVersionString))
-    reply(.dismiss)
+    reply(silentBackgroundUpdateChoice(for: state.stage))
   }
 
   func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {
@@ -150,7 +155,7 @@ final class SilentUpdateDriver: NSObject, SPUUserDriver {
   }
 
   func showReady(toInstallAndRelaunch reply: @escaping @Sendable (SPUUserUpdateChoice) -> Void) {
-    standard.showReady(toInstallAndRelaunch: reply)
+    reply(confirmInstallAndRelaunchChoice())
   }
 
   func showInstallingUpdate(
@@ -177,6 +182,35 @@ final class SilentUpdateDriver: NSObject, SPUUserDriver {
   func dismissUpdateInstallation() {
     standard.dismissUpdateInstallation()
   }
+}
+
+func silentBackgroundUpdateChoice(for stage: SPUUserUpdateStage) -> SPUUserUpdateChoice {
+  switch stage {
+  case .notDownloaded, .downloaded:
+    .dismiss
+  case .installing:
+    .skip
+  @unknown default:
+    .dismiss
+  }
+}
+
+func installAndRelaunchChoice(didConfirm: Bool) -> SPUUserUpdateChoice {
+  didConfirm ? .install : .skip
+}
+
+func shouldConfirmInstallAndRelaunchImmediately(for stage: SPUUserUpdateStage) -> Bool {
+  stage == .installing
+}
+
+@MainActor
+private func confirmInstallAndRelaunchChoice() -> SPUUserUpdateChoice {
+  let alert = NSAlert()
+  alert.messageText = "Install Update and Relaunch?"
+  alert.informativeText = "Prowl will quit and relaunch to finish installing the update."
+  alert.addButton(withTitle: "Install and Relaunch")
+  alert.addButton(withTitle: "Later")
+  return installAndRelaunchChoice(didConfirm: alert.runModal() == .alertFirstButtonReturn)
 }
 
 extension UpdaterClient: DependencyKey {
