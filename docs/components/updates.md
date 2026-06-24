@@ -17,6 +17,14 @@ Prowl uses the **Sparkle** framework for auto-updates. Releases are notarized.
   badge appears on the notification bell; clicking it opens the standard Sparkle
   dialog.
 - **On quit with a downloaded update:** Prowl offers to install or defer.
+- **Install confirmation:** installing and relaunching always requires an
+  explicit confirmation. When an update is ready (or a user-initiated check finds
+  one already at the installing stage), Prowl shows an "Install Update and
+  Relaunch?" prompt. Choosing **Install and Relaunch** quits and relaunches to
+  finish; choosing **Later** cancels the current install attempt **without**
+  permanently skipping the version, so the same update is offered again on the
+  next check. A "Check for Updates" action will therefore never install and
+  relaunch on its own.
 
 ## Channels
 
