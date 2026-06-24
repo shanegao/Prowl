@@ -109,15 +109,12 @@ struct AppearanceSettingsView: View {
           .help("Overlay detected agent status on the owning tab icon in Shelf View.")
         }
         Section("Default Views") {
-          Picker("Launch in", selection: $store.defaultViewMode) {
+          Picker("Open when launching Prowl", selection: $store.defaultViewMode) {
             ForEach(DefaultViewMode.allCases) { mode in
               Text(mode.title).tag(mode)
             }
           }
           .help("View Prowl starts in on launch. Shelf and Canvas require at least one worktree or folder.")
-          Text("The view Prowl opens in when you launch the app.")
-            .foregroundStyle(.secondary)
-            .font(.callout)
 
           Picker("Canvas layout", selection: $store.canvasDefaultLayout) {
             ForEach(CanvasDefaultLayout.allCases) { layout in
@@ -125,12 +122,9 @@ struct AppearanceSettingsView: View {
             }
           }
           .help("How cards are arranged the first time you open Canvas for a set of cards.")
-          Text(
-            "How cards are arranged when you open Canvas: Uniform keeps every card the same size; "
-              + "Tile resizes cards to fill the screen, scaling them down as you add more."
-          )
-          .foregroundStyle(.secondary)
-          .font(.callout)
+          Text(store.canvasDefaultLayout.settingsDescription)
+            .foregroundStyle(.secondary)
+            .font(.callout)
         }
         Section("Default Editor") {
           Toggle(

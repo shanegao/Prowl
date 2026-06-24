@@ -18,4 +18,15 @@ enum CanvasDefaultLayout: String, CaseIterable, Identifiable, Codable, Sendable 
       return "Tile"
     }
   }
+
+  /// One-line description shown under the Settings picker, following the
+  /// current selection.
+  var settingsDescription: String {
+    switch self {
+    case .uniform:
+      return "Cards open at the same size."
+    case .tile:
+      return "Cards resize to fill the screen, smaller as you add more."
+    }
+  }
 }
