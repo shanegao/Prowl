@@ -121,7 +121,7 @@ struct PullRequestStatusModel: Equatable {
     guard number != nil else {
       return false
     }
-    let s = state?.uppercased()
-    return s != nil && s != "UNKNOWN"
+    let uppercasedState = state?.uppercased()
+    return uppercasedState != nil && uppercasedState != "UNKNOWN"
   }
 }
