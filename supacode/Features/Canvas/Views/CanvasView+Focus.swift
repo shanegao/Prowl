@@ -260,6 +260,7 @@ extension CanvasView {
   }
 
   func deactivateCanvas() {
+    viewportAnimator.cancel()
     expandedTabID = nil
     let activeStates = terminalManager.activeWorktreeStates
     for state in activeStates {

@@ -87,6 +87,14 @@ class CanvasScrollCoordinator {
   }
 }
 
+private final class CanvasViewportAnimationTimerBox {
+  nonisolated(unsafe) var timer: Timer?
+
+  deinit {
+    timer?.invalidate()
+  }
+}
+
 @MainActor
 @Observable
 final class CanvasViewportAnimator {
@@ -95,7 +103,7 @@ final class CanvasViewportAnimator {
     var scale: CGFloat
   }
 
-  private var timer: Timer?
+  @ObservationIgnored private let timerBox = CanvasViewportAnimationTimerBox()
   private var startSnapshot = Snapshot(offset: .zero, scale: 1)
   private var targetSnapshot = Snapshot(offset: .zero, scale: 1)
   private var startTime: CFTimeInterval = 0
@@ -115,7 +123,7 @@ final class CanvasViewportAnimator {
     self.duration = duration
     self.onUpdate = onUpdate
 
-    timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
+    timerBox.timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
       MainActor.assumeIsolated { self?.tick() }
     }
   }
@@ -140,8 +148,8 @@ final class CanvasViewportAnimator {
   }
 
   func cancel() {
-    timer?.invalidate()
-    timer = nil
+    timerBox.timer?.invalidate()
+    timerBox.timer = nil
     onUpdate = nil
   }
 
