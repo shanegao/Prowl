@@ -66,11 +66,14 @@ struct WorktreeCommands: Commands {
         worktreeMenuButton(entry: entry)
       }
       Divider()
-      Button("Archived Worktrees") {
+      Button(store.state.repositories.isShowingArchivedWorktrees ? "Exit Archived Worktrees" : "Archived Worktrees") {
         store.send(.repositories(.selectArchivedWorktrees))
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.archivedWorktrees)))
-      .help(helpText(title: "Archived Worktrees", commandID: AppShortcuts.CommandID.archivedWorktrees))
+      .help(
+        helpText(
+          title: store.state.repositories.isShowingArchivedWorktrees ? "Exit Archived Worktrees" : "Archived Worktrees",
+          commandID: AppShortcuts.CommandID.archivedWorktrees))
     }
     CommandGroup(replacing: .newItem) {
       if !customCommands.isEmpty {

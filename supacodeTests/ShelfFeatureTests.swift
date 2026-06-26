@@ -868,6 +868,40 @@ struct ShelfFeatureTests {
       $0.worktreeHistoryBackStack = [worktree.id]
       $0.selection = .archivedWorktrees
       $0.sidebarSelectedWorktreeIDs = []
+      $0.preArchivedWorktreeID = worktree.id
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func selectArchivedWorktreesTogglesBackToPreviousWorktree() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktree = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .archivedWorktrees
+    state.sidebarSelectedWorktreeIDs = []
+    state.preArchivedWorktreeID = worktree.id
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.openedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
