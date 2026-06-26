@@ -194,6 +194,72 @@ enum CanvasZoomMath {
   }
 }
 
+enum CanvasViewportMath {
+  struct FitResult: Equatable {
+    let scale: CGFloat
+    let offset: CGSize
+  }
+
+  static func fit(
+    bounds: CGRect,
+    viewport: CGSize,
+    bottomReserve: CGFloat,
+    padding: CGFloat
+  ) -> FitResult? {
+    guard viewport.width > 0, viewport.height > 0,
+      !bounds.isNull, bounds.width > 0, bounds.height > 0,
+      bounds.width.isFinite, bounds.height.isFinite
+    else {
+      return nil
+    }
+
+    let visibleWidth = viewport.width
+    let visibleHeight = max(1, viewport.height - bottomReserve)
+    let paddedWidth = max(1, bounds.width + padding * 2)
+    let paddedHeight = max(1, bounds.height + padding * 2)
+    let scale = max(0.25, min(1.0, min(visibleWidth / paddedWidth, visibleHeight / paddedHeight)))
+
+    return FitResult(
+      scale: scale,
+      offset: CGSize(
+        width: visibleWidth / 2 - bounds.midX * scale,
+        height: visibleHeight / 2 - bounds.midY * scale
+      )
+    )
+  }
+
+  static func revealDelta(
+    for cardRect: CGRect,
+    viewport: CGSize,
+    bottomReserve: CGFloat,
+    margin: CGFloat
+  ) -> CGSize {
+    guard viewport.width > 0, viewport.height > 0 else { return .zero }
+
+    let viewMinX: CGFloat = 0
+    let viewMaxX = viewport.width
+    let viewMinY: CGFloat = 0
+    let viewMaxY = max(0, viewport.height - bottomReserve)
+
+    var deltaX: CGFloat = 0
+    var deltaY: CGFloat = 0
+
+    if cardRect.minX < viewMinX {
+      deltaX = (viewMinX + margin) - cardRect.minX
+    } else if cardRect.maxX > viewMaxX {
+      deltaX = (viewMaxX - margin) - cardRect.maxX
+    }
+
+    if cardRect.minY < viewMinY {
+      deltaY = (viewMinY + margin) - cardRect.minY
+    } else if cardRect.maxY > viewMaxY {
+      deltaY = (viewMaxY - margin) - cardRect.maxY
+    }
+
+    return CGSize(width: deltaX, height: deltaY)
+  }
+}
+
 class CanvasScrollContainerView: NSView {
   var scrollCoordinator: CanvasScrollCoordinator?
   /// When false (a card is expanded), the container ignores scroll/zoom/

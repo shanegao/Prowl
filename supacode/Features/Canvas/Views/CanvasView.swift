@@ -700,38 +700,27 @@ struct CanvasView: View {
     let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
     guard !keys.isEmpty else { return }
 
-    // Bounding box of all cards in canvas coordinates
-    var minX = CGFloat.infinity
-    var minY = CGFloat.infinity
-    var maxX = -CGFloat.infinity
-    var maxY = -CGFloat.infinity
+    var bounds = CGRect.null
 
     for key in keys {
       guard let layout = layoutStore.cardLayouts[key] else { continue }
-      let halfW = layout.size.width / 2
-      let halfH = (layout.size.height + titleBarHeight) / 2
-      minX = min(minX, layout.position.x - halfW)
-      minY = min(minY, layout.position.y - halfH)
-      maxX = max(maxX, layout.position.x + halfW)
-      maxY = max(maxY, layout.position.y + halfH)
+      bounds = bounds.union(cardRect(for: layout))
     }
 
-    guard minX.isFinite else { return }
+    guard
+      let fit = CanvasViewportMath.fit(
+        bounds: bounds,
+        viewport: canvasSize,
+        bottomReserve: bottomToolbarReserve,
+        padding: 30
+      )
+    else {
+      return
+    }
 
-    let padding: CGFloat = 30
-    let bboxW = maxX - minX + padding * 2
-    let bboxH = maxY - minY + padding * 2
-    let bboxCenterX = (minX + maxX) / 2
-    let bboxCenterY = (minY + maxY) / 2
-
-    let newScale = max(0.25, min(1.0, min(canvasSize.width / bboxW, canvasSize.height / bboxH)))
-
-    canvasOffset = CGSize(
-      width: canvasSize.width / 2 - bboxCenterX * newScale,
-      height: (canvasSize.height - bottomToolbarReserve) / 2 - bboxCenterY * newScale
-    )
-    canvasScale = newScale
-    lastCanvasScale = newScale
+    canvasOffset = fit.offset
+    canvasScale = fit.scale
+    lastCanvasScale = fit.scale
     lastCanvasOffset = canvasOffset
   }
 
@@ -929,42 +918,19 @@ struct CanvasView: View {
     let cardKey = tabID.rawValue.uuidString
     guard let layout = layoutStore.cardLayouts[cardKey] else { return }
 
-    let margin: CGFloat = 20
-    let cardHeight = layout.size.height + titleBarHeight
-    let scaledHalfW = layout.size.width / 2 * canvasScale
-    let scaledHalfH = cardHeight / 2 * canvasScale
-    let screenCenter = screenPosition(for: layout.position)
+    let cardRect = screenRect(for: layout)
+    let delta = CanvasViewportMath.revealDelta(
+      for: cardRect,
+      viewport: viewportSize,
+      bottomReserve: bottomToolbarReserve,
+      margin: 20
+    )
 
-    let cardMinX = screenCenter.x - scaledHalfW
-    let cardMaxX = screenCenter.x + scaledHalfW
-    let cardMinY = screenCenter.y - scaledHalfH
-    let cardMaxY = screenCenter.y + scaledHalfH
-
-    let viewMinX: CGFloat = 0
-    let viewMaxX = viewportSize.width
-    let viewMinY: CGFloat = 0
-    let viewMaxY = viewportSize.height - bottomToolbarReserve
-
-    var deltaX: CGFloat = 0
-    var deltaY: CGFloat = 0
-
-    if cardMinX < viewMinX + margin {
-      deltaX = (viewMinX + margin) - cardMinX
-    } else if cardMaxX > viewMaxX - margin {
-      deltaX = (viewMaxX - margin) - cardMaxX
-    }
-
-    if cardMinY < viewMinY + margin {
-      deltaY = (viewMinY + margin) - cardMinY
-    } else if cardMaxY > viewMaxY - margin {
-      deltaY = (viewMaxY - margin) - cardMaxY
-    }
-
-    guard deltaX != 0 || deltaY != 0 else { return }
+    guard delta != .zero else { return }
 
     let target = CGSize(
-      width: canvasOffset.width + deltaX,
-      height: canvasOffset.height + deltaY
+      width: canvasOffset.width + delta.width,
+      height: canvasOffset.height + delta.height
     )
     let start = CanvasViewportAnimator.Snapshot(offset: canvasOffset, scale: canvasScale)
     let end = CanvasViewportAnimator.Snapshot(offset: target, scale: canvasScale)
@@ -972,6 +938,27 @@ struct CanvasView: View {
       canvasOffset = snapshot.offset
       lastCanvasOffset = snapshot.offset
     }
+  }
+
+  private func cardRect(for layout: CanvasCardLayout) -> CGRect {
+    let width = layout.size.width
+    let height = layout.size.height + titleBarHeight
+    return CGRect(
+      x: layout.position.x - width / 2,
+      y: layout.position.y - height / 2,
+      width: width,
+      height: height
+    )
+  }
+
+  private func screenRect(for layout: CanvasCardLayout) -> CGRect {
+    let rect = cardRect(for: layout)
+    return CGRect(
+      x: rect.minX * canvasScale + canvasOffset.width,
+      y: rect.minY * canvasScale + canvasOffset.height,
+      width: rect.width * canvasScale,
+      height: rect.height * canvasScale
+    )
   }
 
   private func cardEntries(
