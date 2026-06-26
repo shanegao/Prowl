@@ -315,6 +315,7 @@ struct RepositoriesFeature {
     var lastFocusedWorktreeID: Worktree.ID?
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
+    var preArchivedWorktreeID: Worktree.ID?
     var isShelfActive: Bool = false
     var worktreeHistoryBackStack: [Worktree.ID] = []
     var worktreeHistoryForwardStack: [Worktree.ID] = []

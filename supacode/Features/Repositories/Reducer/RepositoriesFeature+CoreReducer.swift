@@ -345,6 +345,24 @@ extension RepositoriesFeature {
 
     case .selectArchivedWorktrees:
       state.isShelfActive = false
+      // Toggle: if already showing archived, return to the previous worktree.
+      if state.isShowingArchivedWorktrees {
+        defer { state.preArchivedWorktreeID = nil }
+        if let previousID = state.preArchivedWorktreeID,
+          isSelectionValid(previousID, state: state)
+        {
+          setSingleWorktreeSelection(previousID, state: &state, recordHistory: false)
+          state.openedWorktreeIDs.insert(previousID)
+          state.pendingTerminalFocusWorktreeIDs.insert(previousID)
+          return .send(.delegate(.selectedWorktreeChanged(state.worktree(for: previousID))))
+        }
+        state.selection = nil
+        state.selectedWorkspaceChildID = nil
+        state.sidebarSelectedWorktreeIDs = []
+        return .send(.delegate(.selectedWorktreeChanged(nil)))
+      }
+      // Entering archived view — remember current worktree for later restore.
+      state.preArchivedWorktreeID = state.selectedWorktreeID
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       state.selection = .archivedWorktrees
       state.selectedWorkspaceChildID = nil

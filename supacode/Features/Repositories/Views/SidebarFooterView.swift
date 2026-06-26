@@ -75,12 +75,12 @@ struct SidebarFooterView: View {
       Button {
         store.send(.selectArchivedWorktrees)
       } label: {
-        Image(systemName: "archivebox")
-          .accessibilityLabel("Archived Worktrees")
+        Image(systemName: store.state.isShowingArchivedWorktrees ? "arrow.uturn.left" : "archivebox")
+          .accessibilityLabel(store.state.isShowingArchivedWorktrees ? "Exit Archived Worktrees" : "Archived Worktrees")
       }
       .help(
         AppShortcuts.helpText(
-          title: "Archived Worktrees",
+          title: store.state.isShowingArchivedWorktrees ? "Exit Archived Worktrees" : "Archived Worktrees",
           commandID: AppShortcuts.CommandID.archivedWorktrees,
           in: resolvedKeybindings
         ))
