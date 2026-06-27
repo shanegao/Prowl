@@ -25,6 +25,14 @@ struct WorktreeCreationPromptFeature {
     var showAdvancedOptions: Bool = false
     var validationMessage: String?
     var isValidating = false
+    var isSuggestingName = false
+    var suggestedBranchName: String?
+    let randomPlaceholder: String
+
+    var effectiveBranchName: String {
+      let trimmed = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? randomPlaceholder : trimmed
+    }
 
     var automaticBaseRefLabel: String {
       automaticBaseRef.isEmpty ? "Automatic" : "Automatic (\(automaticBaseRef))"
@@ -32,7 +40,7 @@ struct WorktreeCreationPromptFeature {
 
     /// Default leaf folder name shown as the name-override placeholder.
     var worktreeNamePlaceholder: String {
-      branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+      effectiveBranchName
     }
 
     /// Live validity of the current name override, so the footer can flag an
@@ -49,7 +57,7 @@ struct WorktreeCreationPromptFeature {
         repositoryRootURL: repositoryRootURL,
         nameOverride: worktreeNameOverride,
         pathOverride: worktreePathOverride,
-        branchName: branchName
+        branchName: effectiveBranchName
       )
       .path(percentEncoded: false)
     }
@@ -61,6 +69,8 @@ struct WorktreeCreationPromptFeature {
     case createButtonTapped
     case setValidationMessage(String?)
     case setValidating(Bool)
+    case branchNameSuggestionReceived(String?)
+    case useSuggestedBranchName
     case delegate(Delegate)
   }
 
@@ -87,12 +97,8 @@ struct WorktreeCreationPromptFeature {
         return .send(.delegate(.cancel))
 
       case .createButtonTapped:
-        let trimmed = state.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-          state.validationMessage = "Branch name required."
-          return .none
-        }
-        guard !trimmed.contains(where: \.isWhitespace) else {
+        let effective = state.effectiveBranchName
+        guard !effective.contains(where: \.isWhitespace) else {
           state.validationMessage = "Branch names can't contain spaces."
           return .none
         }
@@ -107,7 +113,7 @@ struct WorktreeCreationPromptFeature {
           .delegate(
             .submit(
               repositoryID: state.repositoryID,
-              branchName: trimmed,
+              branchName: effective,
               baseRef: state.selectedBaseRef,
               placement: WorktreePlacementOverride(
                 name: nameOverride.isEmpty ? nil : nameOverride,
@@ -123,6 +129,17 @@ struct WorktreeCreationPromptFeature {
 
       case .setValidating(let isValidating):
         state.isValidating = isValidating
+        return .none
+
+      case .branchNameSuggestionReceived(let name):
+        state.isSuggestingName = false
+        state.suggestedBranchName = name
+        return .none
+
+      case .useSuggestedBranchName:
+        if let name = state.suggestedBranchName {
+          state.branchName = name
+        }
         return .none
 
       case .delegate:
