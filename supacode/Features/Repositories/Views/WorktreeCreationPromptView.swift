@@ -52,6 +52,7 @@ struct WorktreeCreationPromptView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tint)
+            Spacer()
             Image(systemName: "questionmark.circle")
               .accessibilityLabel("About auto suggestion")
               .font(.footnote)
