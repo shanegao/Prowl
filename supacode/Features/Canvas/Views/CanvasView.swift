@@ -51,7 +51,7 @@ struct CanvasView: View {
   let cardSpacing: CGFloat = 20
   /// Tighter gap for the Tile layout. It lives in the scaled-up tile frame, so
   /// the on-screen gap shrinks further as more cards are tiled (gap × scale).
-  let tileCardSpacing: CGFloat = 10
+  let tileCardSpacing: CGFloat = 12
   /// Outer margin kept when fitting the whole canvas into the visible viewport.
   let viewportFitPadding: CGFloat = 12
   /// Reserved height at the bottom of the viewport for the help button and
