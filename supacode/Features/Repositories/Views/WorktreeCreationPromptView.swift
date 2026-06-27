@@ -52,11 +52,16 @@ struct WorktreeCreationPromptView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tint)
+            Image(systemName: "questionmark.circle")
+              .accessibilityLabel("About auto suggestion")
+              .font(.footnote)
+              .foregroundStyle(.tertiary)
+              .help(
+                "Suggested by on-device AI based on your repository "
+                  + "context and recent terminal activity. "
+                  + "May not always be accurate."
+              )
           }
-          .help(
-            "Suggested by on-device AI based on your repository context "
-              + "and recent terminal activity. May not always be accurate."
-          )
         }
       }
 
