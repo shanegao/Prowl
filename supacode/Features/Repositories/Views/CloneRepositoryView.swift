@@ -66,7 +66,7 @@ struct CloneRepositoryView: View {
     .padding(24)
     .frame(width: 460)
     .onAppear { prefillFromClipboard() }
-    .opacity(isCloning ? 0 : 1)
+    .disabled(isCloning)
     .overlay {
       if isCloning {
         VStack(spacing: 8) {
@@ -75,13 +75,15 @@ struct CloneRepositoryView: View {
             .font(.callout)
             .foregroundStyle(.secondary)
         }
+        .padding(18)
+        .background(.regularMaterial, in: .rect(cornerRadius: 8))
       }
     }
   }
 
   private var isValidInput: Bool {
-    !urlString.trimmingCharacters(in: .whitespaces).isEmpty
-      && !locationPath.trimmingCharacters(in: .whitespaces).isEmpty
+    !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && !locationPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   private func prefillFromClipboard() {
@@ -104,23 +106,37 @@ struct CloneRepositoryView: View {
   }
 
   private func performClone() {
-    let repoName = Self.extractRepoName(from: urlString)
-    let destination = URL(fileURLWithPath: locationPath).appendingPathComponent(repoName, isDirectory: true)
-    let url = urlString
+    guard let request = Self.cloneRequest(urlString: urlString, locationPath: locationPath) else {
+      errorMessage = "Enter a valid clone URL and destination."
+      return
+    }
 
     isCloning = true
     errorMessage = nil
 
     Task {
-      let error = await Self.runGitClone(url: url, destination: destination)
+      let error = await Self.runGitClone(url: request.url, destination: request.destination)
       isCloning = false
       if let error {
         errorMessage = error
       } else {
         dismiss()
-        onCloned(destination)
+        onCloned(request.destination)
       }
     }
+  }
+
+  static func cloneRequest(urlString: String, locationPath: String) -> CloneRequest? {
+    let trimmedURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedURL.isEmpty,
+      let normalizedLocation = PathPolicy.normalizePath(locationPath, resolvingSymlinks: false)
+    else {
+      return nil
+    }
+
+    let destination = URL(fileURLWithPath: normalizedLocation, isDirectory: true)
+      .appending(path: extractRepoName(from: trimmedURL), directoryHint: .isDirectory)
+    return CloneRequest(url: trimmedURL, destination: destination)
   }
 
   /// Returns `nil` on success, or an error message on failure.
@@ -129,15 +145,29 @@ struct CloneRepositoryView: View {
       let process = Process()
       process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
       process.arguments = ["clone", "--", url, destination.path]
-      let errorPipe = Pipe()
-      process.standardError = errorPipe
       process.standardOutput = FileHandle.nullDevice
+      let errorLogURL = FileManager.default.temporaryDirectory
+        .appending(path: "prowl-git-clone-\(UUID().uuidString).log", directoryHint: .notDirectory)
+
+      guard FileManager.default.createFile(atPath: errorLogURL.path(percentEncoded: false), contents: nil),
+        let errorHandle = try? FileHandle(forWritingTo: errorLogURL)
+      else {
+        continuation.resume(returning: "Unable to prepare clone log")
+        return
+      }
+
+      process.standardError = errorHandle
 
       process.terminationHandler = { proc in
+        try? errorHandle.close()
+        defer {
+          try? FileManager.default.removeItem(at: errorLogURL)
+        }
+
         if proc.terminationStatus == 0 {
           continuation.resume(returning: nil)
         } else {
-          let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+          let data = (try? Data(contentsOf: errorLogURL)) ?? Data()
           let msg =
             String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "Clone failed"
@@ -148,36 +178,52 @@ struct CloneRepositoryView: View {
       do {
         try process.run()
       } catch {
+        try? errorHandle.close()
+        try? FileManager.default.removeItem(at: errorLogURL)
         continuation.resume(returning: error.localizedDescription)
       }
     }
   }
 
   static func isGitURL(_ string: String) -> Bool {
-    if string.hasPrefix("https://") || string.hasPrefix("http://") {
-      if string.hasSuffix(".git") { return true }
-      let hosts = ["github.com", "gitlab.com", "bitbucket.org", "dev.azure.com", "gitee.com"]
-      return hosts.contains { string.contains($0) }
+    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.hasPrefix("git@") && trimmed.contains(":") { return true }
+
+    guard let components = URLComponents(string: trimmed),
+      let scheme = components.scheme?.lowercased()
+    else {
+      return false
     }
-    if string.hasPrefix("git@") && string.contains(":") { return true }
-    if string.hasPrefix("git://") || string.hasPrefix("ssh://") { return true }
-    return false
+
+    if scheme == "https" || scheme == "http" {
+      if components.path.hasSuffix(".git") { return true }
+      let hosts = ["github.com", "gitlab.com", "bitbucket.org", "dev.azure.com", "gitee.com"]
+      return components.host.map { hosts.contains($0.lowercased()) } ?? false
+    }
+    return scheme == "git" || scheme == "ssh"
   }
 
   static func extractRepoName(from urlString: String) -> String {
-    let cleaned = urlString.hasSuffix("/") ? String(urlString.dropLast()) : urlString
-    var name: String
+    var cleaned = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+    while cleaned.hasSuffix("/") {
+      cleaned.removeLast()
+    }
+
+    var name: String?
     if cleaned.contains(":") && !cleaned.contains("://") {
-      name =
-        cleaned.components(separatedBy: "/").last
-        ?? cleaned.components(separatedBy: ":").last ?? cleaned
+      let pathPart = cleaned.split(separator: ":", maxSplits: 1).last.map(String.init) ?? cleaned
+      name = pathPart.split(separator: "/").last.map(String.init)
     } else {
-      name = URL(string: cleaned)?.lastPathComponent ?? cleaned
+      name =
+        URLComponents(string: cleaned)?.path.split(separator: "/").last.map(String.init)
+        ?? URL(string: cleaned)?.lastPathComponent
     }
-    if name.hasSuffix(".git") {
-      name = String(name.dropLast(4))
+
+    var resolvedName = name ?? cleaned
+    if resolvedName.hasSuffix(".git") {
+      resolvedName = String(resolvedName.dropLast(4))
     }
-    return name.isEmpty ? "repository" : name
+    return resolvedName.isEmpty ? "repository" : resolvedName
   }
 
   private static var defaultClonePath: String {
@@ -187,5 +233,12 @@ struct CloneRepositoryView: View {
       return developer.path
     }
     return home.path
+  }
+}
+
+extension CloneRepositoryView {
+  struct CloneRequest: Equatable {
+    let url: String
+    let destination: URL
   }
 }

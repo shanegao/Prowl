@@ -166,8 +166,12 @@ extension RepositoriesFeature {
       if wasAlreadyLoaded, !wasRestoringSnapshot {
         let newRepos = state.repositories.filter { !previousRepoIDs.contains($0.id) }
         if let firstNew = newRepos.first {
-          let targetID = firstNew.worktrees.first?.id ?? firstNew.id
-          allEffects.append(.send(.selectWorktree(targetID, focusTerminal: true)))
+          if let worktreeID = firstNew.worktrees.first?.id {
+            allEffects.append(.send(.selectWorktree(worktreeID, focusTerminal: true)))
+          } else if firstNew.capabilities.supportsRunnableFolderActions {
+            state.pendingTerminalFocusWorktreeIDs.insert(firstNew.id)
+            allEffects.append(.send(.selectRepository(firstNew.id)))
+          }
         }
       }
       return .merge(allEffects)

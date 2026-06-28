@@ -14,7 +14,6 @@ struct AddToProwlView: View {
   var body: some View {
     if showCloneForm {
       CloneRepositoryView(dismiss: dismiss) { clonedURL in
-        dismiss()
         onCloneCompleted(clonedURL)
       }
     } else {

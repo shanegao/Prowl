@@ -2066,6 +2066,151 @@ struct RepositoriesFeatureTests {
     #expect(savedEntries.value == expectedSavedEntries)
   }
 
+  @Test func openRepositoriesFinishedAutoSelectsNewGitRepositoryAfterInitialLoad() async {
+    let existingWorktree = makeWorktree(id: "/tmp/existing/main", name: "main", repoRoot: "/tmp/existing")
+    let existingRepository = makeRepository(id: "/tmp/existing", worktrees: [existingWorktree])
+    let newWorktree = makeWorktree(id: "/tmp/new/main", name: "main", repoRoot: "/tmp/new")
+    let newRepository = makeRepository(id: "/tmp/new", name: "new", worktrees: [newWorktree])
+    var initialState = makeState(repositories: [existingRepository])
+    initialState.isInitialLoadComplete = true
+    initialState.snapshotPersistencePhase = .active
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+    }
+
+    await store.send(
+      .repositoryManagement(
+        .openRepositoriesFinished(
+          [existingRepository, newRepository],
+          failures: [],
+          invalidRoots: [],
+          openFailures: [],
+          roots: [existingRepository.rootURL, newRepository.rootURL]
+        ))
+    ) {
+      $0.repositories = [existingRepository, newRepository]
+      $0.repositoryRoots = [existingRepository.rootURL, newRepository.rootURL]
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(newWorktree.id)
+      $0.sidebarSelectedWorktreeIDs = [newWorktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [newWorktree.id]
+      $0.openedWorktreeIDs = [newWorktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  @Test func openRepositoriesFinishedAutoSelectsNewPlainRepositoryAfterInitialLoad() async {
+    let existingWorktree = makeWorktree(id: "/tmp/existing/main", name: "main", repoRoot: "/tmp/existing")
+    let existingRepository = makeRepository(id: "/tmp/existing", worktrees: [existingWorktree])
+    let plainRepository = makeRepository(
+      id: "/tmp/plain",
+      name: "plain",
+      kind: .plain,
+      worktrees: []
+    )
+    var initialState = makeState(repositories: [existingRepository])
+    initialState.isInitialLoadComplete = true
+    initialState.snapshotPersistencePhase = .active
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+    }
+
+    await store.send(
+      .repositoryManagement(
+        .openRepositoriesFinished(
+          [existingRepository, plainRepository],
+          failures: [],
+          invalidRoots: [],
+          openFailures: [],
+          roots: [existingRepository.rootURL, plainRepository.rootURL]
+        ))
+    ) {
+      $0.repositories = [existingRepository, plainRepository]
+      $0.repositoryRoots = [existingRepository.rootURL, plainRepository.rootURL]
+      $0.pendingTerminalFocusWorktreeIDs = [plainRepository.id]
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.selectRepository) {
+      $0.selection = .repository(plainRepository.id)
+      $0.openedWorktreeIDs = [plainRepository.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  @Test func openRepositoriesFinishedDoesNotAutoSelectDuringInitialLoad() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+    }
+
+    await store.send(
+      .repositoryManagement(
+        .openRepositoriesFinished(
+          [repository],
+          failures: [],
+          invalidRoots: [],
+          openFailures: [],
+          roots: [repository.rootURL]
+        ))
+    ) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [repository.rootURL]
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test func openRepositoriesFinishedDoesNotAutoSelectWhileRestoringSnapshot() async {
+    let existingWorktree = makeWorktree(id: "/tmp/existing/main", name: "main", repoRoot: "/tmp/existing")
+    let existingRepository = makeRepository(id: "/tmp/existing", worktrees: [existingWorktree])
+    let newWorktree = makeWorktree(id: "/tmp/new/main", name: "main", repoRoot: "/tmp/new")
+    let newRepository = makeRepository(id: "/tmp/new", name: "new", worktrees: [newWorktree])
+    var initialState = makeState(repositories: [existingRepository])
+    initialState.isInitialLoadComplete = true
+    initialState.snapshotPersistencePhase = .restoring
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+
+    await store.send(
+      .repositoryManagement(
+        .openRepositoriesFinished(
+          [existingRepository, newRepository],
+          failures: [],
+          invalidRoots: [],
+          openFailures: [],
+          roots: [existingRepository.rootURL, newRepository.rootURL]
+        ))
+    ) {
+      $0.repositories = [existingRepository, newRepository]
+      $0.repositoryRoots = [existingRepository.rootURL, newRepository.rootURL]
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
   @Test func revealInSidebarExpandsCollapsedRepository() async {
     let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
