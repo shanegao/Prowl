@@ -33,12 +33,15 @@ root; "not a git repository" → plain folder).
 
 - **Shortcut:** `⌘⇧O` (`open_repository`)
 - **Toolbar:** the **Add...** button (folder-with-plus icon) at the top of the
-  sidebar. Choose **Add Local Repository/Folder**.
+  sidebar. Use the popover to browse for a local folder, drag a folder onto the
+  drop zone, clone a remote git URL into a chosen directory, or start workspace
+  creation.
 - **Command Palette:** "Open Repository".
 
 Pick one or more directories. Prowl detects git vs plain, de-duplicates, and
 persists the list. Paths that don't exist or can't be read are reported in an
-alert after the load.
+alert after the load. Repositories added after the initial app load are selected
+automatically.
 
 ## Creating a worktree
 

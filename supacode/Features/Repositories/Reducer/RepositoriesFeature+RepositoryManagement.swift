@@ -86,6 +86,8 @@ extension RepositoriesFeature {
       if failures.isEmpty, state.snapshotPersistencePhase != .active {
         state.snapshotPersistencePhase = .active
       }
+      let wasAlreadyLoaded = state.isInitialLoadComplete
+      let previousRepoIDs = Set(state.repositories.ids)
       let previousSelection = state.selectedWorktreeID
       let previousSelectedWorktree = state.worktree(for: previousSelection)
       let applyResult = applyRepositories(
@@ -161,6 +163,17 @@ extension RepositoriesFeature {
         allEffects.append(effect)
       }
       allEffects.append(refreshWorkspaceChildrenEffect(state: state))
+      if wasAlreadyLoaded, !wasRestoringSnapshot {
+        let newRepos = state.repositories.filter { !previousRepoIDs.contains($0.id) }
+        if let firstNew = newRepos.first {
+          if let worktreeID = firstNew.worktrees.first?.id {
+            allEffects.append(.send(.selectWorktree(worktreeID, focusTerminal: true)))
+          } else if firstNew.capabilities.supportsRunnableFolderActions {
+            state.pendingTerminalFocusWorktreeIDs.insert(firstNew.id)
+            allEffects.append(.send(.selectRepository(firstNew.id)))
+          }
+        }
+      }
       return .merge(allEffects)
 
     case .requestRemoveRepository(let repositoryID):

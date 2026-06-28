@@ -203,26 +203,24 @@ struct SidebarListView: View {
             Label("Add...", systemImage: "folder.badge.plus")
           }
           .help("Add Repository or Workspace")
+          .persistentPopover(isPresented: $isAddChoicePresented) {
+            AddToProwlView(
+              dismiss: { isAddChoicePresented = false },
+              onBrowse: {
+                store.send(.setOpenPanelPresented(true))
+              },
+              onCloneCompleted: { url in
+                store.send(.repositoryManagement(.openRepositories([url])))
+              },
+              onWorkspace: {
+                store.send(.workspaceCreation(.promptRequested))
+              },
+              onDrop: { urls in
+                store.send(.repositoryManagement(.openRepositories(urls)))
+              }
+            )
+          }
         }
-      }
-      .confirmationDialog(
-        "Add to Prowl",
-        isPresented: $isAddChoicePresented,
-        titleVisibility: .visible
-      ) {
-        Button("Add Local Repository/Folder") {
-          store.send(.setOpenPanelPresented(true))
-        }
-        Button("Add Workspace") {
-          store.send(.workspaceCreation(.promptRequested))
-        }
-        Button("Cancel", role: .cancel) {}
-      } message: {
-        Text(
-          "A local repository or folder opens one project root. "
-            + "A workspace creates one shared task folder "
-            + "containing multiple repositories for one agent to work across."
-        )
       }
     }  // ScrollViewReader
   }

@@ -17,6 +17,23 @@ struct EmptyStateView: View {
       Button("Add...") {
         isAddChoicePresented = true
       }
+      .persistentPopover(isPresented: $isAddChoicePresented) {
+        AddToProwlView(
+          dismiss: { isAddChoicePresented = false },
+          onBrowse: {
+            store.send(.setOpenPanelPresented(true))
+          },
+          onCloneCompleted: { url in
+            store.send(.repositoryManagement(.openRepositories([url])))
+          },
+          onWorkspace: {
+            store.send(.workspaceCreation(.promptRequested))
+          },
+          onDrop: { urls in
+            store.send(.repositoryManagement(.openRepositories(urls)))
+          }
+        )
+      }
       .modifier(
         KeyboardShortcutModifier(
           shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openRepository)
@@ -28,25 +45,6 @@ struct EmptyStateView: View {
           commandID: AppShortcuts.CommandID.openRepository,
           in: resolvedKeybindings
         ))
-    }
-    .confirmationDialog(
-      "Add to Prowl",
-      isPresented: $isAddChoicePresented,
-      titleVisibility: .visible
-    ) {
-      Button("Add Local Repository/Folder") {
-        store.send(.setOpenPanelPresented(true))
-      }
-      Button("Add Workspace") {
-        store.send(.workspaceCreation(.promptRequested))
-      }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text(
-        "A local repository or folder opens one project root. "
-          + "A workspace creates one shared task folder "
-          + "containing multiple repositories for one agent to work across."
-      )
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor))
