@@ -281,6 +281,15 @@ final class GhosttySurfaceView: NSView, Identifiable {
     } else {
       initialInputCString = nil
     }
+    // Advertise 24-bit color to the pane's programs. Ghostty sets `TERM=xterm-ghostty`,
+    // which Node's `supports-color` (used by Claude Code / Codex) doesn't recognize, so
+    // without `COLORTERM` those agents fall back to no-color — panes render monochrome
+    // with no syntax or diff highlighting. Set here so it covers every surface; a
+    // caller-supplied `COLORTERM` still wins.
+    var environment = environment
+    if environment["COLORTERM"] == nil {
+      environment["COLORTERM"] = "truecolor"
+    }
     let sortedEnv = environment.sorted { $0.key < $1.key }
     var allocatedStrings: [UnsafeMutablePointer<CChar>] = []
     allocatedStrings.reserveCapacity(sortedEnv.count * 2)
