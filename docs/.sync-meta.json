@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "e5b48abedda0e29cc164b43dc4d062e99db45574",
-  "last_synced_date": "2026-06-29",
-  "note": "Release prep. AI branch name suggestion documented; Add-to-Prowl popover, CI run links, PR head-repo filter, fullscreen fix, and terminal defocus tracking are internal or already covered."
+  "last_synced_commit": "40d65e486be27848e16c1373a0d946267ce5ff39",
+  "last_synced_date": "2026-06-30",
+  "note": "Release prep. No user-facing changes since last sync (worktree watcher fix, dictionary construction refactor)."
 }
