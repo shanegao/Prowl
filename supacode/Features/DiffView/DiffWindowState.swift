@@ -45,6 +45,7 @@ final class DiffWindowState {
     selectedFile = nil
     diffDocument = nil
     documentCache = [:]
+    selectDebounceTask?.cancel()
     loadTask?.cancel()
     loadTask = Task { await loadAllFiles(worktreeURL: worktreeURL) }
   }
@@ -73,6 +74,10 @@ final class DiffWindowState {
         return
       }
       guard let self, !Task.isCancelled else { return }
+      // The selection may have changed via a path other than `selectFile` while this
+      // task was waiting (e.g. `loadAllFiles` reconciliation after a refresh) — only
+      // apply this debounced document if `file` is still the current selection.
+      guard self.selectedFile?.id == file.id else { return }
       self.updateDiffDocument(self.documentCache[file.id])
     }
   }
