@@ -15,6 +15,10 @@ final class DiffWindowState {
   /// large files, since diffing/painting happens on the JS side. Cleared by
   /// `markDiffRendered()` once the view reports its `didRender` event.
   var isRenderingDiff = false
+  /// Set by `markDiffFailed(_:)` when `DiffView` reports a `.didFail` event, so
+  /// the render-in-progress indicator doesn't stay stuck forever. Cleared as soon
+  /// as a new document starts rendering.
+  var renderError: DiffError?
 
   private var documentCache: [String: DiffDocument] = [:]
   private var loadTask: Task<Void, Never>?
@@ -87,9 +91,19 @@ final class DiffWindowState {
     isRenderingDiff = false
   }
 
+  /// Called by the view once `DiffView` reports its `didFail` event, so the
+  /// loading indicator doesn't stay stuck forever when a render fails.
+  func markDiffFailed(_ error: DiffError) {
+    isRenderingDiff = false
+    renderError = error
+  }
+
   private func updateDiffDocument(_ newDocument: DiffDocument?) {
     guard newDocument != diffDocument else { return }
     isRenderingDiff = newDocument != nil
+    if isRenderingDiff {
+      renderError = nil
+    }
     diffDocument = newDocument
   }
 
