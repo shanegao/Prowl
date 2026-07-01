@@ -104,7 +104,22 @@ struct DiffWindowContentView: View {
             style: diffStyle,
             showsFileHeaders: false,
           ),
+          onEvent: { event in
+            if case .didRender = event {
+              state.markDiffRendered()
+            }
+          }
         )
+        .overlay {
+          if state.isRenderingDiff {
+            ProgressView()
+              .controlSize(.small)
+              .padding(12)
+              .background(.regularMaterial, in: Circle())
+              .transition(.opacity)
+          }
+        }
+        .animation(.easeInOut(duration: 0.15), value: state.isRenderingDiff)
       } else if state.isLoadingFiles {
         ProgressView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)

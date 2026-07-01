@@ -10,20 +10,32 @@ final class DiffWindowState {
   var selectedFile: DiffChangedFile?
   var diffDocument: DiffDocument?
   var isLoadingFiles = false
+  /// True while the WebView-backed `DiffView` is still rendering the current
+  /// `diffDocument` — this can take noticeably longer than the cache lookup for
+  /// large files, since diffing/painting happens on the JS side. Cleared by
+  /// `markDiffRendered()` once the view reports its `didRender` event.
+  var isRenderingDiff = false
 
   private var documentCache: [String: DiffDocument] = [:]
   private var loadTask: Task<Void, Never>?
+  private var selectDebounceTask: Task<Void, Never>?
 
   private let fetchChangedFiles: @Sendable (URL) async -> [DiffChangedFile]
   private let loadDiffDocument: @Sendable (DiffChangedFile, URL) async -> DiffDocument
+  private let selectDebounceInterval: Duration
+  private let sleep: @Sendable (Duration) async throws -> Void
 
-  init(
+  init<C: Clock<Duration>>(
     fetchChangedFiles: @escaping @Sendable (URL) async -> [DiffChangedFile] = DiffWindowState.liveFetchChangedFiles,
     loadDiffDocument: @escaping @Sendable (DiffChangedFile, URL) async -> DiffDocument
-      = DiffWindowState.liveLoadDocument
+      = DiffWindowState.liveLoadDocument,
+    selectDebounceInterval: Duration = .milliseconds(150),
+    clock: C = ContinuousClock()
   ) {
     self.fetchChangedFiles = fetchChangedFiles
     self.loadDiffDocument = loadDiffDocument
+    self.selectDebounceInterval = selectDebounceInterval
+    self.sleep = { duration in try await clock.sleep(for: duration) }
   }
 
   func load(worktreeURL: URL, branchName: String) {
@@ -47,7 +59,33 @@ final class DiffWindowState {
   func selectFile(_ file: DiffChangedFile) {
     guard selectedFile != file else { return }
     selectedFile = file
-    diffDocument = documentCache[file.id]
+
+    // Debounced so that flicking quickly through several files (e.g. A -> B -> C)
+    // never triggers a render for a file the user only passed through — only the
+    // selection that's still current once the interval elapses gets applied.
+    selectDebounceTask?.cancel()
+    let sleep = self.sleep
+    let interval = selectDebounceInterval
+    selectDebounceTask = Task { [weak self, sleep] in
+      do {
+        try await sleep(interval)
+      } catch {
+        return
+      }
+      guard let self, !Task.isCancelled else { return }
+      self.updateDiffDocument(self.documentCache[file.id])
+    }
+  }
+
+  /// Called by the view once `DiffView` reports its `didRender` event.
+  func markDiffRendered() {
+    isRenderingDiff = false
+  }
+
+  private func updateDiffDocument(_ newDocument: DiffDocument?) {
+    guard newDocument != diffDocument else { return }
+    isRenderingDiff = newDocument != nil
+    diffDocument = newDocument
   }
 
   // MARK: - Reconciliation (pure, testable without hitting Git or Task scheduling)
@@ -104,7 +142,7 @@ final class DiffWindowState {
         guard !Task.isCancelled else { break }
         documentCache[id] = doc
         if selectedFile?.id == id {
-          diffDocument = doc
+          updateDiffDocument(doc)
         }
       }
     }
@@ -112,7 +150,9 @@ final class DiffWindowState {
     guard !Task.isCancelled else { return }
     isLoadingFiles = false
 
-    (selectedFile, diffDocument) = Self.resolvedSelection(current: selectedFile, files: files, cache: documentCache)
+    let resolved = Self.resolvedSelection(current: selectedFile, files: files, cache: documentCache)
+    selectedFile = resolved.file
+    updateDiffDocument(resolved.document)
   }
 
   // MARK: - Live Git integration
