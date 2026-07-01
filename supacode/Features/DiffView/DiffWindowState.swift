@@ -14,6 +14,18 @@ final class DiffWindowState {
   private var documentCache: [String: DiffDocument] = [:]
   private var loadTask: Task<Void, Never>?
 
+  private let fetchChangedFiles: @Sendable (URL) async -> [DiffChangedFile]
+  private let loadDiffDocument: @Sendable (DiffChangedFile, URL) async -> DiffDocument
+
+  init(
+    fetchChangedFiles: @escaping @Sendable (URL) async -> [DiffChangedFile] = DiffWindowState.liveFetchChangedFiles,
+    loadDiffDocument: @escaping @Sendable (DiffChangedFile, URL) async -> DiffDocument
+      = DiffWindowState.liveLoadDocument
+  ) {
+    self.fetchChangedFiles = fetchChangedFiles
+    self.loadDiffDocument = loadDiffDocument
+  }
+
   func load(worktreeURL: URL, branchName: String) {
     self.worktreeURL = worktreeURL
     self.branchName = branchName
@@ -27,7 +39,7 @@ final class DiffWindowState {
 
   func refresh() {
     guard let worktreeURL else { return }
-    documentCache = [:]
+    // Keep cache intact so file switching remains responsive during refresh
     loadTask?.cancel()
     loadTask = Task { await loadAllFiles(worktreeURL: worktreeURL) }
   }
@@ -38,57 +50,85 @@ final class DiffWindowState {
     diffDocument = documentCache[file.id]
   }
 
-  // MARK: - Private
+  // MARK: - Reconciliation (pure, testable without hitting Git or Task scheduling)
 
-  private func loadAllFiles(worktreeURL: URL) async {
+  /// Drops cache entries for files no longer present in the latest changed-file list.
+  static func evictedCache(
+    _ cache: [String: DiffDocument],
+    keeping fileIDs: Set<String>
+  ) -> [String: DiffDocument] {
+    cache.filter { fileIDs.contains($0.key) }
+  }
+
+  /// Keeps the current selection if its document is cached; otherwise falls back to the
+  /// first file, or to nothing if there are no files.
+  static func resolvedSelection(
+    current: DiffChangedFile?,
+    files: [DiffChangedFile],
+    cache: [String: DiffDocument]
+  ) -> (file: DiffChangedFile?, document: DiffDocument?) {
+    if let current, let document = cache[current.id] {
+      return (current, document)
+    } else if let first = files.first {
+      return (first, cache[first.id])
+    } else {
+      return (nil, nil)
+    }
+  }
+
+  // MARK: - Loading
+
+  /// Exposed (not private) so tests can drive it directly with injected fakes,
+  /// bypassing the `Task` scheduling used by `load()`/`refresh()`.
+  func loadAllFiles(worktreeURL: URL) async {
     isLoadingFiles = true
-    async let trackedOutput = GitClient().diffNameStatus(at: worktreeURL)
-    async let untrackedPaths = GitClient().untrackedFilePaths(at: worktreeURL)
+    let files = await fetchChangedFiles(worktreeURL)
+
+    guard !Task.isCancelled else { return }
+
+    changedFiles = files
+
+    let fileIDs = Set(files.map(\.id))
+    documentCache = Self.evictedCache(documentCache, keeping: fileIDs)
+
+    // Load documents concurrently, updating the cache as each one completes
+    // so that file switching is responsive without waiting for all files
+    await withTaskGroup(of: (String, DiffDocument).self) { [loadDiffDocument] group in
+      for file in files {
+        group.addTask {
+          let doc = await loadDiffDocument(file, worktreeURL)
+          return (file.id, doc)
+        }
+      }
+      for await (id, doc) in group {
+        guard !Task.isCancelled else { break }
+        documentCache[id] = doc
+        if selectedFile?.id == id {
+          diffDocument = doc
+        }
+      }
+    }
+
+    guard !Task.isCancelled else { return }
+    isLoadingFiles = false
+
+    (selectedFile, diffDocument) = Self.resolvedSelection(current: selectedFile, files: files, cache: documentCache)
+  }
+
+  // MARK: - Live Git integration
+
+  private nonisolated static func liveFetchChangedFiles(worktreeURL: URL) async -> [DiffChangedFile] {
+    let gitClient = GitClient()
+    async let trackedOutput = gitClient.diffNameStatus(at: worktreeURL)
+    async let untrackedPaths = gitClient.untrackedFilePaths(at: worktreeURL)
     let trackedFiles = DiffChangedFile.parseNameStatus(await trackedOutput)
     let untrackedFiles = await untrackedPaths.map {
       DiffChangedFile(status: .added, oldPath: nil, newPath: $0)
     }
-    let files = trackedFiles + untrackedFiles
-    changedFiles = files
-
-    // Load all documents concurrently
-    let documents = await Self.loadAllDocuments(files: files, worktreeURL: worktreeURL)
-    guard !Task.isCancelled else { return }
-    documentCache = documents
-    isLoadingFiles = false
-
-    // Auto-select
-    if let selectedFile, documents[selectedFile.id] != nil {
-      diffDocument = documents[selectedFile.id]
-    } else if let first = files.first {
-      selectedFile = first
-      diffDocument = documents[first.id]
-    } else {
-      selectedFile = nil
-      diffDocument = nil
-    }
+    return trackedFiles + untrackedFiles
   }
 
-  private nonisolated static func loadAllDocuments(
-    files: [DiffChangedFile],
-    worktreeURL: URL
-  ) async -> [String: DiffDocument] {
-    await withTaskGroup(of: (String, DiffDocument).self) { group in
-      for file in files {
-        group.addTask {
-          let doc = await loadDocument(for: file, worktreeURL: worktreeURL)
-          return (file.id, doc)
-        }
-      }
-      var result: [String: DiffDocument] = [:]
-      for await (id, doc) in group {
-        result[id] = doc
-      }
-      return result
-    }
-  }
-
-  private nonisolated static func loadDocument(
+  private nonisolated static func liveLoadDocument(
     for file: DiffChangedFile,
     worktreeURL: URL
   ) async -> DiffDocument {
