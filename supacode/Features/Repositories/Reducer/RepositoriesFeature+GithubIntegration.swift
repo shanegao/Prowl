@@ -793,7 +793,7 @@ extension RepositoriesFeature {
 
   private func mergePullRequestRefreshResults(
     repositoryID: Repository.ID,
-    prsByBranch: [String: GithubPullRequest],
+    prsByBranch: [String: GithubPullRequest?],
     state: inout State
   ) {
     guard !prsByBranch.isEmpty else {
@@ -805,10 +805,17 @@ extension RepositoriesFeature {
     // Host batches race independently. Use the returned PR URL to recover its
     // source repo, then compare against the original remote order before replacing.
     for (branch, pullRequest) in prsByBranch {
-      let priority = remotePriority(for: pullRequest, remotePriorities: remotePriorities)
-      if merged[branch] == nil || priority < (resultPriorities[branch] ?? .max) {
-        merged[branch] = pullRequest
-        resultPriorities[branch] = priority
+      if let pullRequest {
+        let priority = remotePriority(for: pullRequest, remotePriorities: remotePriorities)
+        if merged[branch] == nil || priority < (resultPriorities[branch] ?? .max) {
+          merged[branch] = pullRequest
+          resultPriorities[branch] = priority
+        }
+      } else if merged[branch] == nil {
+        // Explicitly no PR found for this branch, and we haven't seen a PR from
+        // another host yet — record nil so downstream consumers can clear stale state.
+        // If merged already has a PR, don't overwrite it with nil.
+        merged[branch] = nil
       }
     }
     state.prRefreshResultsByRepositoryID[repositoryID] = merged
@@ -858,7 +865,7 @@ extension RepositoriesFeature {
   private func pullRequestsByWorktreeID(
     repository: Repository,
     worktreeIDs: [Worktree.ID],
-    prsByBranch: [String: GithubPullRequest]
+    prsByBranch: [String: GithubPullRequest?]
   ) -> [Worktree.ID: GithubPullRequest?] {
     var prsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
     for worktreeID in worktreeIDs {
@@ -886,18 +893,9 @@ extension RepositoriesFeature {
         gitClient: gitClient
       )
       guard !remoteInfos.isEmpty else {
-        let clearedPullRequestsByWorktreeID = Dictionary(
-          worktreeIDs.map { ($0, Optional<GithubPullRequest>.none) },
-          uniquingKeysWith: { first, _ in first }
-        )
-        await send(
-          .githubIntegration(
-            .repositoryPullRequestsLoaded(
-              repositoryID: repositoryID,
-              pullRequestsByWorktreeID: clearedPullRequestsByWorktreeID
-            )
-          )
-        )
+        // No GitHub remote configured for this repository — preserve existing PR
+        // values rather than clearing them, which would cause a flicker during
+        // refresh cycles.
         await send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
         return
       }

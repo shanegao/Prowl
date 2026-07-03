@@ -70,7 +70,7 @@ final class PullRequestRefreshCoordinator {
       repositoryID: Repository.ID,
       repositoryRootURL: URL,
       worktreeIDs: [Worktree.ID],
-      prsByBranch: [String: GithubPullRequest]
+      prsByBranch: [String: GithubPullRequest?]
     )
     case failed(
       repositoryID: Repository.ID,
@@ -337,7 +337,7 @@ final class PullRequestRefreshCoordinator {
 
   private func emitOutcomes(
     _ requests: [Request],
-    prsByRepo: [RepoKey: [String: GithubPullRequest]],
+    prsByRepo: [RepoKey: [String: GithubPullRequest?]],
     failedMessagesByRepo: [RepoKey: String]
   ) {
     for request in requests {
@@ -369,13 +369,16 @@ final class PullRequestRefreshCoordinator {
 
   private func mergedPullRequests(
     for request: Request,
-    prsByRepo: [RepoKey: [String: GithubPullRequest]]
-  ) -> [String: GithubPullRequest] {
-    var prsByBranch: [String: GithubPullRequest] = [:]
+    prsByRepo: [RepoKey: [String: GithubPullRequest?]]
+  ) -> [String: GithubPullRequest?] {
+    var prsByBranch: [String: GithubPullRequest?] = [:]
     for branch in request.branches {
       for repository in request.repositories {
-        if let pullRequest = prsByRepo[repository.key]?[branch] {
-          prsByBranch[branch] = pullRequest
+        let repoResult = prsByRepo[repository.key]
+        // Check if this repo even knows about this branch — if the key exists,
+        // use its value (PR or nil) and stop searching.
+        if let prs = repoResult, prs.keys.contains(branch) {
+          prsByBranch[branch] = prs[branch]
           break
         }
       }
@@ -437,12 +440,12 @@ final class PullRequestRefreshCoordinator {
   }
 
   private struct RepoFetchResults: Sendable {
-    var successByRepo: [RepoKey: [String: GithubPullRequest]] = [:]
+    var successByRepo: [RepoKey: [String: GithubPullRequest?]] = [:]
     var failedMessagesByRepo: [RepoKey: String] = [:]
   }
 
   private enum RepoFetchOutcome: Sendable {
-    case success(RepoKey, [String: GithubPullRequest])
+    case success(RepoKey, [String: GithubPullRequest?])
     case failed(RepoKey, String)
   }
 }

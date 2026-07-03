@@ -167,11 +167,11 @@ nonisolated struct CrossRepoPullRequestRequest: Sendable, Hashable {
 }
 
 nonisolated struct CrossRepoPullRequestResult: Sendable {
-  let successByRepo: [RepoKey: [String: GithubPullRequest]]
+  let successByRepo: [RepoKey: [String: GithubPullRequest?]]
   let failedRepos: [RepoKey: GithubCLIError]
 
   init(
-    successByRepo: [RepoKey: [String: GithubPullRequest]] = [:],
+    successByRepo: [RepoKey: [String: GithubPullRequest?]] = [:],
     failedRepos: [RepoKey: GithubCLIError] = [:]
   ) {
     self.successByRepo = successByRepo
