@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.7.4](https://github.com/onevcat/Prowl/releases/tag/v2026.7.4)
+
+### New
+- The diff view now shows a render-in-progress indicator when diffing and painting large files takes a moment, so it's clear the app hasn't stalled.
+
+### Fixed
+- Fixed a crash that could occur during repository loading when duplicate worktree paths were detected.
+- Fixed the diff view getting stuck showing a render error with no way to recover; refreshing or reselecting the file now retries the render.
+- Fixed a race condition where switching worktrees or refreshing quickly could leave stale diff content on screen.
+
+### Improved
+- Selecting a file in the diff view now applies immediately instead of always waiting for a fixed delay; only rapid successive switches between files are debounced, avoiding the flash you'd see when flicking through several files quickly.
+
 ## [2026.6.29](https://github.com/onevcat/Prowl/releases/tag/v2026.6.29)
 
 Smarter worktree creation — Prowl now suggests branch names using Apple's on-device AI, and the refreshed Add popover lets you clone remote repos without leaving the app.
