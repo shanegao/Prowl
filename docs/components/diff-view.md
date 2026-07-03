@@ -40,13 +40,17 @@ Tools that are not installed on the Mac are shown disabled in the Diff Tool menu
 - The selected file's diff, comparing the **HEAD** version (`git show HEAD:path`)
   against the **on-disk** version.
 - Both tracked changes and **untracked new files** are included.
+- A small **spinner** overlays the diff while a large file is still rendering,
+  and an **error overlay** appears if rendering fails.
 
 ## Modes & interactions
 
 - **Split** (side-by-side, default) or **Unified** view — toggle via the toolbar
   picker.
-- Click a file in the list to view its diff.
+- Click a file in the list to view its diff. Rapid switching is debounced: the
+  first selection renders immediately, files flicked through are skipped.
 - Auto-refresh on focus keeps it current as the agent keeps working.
+- If a render fails, **re-selecting the file** (or any refresh) retries it.
 
 ## Line-change badges elsewhere
 
