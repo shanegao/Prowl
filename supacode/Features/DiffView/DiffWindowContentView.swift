@@ -104,7 +104,41 @@ struct DiffWindowContentView: View {
             style: diffStyle,
             showsFileHeaders: false,
           ),
+          onEvent: { event in
+            switch event {
+            case .didRender:
+              state.markDiffRendered()
+            case .didFail(let error):
+              state.markDiffFailed(error)
+            default:
+              break
+            }
+          }
         )
+        .overlay {
+          if state.isRenderingDiff {
+            ProgressView()
+              .controlSize(.small)
+              .padding(12)
+              .background(.regularMaterial, in: Circle())
+              .transition(.opacity)
+          } else if let renderError = state.renderError {
+            VStack(spacing: 6) {
+              Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+              Text(renderError.message)
+                .font(.caption)
+                .multilineTextAlignment(.center)
+            }
+            .padding(12)
+            .frame(maxWidth: 240)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            .transition(.opacity)
+          }
+        }
+        .animation(.easeInOut(duration: 0.15), value: state.isRenderingDiff)
+        .animation(.easeInOut(duration: 0.15), value: state.renderError)
       } else if state.isLoadingFiles {
         ProgressView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)
