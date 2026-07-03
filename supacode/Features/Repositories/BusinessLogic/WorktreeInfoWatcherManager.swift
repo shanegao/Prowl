@@ -95,14 +95,13 @@ final class WorktreeInfoWatcherManager {
   private var worktreeFileEventMonitors: [Worktree.ID: WorktreeFileEventMonitoring] = [:]
   private var worktreeRegistryMonitors: [URL: WorktreeRegistryMonitoring] = [:]
   private var remoteConfigMonitors: [URL: RemoteConfigMonitoring] = [:]
-  private var branchDebounceTasks: [Worktree.ID: Task<Void, Never>] = [:]
-  private var filesDebounceTasks: [Worktree.ID: Task<Void, Never>] = [:]
-  private var repositoryWorktreesDebounceTasks: [URL: Task<Void, Never>] = [:]
-  private var repositoryRemoteConfigDebounceTasks: [URL: Task<Void, Never>] = [:]
-  private var restartTasks: [Worktree.ID: Task<Void, Never>] = [:]
+  private let branchChangedDebouncer: KeyedDebouncer<Worktree.ID>
+  private let repositoryWorktreesDebouncer: KeyedDebouncer<URL>
+  private let remoteConfigDebouncer: KeyedDebouncer<URL>
+  private let restartDebouncer: KeyedDebouncer<Worktree.ID>
+  private let lineChangesRefreshDebouncer: KeyedDebouncer<Worktree.ID>
   private var pullRequestTasks: [URL: RefreshTask] = [:]
   private var lineChangeSafetyTasks: [Worktree.ID: RefreshTask] = [:]
-  private var lineChangeRefreshTasks: [Worktree.ID: Task<Void, Never>] = [:]
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
   private var openedWorktreeIDs: Set<Worktree.ID> = []
   private var hasCompletedInitialWorktreeLoad = false
@@ -149,6 +148,13 @@ final class WorktreeInfoWatcherManager {
     self.sleep = { duration in
       try await clock.sleep(for: duration)
     }
+    branchChangedDebouncer = KeyedDebouncer(interval: .milliseconds(200), clock: clock)
+    repositoryWorktreesDebouncer = KeyedDebouncer(interval: repositoryWorktreesEventDebounceInterval, clock: clock)
+    remoteConfigDebouncer = KeyedDebouncer(interval: remoteConfigEventDebounceInterval, clock: clock)
+    restartDebouncer = KeyedDebouncer(interval: .seconds(5), clock: clock)
+    // Callers always pass an explicit per-worktree delay; the instance interval
+    // is only a nominal default.
+    lineChangesRefreshDebouncer = KeyedDebouncer(interval: defaultLineChangesTiming.eventDebounce, clock: clock)
   }
 
   func handleCommand(_ command: WorktreeInfoWatcherClient.Command) {
@@ -322,15 +328,9 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func scheduleBranchChanged(worktreeID: Worktree.ID) {
-    branchDebounceTasks[worktreeID]?.cancel()
-    let sleep = self.sleep
-    let task = Task { [weak self, sleep] in
-      try? await sleep(.milliseconds(200))
-      await MainActor.run {
-        self?.emit(.branchChanged(worktreeID: worktreeID))
-      }
+    branchChangedDebouncer.schedule(worktreeID) { [weak self] in
+      self?.emit(.branchChanged(worktreeID: worktreeID))
     }
-    branchDebounceTasks[worktreeID] = task
   }
 
   private func scheduleFilesChanged(worktreeID: Worktree.ID) {
@@ -342,15 +342,9 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func scheduleRestart(worktreeID: Worktree.ID) {
-    restartTasks[worktreeID]?.cancel()
-    let sleep = self.sleep
-    let task = Task { [weak self, sleep] in
-      try? await sleep(.seconds(5))
-      await MainActor.run {
-        self?.restartWatcher(worktreeID: worktreeID)
-      }
+    restartDebouncer.schedule(worktreeID) { [weak self] in
+      self?.restartWatcher(worktreeID: worktreeID)
     }
-    restartTasks[worktreeID] = task
   }
 
   private func restartWatcher(worktreeID: Worktree.ID) {
@@ -373,34 +367,26 @@ final class WorktreeInfoWatcherManager {
   private func stopWatcher(for worktreeID: Worktree.ID) {
     stopHeadWatcher(for: worktreeID)
     stopWorktreeFileEventMonitor(for: worktreeID)
-    branchDebounceTasks.removeValue(forKey: worktreeID)?.cancel()
-    filesDebounceTasks.removeValue(forKey: worktreeID)?.cancel()
-    restartTasks.removeValue(forKey: worktreeID)?.cancel()
+    branchChangedDebouncer.cancel(worktreeID)
+    restartDebouncer.cancel(worktreeID)
     lineChangeSafetyTasks.removeValue(forKey: worktreeID)?.task.cancel()
-    lineChangeRefreshTasks.removeValue(forKey: worktreeID)?.cancel()
+    lineChangesRefreshDebouncer.cancel(worktreeID)
   }
 
   private func stopAll() {
     for watcher in headWatchers.values {
       watcher.monitor.cancel()
     }
-    for task in branchDebounceTasks.values {
-      task.cancel()
-    }
-    for task in filesDebounceTasks.values {
-      task.cancel()
-    }
-    for task in restartTasks.values {
-      task.cancel()
-    }
+    branchChangedDebouncer.cancelAll()
+    restartDebouncer.cancelAll()
+    lineChangesRefreshDebouncer.cancelAll()
+    repositoryWorktreesDebouncer.cancelAll()
+    remoteConfigDebouncer.cancelAll()
     for task in pullRequestTasks.values {
       task.task.cancel()
     }
     for task in lineChangeSafetyTasks.values {
       task.task.cancel()
-    }
-    for task in lineChangeRefreshTasks.values {
-      task.cancel()
     }
     for monitor in worktreeFileEventMonitors.values {
       monitor.cancel()
@@ -411,24 +397,12 @@ final class WorktreeInfoWatcherManager {
     for monitor in remoteConfigMonitors.values {
       monitor.cancel()
     }
-    for task in repositoryWorktreesDebounceTasks.values {
-      task.cancel()
-    }
-    for task in repositoryRemoteConfigDebounceTasks.values {
-      task.cancel()
-    }
     headWatchers.removeAll()
     worktreeFileEventMonitors.removeAll()
     worktreeRegistryMonitors.removeAll()
     remoteConfigMonitors.removeAll()
-    branchDebounceTasks.removeAll()
-    filesDebounceTasks.removeAll()
-    repositoryWorktreesDebounceTasks.removeAll()
-    repositoryRemoteConfigDebounceTasks.removeAll()
-    restartTasks.removeAll()
     pullRequestTasks.removeAll()
     lineChangeSafetyTasks.removeAll()
-    lineChangeRefreshTasks.removeAll()
     deferredLineChangeIDs.removeAll()
     openedWorktreeIDs.removeAll()
     hasCompletedInitialWorktreeLoad = false
@@ -532,20 +506,9 @@ final class WorktreeInfoWatcherManager {
     guard worktrees[worktreeID] != nil else {
       return
     }
-    lineChangeRefreshTasks[worktreeID]?.cancel()
-    let sleep = self.sleep
-    let task = Task { [weak self, sleep] in
-      do {
-        try await sleep(delay)
-      } catch {
-        return
-      }
-      await MainActor.run {
-        self?.lineChangeRefreshTasks.removeValue(forKey: worktreeID)
-        self?.emitLineChangesChanged(worktreeID: worktreeID)
-      }
+    lineChangesRefreshDebouncer.schedule(worktreeID, after: delay) { [weak self] in
+      self?.emitLineChangesChanged(worktreeID: worktreeID)
     }
-    lineChangeRefreshTasks[worktreeID] = task
   }
 
   private func scheduleLineChangesDebouncedRefresh(worktreeID: Worktree.ID) {
@@ -645,7 +608,7 @@ final class WorktreeInfoWatcherManager {
     let obsoleteRoots = worktreeRegistryMonitors.keys.filter { !normalizedRoots.contains($0) }
     for repositoryRootURL in obsoleteRoots {
       worktreeRegistryMonitors.removeValue(forKey: repositoryRootURL)?.cancel()
-      repositoryWorktreesDebounceTasks.removeValue(forKey: repositoryRootURL)?.cancel()
+      repositoryWorktreesDebouncer.cancel(repositoryRootURL)
     }
     for repositoryRootURL in normalizedRoots where worktreeRegistryMonitors[repositoryRootURL] == nil {
       worktreeRegistryMonitors[repositoryRootURL] = worktreeRegistryMonitorFactory(repositoryRootURL) { [weak self] in
@@ -659,7 +622,7 @@ final class WorktreeInfoWatcherManager {
     let obsoleteRoots = remoteConfigMonitors.keys.filter { !normalizedRoots.contains($0) }
     for repositoryRootURL in obsoleteRoots {
       remoteConfigMonitors.removeValue(forKey: repositoryRootURL)?.cancel()
-      repositoryRemoteConfigDebounceTasks.removeValue(forKey: repositoryRootURL)?.cancel()
+      remoteConfigDebouncer.cancel(repositoryRootURL)
     }
     for repositoryRootURL in normalizedRoots where remoteConfigMonitors[repositoryRootURL] == nil {
       remoteConfigMonitors[repositoryRootURL] = remoteConfigMonitorFactory(repositoryRootURL) { [weak self] in
@@ -670,40 +633,16 @@ final class WorktreeInfoWatcherManager {
 
   private func scheduleRepositoryWorktreesChanged(repositoryRootURL: URL) {
     let normalizedRootURL = repositoryRootURL.standardizedFileURL
-    repositoryWorktreesDebounceTasks[normalizedRootURL]?.cancel()
-    let debounceInterval = repositoryWorktreesEventDebounceInterval
-    let sleep = self.sleep
-    let task = Task { [weak self, sleep] in
-      do {
-        try await sleep(debounceInterval)
-      } catch {
-        return
-      }
-      await MainActor.run {
-        self?.repositoryWorktreesDebounceTasks.removeValue(forKey: normalizedRootURL)
-        self?.emit(.repositoryWorktreesChanged(repositoryRootURL: normalizedRootURL))
-      }
+    repositoryWorktreesDebouncer.schedule(normalizedRootURL) { [weak self] in
+      self?.emit(.repositoryWorktreesChanged(repositoryRootURL: normalizedRootURL))
     }
-    repositoryWorktreesDebounceTasks[normalizedRootURL] = task
   }
 
   private func scheduleRepositoryRemoteConfigurationChanged(repositoryRootURL: URL) {
     let normalizedRootURL = repositoryRootURL.standardizedFileURL
-    repositoryRemoteConfigDebounceTasks[normalizedRootURL]?.cancel()
-    let debounceInterval = remoteConfigEventDebounceInterval
-    let sleep = self.sleep
-    let task = Task { [weak self, sleep] in
-      do {
-        try await sleep(debounceInterval)
-      } catch {
-        return
-      }
-      await MainActor.run {
-        self?.repositoryRemoteConfigDebounceTasks.removeValue(forKey: normalizedRootURL)
-        self?.emit(.repositoryRemoteConfigurationChanged(repositoryRootURL: normalizedRootURL))
-      }
+    remoteConfigDebouncer.schedule(normalizedRootURL) { [weak self] in
+      self?.emit(.repositoryRemoteConfigurationChanged(repositoryRootURL: normalizedRootURL))
     }
-    repositoryRemoteConfigDebounceTasks[normalizedRootURL] = task
   }
 
   private func updateRepeatingTask(

@@ -134,7 +134,7 @@ struct DiffWindowStateTests {
     state.selectFile(fileB)
     await advanceSelectDebounce(clock)
 
-    #expect(state.isRenderingDiff)
+    #expect(state.renderState == .rendering)
     #expect(state.diffDocument == docB)
   }
 
@@ -154,7 +154,7 @@ struct DiffWindowStateTests {
     state.selectFile(fileB)
     await advanceSelectDebounce(clock)
 
-    #expect(!state.isRenderingDiff)
+    #expect(state.renderState == .idle)
   }
 
   @Test func loadAllFilesMarksRenderingWhenAutoSelectedDocumentArrives() async {
@@ -167,7 +167,7 @@ struct DiffWindowStateTests {
 
     await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
 
-    #expect(state.isRenderingDiff)
+    #expect(state.renderState == .rendering)
   }
 
   @Test func selectFileAppliesCachedDocumentImmediately() async {
@@ -189,7 +189,7 @@ struct DiffWindowStateTests {
     state.selectFile(fileB)
 
     #expect(state.diffDocument == docB)
-    #expect(state.isRenderingDiff)
+    #expect(state.renderState == .rendering)
   }
 
   @Test func selectFileDefersFollowUpSelectionWithinDebounceWindow() async {
@@ -301,7 +301,7 @@ struct DiffWindowStateTests {
     #expect(state.diffDocument != docC)
   }
 
-  @Test func markDiffFailedClearsRenderingAndStoresError() async {
+  @Test func markDiffFailedStoresFailedState() async {
     let fileA = DiffChangedFile(status: .modified, oldPath: "a.swift", newPath: "a.swift")
     let docA = DiffDocument(files: [], title: "a")
     let state = DiffWindowState(
@@ -309,13 +309,12 @@ struct DiffWindowStateTests {
       loadDiffDocument: { _, _ in docA }
     )
     await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
-    #expect(state.isRenderingDiff)
+    #expect(state.renderState == .rendering)
 
     let error = DiffError(code: "render_failed", message: "boom")
     state.markDiffFailed(error)
 
-    #expect(!state.isRenderingDiff)
-    #expect(state.renderError == error)
+    #expect(state.renderState == .failed(error))
   }
 
   @Test func selectingANewFileClearsAPriorRenderError() async {
@@ -332,12 +331,12 @@ struct DiffWindowStateTests {
     )
     await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
     state.markDiffFailed(DiffError(code: "render_failed", message: "boom"))
-    #expect(state.renderError != nil)
+    #expect(state.renderState.isFailed)
 
     state.selectFile(fileB)
     await advanceSelectDebounce(clock)
 
-    #expect(state.renderError == nil)
+    #expect(state.renderState == .rendering)
   }
 
   @Test func reselectingFailedFileRetriesRender() async {
@@ -357,8 +356,7 @@ struct DiffWindowStateTests {
 
     state.selectFile(fileA)
 
-    #expect(state.renderError == nil)
-    #expect(state.isRenderingDiff)
+    #expect(state.renderState == .rendering)
     #expect(state.renderGeneration == generationBefore + 1)
     #expect(state.diffDocument == docA)
   }
@@ -379,8 +377,7 @@ struct DiffWindowStateTests {
     // unchanged so the reloaded document is value-equal to the current one.
     await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
 
-    #expect(state.renderError == nil)
-    #expect(state.isRenderingDiff)
+    #expect(state.renderState == .rendering)
     #expect(state.renderGeneration == generationBefore + 1)
     #expect(state.diffDocument == docA)
   }
@@ -400,7 +397,7 @@ struct DiffWindowStateTests {
 
     state.selectFile(fileA)
 
-    #expect(!state.isRenderingDiff)
+    #expect(state.renderState == .idle)
     #expect(state.renderGeneration == generationBefore)
   }
 }
