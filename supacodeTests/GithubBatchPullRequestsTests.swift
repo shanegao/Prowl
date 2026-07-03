@@ -61,9 +61,9 @@ struct GithubBatchPullRequestsTests {
       owner: "octo",
       repo: "repo"
     )
-    #expect(prs["feature-a"]?.number == 2)
-    #expect(prs["feature-a"]?.title == "Primary PR")
-    #expect(prs["feature-b"] == nil)
+    #expect((prs["feature-a"] ?? nil)?.number == 2)
+    #expect((prs["feature-a"] ?? nil)?.title == "Primary PR")
+    #expect((prs["feature-b"] ?? nil) == nil)
   }
 
   @Test func ignoresForkOnlyMatches() throws {
@@ -104,7 +104,7 @@ struct GithubBatchPullRequestsTests {
       owner: "octo",
       repo: "repo"
     )
-    #expect(prs["feature-a"] == nil)
+    #expect((prs["feature-a"] ?? nil) == nil)
   }
 
   @Test func ignoresPullRequestWithUnknownHeadRepository() throws {
@@ -142,7 +142,7 @@ struct GithubBatchPullRequestsTests {
       owner: "octo",
       repo: "repo"
     )
-    #expect(prs["feature-a"] == nil)
+    #expect((prs["feature-a"] ?? nil) == nil)
   }
 
   @Test func ignoresForkEvenWhenBaseBranchDiffers() throws {
@@ -201,7 +201,7 @@ struct GithubBatchPullRequestsTests {
       owner: "octo",
       repo: "repo"
     )
-    #expect(prs["feature-a"] == nil)
+    #expect((prs["feature-a"] ?? nil) == nil)
   }
 
   @Test func prefersOpenOverMergedEvenIfOlder() throws {
@@ -258,8 +258,8 @@ struct GithubBatchPullRequestsTests {
       owner: "octo",
       repo: "repo"
     )
-    #expect(prs["feature-a"]?.number == 11)
-    #expect(prs["feature-a"]?.title == "Open PR")
+    #expect((prs["feature-a"] ?? nil)?.number == 11)
+    #expect((prs["feature-a"] ?? nil)?.title == "Open PR")
   }
 
   @Test func fallsBackToLatestMerged() throws {
@@ -316,7 +316,7 @@ struct GithubBatchPullRequestsTests {
       owner: "octo",
       repo: "repo"
     )
-    #expect(prs["feature-a"]?.number == 21)
-    #expect(prs["feature-a"]?.title == "Merged Newer")
+    #expect((prs["feature-a"] ?? nil)?.number == 21)
+    #expect((prs["feature-a"] ?? nil)?.title == "Merged Newer")
   }
 }

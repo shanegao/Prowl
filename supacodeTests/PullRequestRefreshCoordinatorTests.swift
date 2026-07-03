@@ -100,7 +100,7 @@ struct PullRequestRefreshCoordinatorTests {
       clock: clock,
       outcomes: outcomes,
       batched: { _, requests in
-        var success: [RepoKey: [String: GithubPullRequest]] = [:]
+        var success: [RepoKey: [String: GithubPullRequest?]] = [:]
         var failed: [RepoKey: GithubCLIError] = [:]
         for request in requests {
           let key = RepoKey(owner: request.owner, repo: request.repo)
@@ -258,7 +258,7 @@ struct PullRequestRefreshCoordinatorTests {
       clock: clock,
       outcomes: outcomes,
       batched: { _, requests in
-        var dict: [RepoKey: [String: GithubPullRequest]] = [:]
+        var dict: [RepoKey: [String: GithubPullRequest?]] = [:]
         for request in requests {
           dict[request.key] = [
             "feat-1": makeFixturePullRequest(repo: request.repo),
@@ -308,7 +308,7 @@ struct PullRequestRefreshCoordinatorTests {
       clock: clock,
       outcomes: outcomes,
       batched: { _, requests in
-        var dict: [RepoKey: [String: GithubPullRequest]] = [:]
+        var dict: [RepoKey: [String: GithubPullRequest?]] = [:]
         for request in requests {
           if request.repo == "upstream" {
             dict[request.key] = ["feat-1": makeFixturePullRequest(repo: "upstream")]
@@ -335,14 +335,14 @@ struct PullRequestRefreshCoordinatorTests {
     ]
     #expect(calls.first?.requests.allSatisfy { $0.allowedHeadRepositories == expectedAllowedHeadRepositories } == true)
 
-    let refreshed = await outcomes.snapshot().compactMap { outcome -> [String: GithubPullRequest]? in
+    let refreshed = await outcomes.snapshot().compactMap { outcome -> [String: GithubPullRequest?]? in
       if case .refreshed("local", _, _, let prsByBranch) = outcome {
         return prsByBranch
       }
       return nil
     }
     #expect(refreshed.count == 1)
-    #expect(refreshed.first?["feat-1"]?.title == "PR-upstream")
+    #expect((refreshed.first?["feat-1"] ?? nil)?.title == "PR-upstream")
   }
 
   @Test func duplicateRepoKeysFallbackOnceAndFanOutToEachRepository() async throws {
@@ -459,7 +459,7 @@ struct PullRequestRefreshCoordinatorTests {
       clock: clock,
       outcomes: outcomes,
       batched: { _, requests in
-        var dict: [RepoKey: [String: GithubPullRequest]] = [:]
+        var dict: [RepoKey: [String: GithubPullRequest?]] = [:]
         for request in requests {
           let pullRequest = makeFixturePullRequest(repo: request.repo)
           dict[RepoKey(owner: request.owner, repo: request.repo)] = ["feat-1": pullRequest]
@@ -475,7 +475,7 @@ struct PullRequestRefreshCoordinatorTests {
 
     let snapshots = await outcomes.snapshot()
     let refresh = try #require(
-      snapshots.compactMap { snapshot -> (String, [String: GithubPullRequest])? in
+      snapshots.compactMap { snapshot -> (String, [String: GithubPullRequest?])? in
         if case .refreshed(let id, _, _, let prs) = snapshot {
           return (id, prs)
         }
@@ -484,7 +484,7 @@ struct PullRequestRefreshCoordinatorTests {
       .first
     )
     #expect(refresh.0 == "alpha")
-    #expect(refresh.1["feat-1"]?.title == "PR-alpha")
+    #expect((refresh.1["feat-1"] ?? nil)?.title == "PR-alpha")
   }
 
   @Test func enqueueAfterFlushStartsNewDebounceWindow() async throws {
@@ -560,7 +560,7 @@ private func makeCoordinator(
     CrossRepoPullRequestResult,
   legacy:
     @escaping @Sendable (String, String, String, [String]) async throws ->
-    [String: GithubPullRequest] = { _, _, _, _ in [:] }
+    [String: GithubPullRequest?] = { _, _, _, _ in [:] }
 ) -> PullRequestRefreshCoordinator {
   var client = GithubCLIClient.testValue
   client.batchPullRequestsAcrossRepositories = { host, requests, accountOverride in
@@ -629,7 +629,7 @@ nonisolated private func request(
 nonisolated private func successResult(
   for requests: [CrossRepoPullRequestRequest]
 ) -> CrossRepoPullRequestResult {
-  var dict: [RepoKey: [String: GithubPullRequest]] = [:]
+  var dict: [RepoKey: [String: GithubPullRequest?]] = [:]
   for request in requests {
     dict[RepoKey(owner: request.owner, repo: request.repo)] = [:]
   }

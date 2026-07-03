@@ -315,9 +315,6 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
     }
-    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
-      $0.worktreeInfoByID.removeValue(forKey: context.featureWorktree.id)
-    }
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
