@@ -119,13 +119,14 @@ struct DiffWindowContentView: View {
         // render failure works by recreating the view with a new identity.
         .id(state.renderGeneration)
         .overlay {
-          if state.isRenderingDiff {
+          switch state.renderState {
+          case .rendering:
             ProgressView()
               .controlSize(.small)
               .padding(12)
               .background(.regularMaterial, in: Circle())
               .transition(.opacity)
-          } else if let renderError = state.renderError {
+          case .failed(let renderError):
             VStack(spacing: 6) {
               Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
@@ -138,10 +139,11 @@ struct DiffWindowContentView: View {
             .frame(maxWidth: 240)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
             .transition(.opacity)
+          case .idle:
+            EmptyView()
           }
         }
-        .animation(.easeInOut(duration: 0.15), value: state.isRenderingDiff)
-        .animation(.easeInOut(duration: 0.15), value: state.renderError)
+        .animation(.easeInOut(duration: 0.15), value: state.renderState)
       } else if state.isLoadingFiles {
         ProgressView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)

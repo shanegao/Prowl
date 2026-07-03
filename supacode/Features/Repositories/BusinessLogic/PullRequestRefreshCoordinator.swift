@@ -81,17 +81,16 @@ final class PullRequestRefreshCoordinator {
 
   private let githubCLI: GithubCLIClient
   private let clock: any Clock<Duration>
-  private let debounceWindow: Duration
   private let softTimeout: Duration
   private let resultHandler: @MainActor (Outcome) -> Void
 
-  private struct BatchKey: Hashable, Sendable {
+  private nonisolated struct BatchKey: Hashable, Sendable {
     let host: String
     let accountOverride: GithubAccountOverride?
   }
 
   private var pendingByHost: [BatchKey: [Repository.ID: Request]] = [:]
-  private var flushTaskByHost: [BatchKey: Task<Void, Never>] = [:]
+  private let flushDebouncer: KeyedDebouncer<BatchKey>
   private var inflightHosts: Set<BatchKey> = []
   private var queuedByHost: [BatchKey: [Repository.ID: Request]] = [:]
 
@@ -104,9 +103,9 @@ final class PullRequestRefreshCoordinator {
   ) {
     self.githubCLI = githubCLI
     self.clock = clock
-    self.debounceWindow = debounceWindow
     self.softTimeout = softTimeout
     self.resultHandler = resultHandler
+    flushDebouncer = KeyedDebouncer(interval: debounceWindow, clock: clock)
   }
 
   func enqueue(_ request: Request) {
@@ -143,19 +142,14 @@ final class PullRequestRefreshCoordinator {
   }
 
   func cancelHost(_ host: String) {
-    for key in flushTaskByHost.keys where key.host == host {
-      flushTaskByHost.removeValue(forKey: key)?.cancel()
-    }
+    flushDebouncer.cancelAll { $0.host == host }
     pendingByHost = pendingByHost.filter { $0.key.host != host }
     queuedByHost = queuedByHost.filter { $0.key.host != host }
     inflightHosts = inflightHosts.filter { $0.host != host }
   }
 
   func reset() {
-    for (_, task) in flushTaskByHost {
-      task.cancel()
-    }
-    flushTaskByHost.removeAll()
+    flushDebouncer.cancelAll()
     pendingByHost.removeAll()
     queuedByHost.removeAll()
     inflightHosts.removeAll()
@@ -199,20 +193,13 @@ final class PullRequestRefreshCoordinator {
   }
 
   private func rescheduleDebounce(forKey key: BatchKey) {
-    flushTaskByHost.removeValue(forKey: key)?.cancel()
-    let task = Task { [weak self, debounceWindow, clock] in
-      do {
-        try await clock.sleep(for: debounceWindow)
-      } catch {
-        return
-      }
+    flushDebouncer.schedule(key) { [weak self] in
       await self?.flush(key: key)
     }
-    flushTaskByHost[key] = task
   }
 
   private func flush(key: BatchKey) async {
-    flushTaskByHost.removeValue(forKey: key)
+    flushDebouncer.cancel(key)
     guard let bucket = pendingByHost.removeValue(forKey: key), !bucket.isEmpty else {
       return
     }

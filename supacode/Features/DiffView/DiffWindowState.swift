@@ -4,21 +4,28 @@ import YiTong
 @Observable
 @MainActor
 final class DiffWindowState {
+  /// Render phase of the current `diffDocument` in the WebView-backed
+  /// `DiffView`. Rendering can take noticeably longer than the cache lookup for
+  /// large files, since diffing/painting happens on the JS side; the phase is
+  /// driven by the view's `didRender`/`didFail` events.
+  enum RenderState: Equatable {
+    case idle
+    case rendering
+    case failed(DiffError)
+
+    var isFailed: Bool {
+      if case .failed = self { return true }
+      return false
+    }
+  }
+
   var worktreeURL: URL?
   var branchName: String = ""
   var changedFiles: [DiffChangedFile] = []
   var selectedFile: DiffChangedFile?
   var diffDocument: DiffDocument?
   var isLoadingFiles = false
-  /// True while the WebView-backed `DiffView` is still rendering the current
-  /// `diffDocument` — this can take noticeably longer than the cache lookup for
-  /// large files, since diffing/painting happens on the JS side. Cleared by
-  /// `markDiffRendered()` once the view reports its `didRender` event.
-  var isRenderingDiff = false
-  /// Set by `markDiffFailed(_:)` when `DiffView` reports a `.didFail` event, so
-  /// the render-in-progress indicator doesn't stay stuck forever. Cleared as soon
-  /// as a new document starts rendering.
-  var renderError: DiffError?
+  var renderState: RenderState = .idle
   /// Identity for the hosted `DiffView` (used as `.id()` by the view). YiTong
   /// skips re-rendering a value-equal document, so after a render failure the
   /// only way to retry the same content is to recreate the view; bumping this
@@ -27,24 +34,21 @@ final class DiffWindowState {
 
   private var documentCache: [String: DiffDocument] = [:]
   private var loadTask: Task<Void, Never>?
-  private var selectDebounceTask: Task<Void, Never>?
+  private let selectDebouncer: Debouncer
 
   private let fetchChangedFiles: @Sendable (URL) async -> [DiffChangedFile]
   private let loadDiffDocument: @Sendable (DiffChangedFile, URL) async -> DiffDocument
-  private let selectDebounceInterval: Duration
-  private let sleep: @Sendable (Duration) async throws -> Void
 
-  init<C: Clock<Duration>>(
+  init(
     fetchChangedFiles: @escaping @Sendable (URL) async -> [DiffChangedFile] = DiffWindowState.liveFetchChangedFiles,
     loadDiffDocument: @escaping @Sendable (DiffChangedFile, URL) async -> DiffDocument = DiffWindowState
       .liveLoadDocument,
     selectDebounceInterval: Duration = .milliseconds(150),
-    clock: C = ContinuousClock()
+    clock: any Clock<Duration> = ContinuousClock()
   ) {
     self.fetchChangedFiles = fetchChangedFiles
     self.loadDiffDocument = loadDiffDocument
-    self.selectDebounceInterval = selectDebounceInterval
-    self.sleep = { duration in try await clock.sleep(for: duration) }
+    self.selectDebouncer = Debouncer(interval: selectDebounceInterval, clock: clock)
   }
 
   func load(worktreeURL: URL, branchName: String) {
@@ -54,8 +58,7 @@ final class DiffWindowState {
     selectedFile = nil
     diffDocument = nil
     documentCache = [:]
-    selectDebounceTask?.cancel()
-    selectDebounceTask = nil
+    selectDebouncer.cancel()
     loadTask?.cancel()
     loadTask = Task { await loadAllFiles(worktreeURL: worktreeURL) }
   }
@@ -70,48 +73,37 @@ final class DiffWindowState {
   func selectFile(_ file: DiffChangedFile) {
     // Re-selecting the current file is a no-op unless its render failed, in
     // which case it is the natural retry gesture.
-    guard selectedFile != file || renderError != nil else { return }
+    guard selectedFile != file || renderState.isFailed else { return }
     selectedFile = file
 
     // Leading-edge debounce: a deliberate selection applies immediately, but it
     // opens a window during which rapid follow-up selections are deferred — so
     // flicking through files (A -> B -> C) only renders the endpoints, never the
     // files the user just passed through.
-    let applyImmediately = selectDebounceTask == nil
-    if applyImmediately {
+    if selectDebouncer.isIdle {
       updateDiffDocument(documentCache[file.id])
-    }
-    selectDebounceTask?.cancel()
-    let sleep = self.sleep
-    let interval = selectDebounceInterval
-    selectDebounceTask = Task { [weak self, sleep] in
-      do {
-        try await sleep(interval)
-      } catch {
-        return
+      // Opens the coalescing window; nothing to re-apply when it closes.
+      selectDebouncer.schedule {}
+    } else {
+      selectDebouncer.schedule { [weak self] in
+        // The selection may have changed via a path other than `selectFile` while
+        // the window was open (e.g. `loadAllFiles` reconciliation after a refresh)
+        // — only apply the deferred document if `file` is still current.
+        guard let self, self.selectedFile?.id == file.id else { return }
+        self.updateDiffDocument(self.documentCache[file.id])
       }
-      guard let self, !Task.isCancelled else { return }
-      self.selectDebounceTask = nil
-      // A leading-edge task only marks the end of the debounce window.
-      guard !applyImmediately else { return }
-      // The selection may have changed via a path other than `selectFile` while this
-      // task was waiting (e.g. `loadAllFiles` reconciliation after a refresh) — only
-      // apply this debounced document if `file` is still the current selection.
-      guard self.selectedFile?.id == file.id else { return }
-      self.updateDiffDocument(self.documentCache[file.id])
     }
   }
 
   /// Called by the view once `DiffView` reports its `didRender` event.
   func markDiffRendered() {
-    isRenderingDiff = false
+    renderState = .idle
   }
 
   /// Called by the view once `DiffView` reports its `didFail` event, so the
   /// loading indicator doesn't stay stuck forever when a render fails.
   func markDiffFailed(_ error: DiffError) {
-    isRenderingDiff = false
-    renderError = error
+    renderState = .failed(error)
   }
 
   private func updateDiffDocument(_ newDocument: DiffDocument?) {
@@ -120,16 +112,12 @@ final class DiffWindowState {
       // failure it means the user asked for a retry (refresh, or re-selecting
       // the failed file). YiTong won't re-render an equal document, so force
       // the view to be recreated instead.
-      guard renderError != nil, newDocument != nil else { return }
-      renderError = nil
-      isRenderingDiff = true
+      guard renderState.isFailed, newDocument != nil else { return }
+      renderState = .rendering
       renderGeneration += 1
       return
     }
-    isRenderingDiff = newDocument != nil
-    if isRenderingDiff {
-      renderError = nil
-    }
+    renderState = newDocument != nil ? .rendering : .idle
     diffDocument = newDocument
   }
 
