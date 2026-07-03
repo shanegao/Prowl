@@ -115,6 +115,9 @@ struct DiffWindowContentView: View {
             }
           }
         )
+        // YiTong skips re-rendering a value-equal document, so retrying after a
+        // render failure works by recreating the view with a new identity.
+        .id(state.renderGeneration)
         .overlay {
           if state.isRenderingDiff {
             ProgressView()

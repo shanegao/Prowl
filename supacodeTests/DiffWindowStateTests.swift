@@ -170,7 +170,9 @@ struct DiffWindowStateTests {
     #expect(state.isRenderingDiff)
   }
 
-  @Test func selectFileDoesNotUpdateDocumentBeforeDebounceSettles() async {
+  @Test func selectFileAppliesCachedDocumentImmediately() async {
+    // Leading edge of the debounce: a deliberate single selection must not wait
+    // out the debounce interval when its document is already cached.
     let fileA = DiffChangedFile(status: .modified, oldPath: "a.swift", newPath: "a.swift")
     let fileB = DiffChangedFile(status: .modified, oldPath: "b.swift", newPath: "b.swift")
     let docA = DiffDocument(files: [], title: "a")
@@ -185,10 +187,37 @@ struct DiffWindowStateTests {
     state.markDiffRendered()
 
     state.selectFile(fileB)
+
+    #expect(state.diffDocument == docB)
+    #expect(state.isRenderingDiff)
+  }
+
+  @Test func selectFileDefersFollowUpSelectionWithinDebounceWindow() async {
+    let fileA = DiffChangedFile(status: .modified, oldPath: "a.swift", newPath: "a.swift")
+    let fileB = DiffChangedFile(status: .modified, oldPath: "b.swift", newPath: "b.swift")
+    let fileC = DiffChangedFile(status: .modified, oldPath: "c.swift", newPath: "c.swift")
+    let docA = DiffDocument(files: [], title: "a")
+    let docB = DiffDocument(files: [], title: "b")
+    let docC = DiffDocument(files: [], title: "c")
+    let docs = ["a.swift": docA, "b.swift": docB, "c.swift": docC]
+    let clock = TestClock()
+    let state = DiffWindowState(
+      fetchChangedFiles: { _ in [fileA, fileB, fileC] },
+      loadDiffDocument: { file, _ in docs[file.id]! },
+      clock: clock
+    )
+    await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
+    state.markDiffRendered()
+
+    state.selectFile(fileB)
+    state.selectFile(fileC)
     await Task.yield()
 
-    #expect(state.diffDocument == docA)
-    #expect(!state.isRenderingDiff)
+    #expect(state.diffDocument == docB)
+
+    await advanceSelectDebounce(clock)
+
+    #expect(state.diffDocument == docC)
   }
 
   @Test func selectFileOnlyAppliesFinalSelectionWhenSwitchedRapidly() async {
@@ -238,22 +267,26 @@ struct DiffWindowStateTests {
     state.markDiffRendered()
 
     state.selectFile(fileB)
-    state.selectedFile = fileC
+    state.selectFile(fileC)
+    state.selectedFile = fileA
     await advanceSelectDebounce(clock)
 
-    #expect(state.selectedFile == fileC)
-    #expect(state.diffDocument != docB)
+    #expect(state.selectedFile == fileA)
+    #expect(state.diffDocument == docB)
+    #expect(state.diffDocument != docC)
   }
 
   @Test func loadCancelsPendingSelectDebounce() async {
     let fileA = DiffChangedFile(status: .modified, oldPath: "a.swift", newPath: "a.swift")
     let fileB = DiffChangedFile(status: .modified, oldPath: "b.swift", newPath: "b.swift")
+    let fileC = DiffChangedFile(status: .modified, oldPath: "c.swift", newPath: "c.swift")
     let docA = DiffDocument(files: [], title: "a")
     let docB = DiffDocument(files: [], title: "b")
-    let docs = ["a.swift": docA, "b.swift": docB]
+    let docC = DiffDocument(files: [], title: "c")
+    let docs = ["a.swift": docA, "b.swift": docB, "c.swift": docC]
     let clock = TestClock()
     let state = DiffWindowState(
-      fetchChangedFiles: { _ in [fileA, fileB] },
+      fetchChangedFiles: { _ in [fileA, fileB, fileC] },
       loadDiffDocument: { file, _ in docs[file.id]! },
       clock: clock
     )
@@ -261,10 +294,11 @@ struct DiffWindowStateTests {
     state.markDiffRendered()
 
     state.selectFile(fileB)
+    state.selectFile(fileC)
     state.load(worktreeURL: URL(fileURLWithPath: "/tmp2"), branchName: "other")
     await advanceSelectDebounce(clock)
 
-    #expect(state.diffDocument != docB)
+    #expect(state.diffDocument != docC)
   }
 
   @Test func markDiffFailedClearsRenderingAndStoresError() async {
@@ -304,6 +338,70 @@ struct DiffWindowStateTests {
     await advanceSelectDebounce(clock)
 
     #expect(state.renderError == nil)
+  }
+
+  @Test func reselectingFailedFileRetriesRender() async {
+    // YiTong skips re-rendering a value-equal document, so a retry must bump
+    // `renderGeneration` to recreate the view instead of re-applying the doc.
+    let fileA = DiffChangedFile(status: .modified, oldPath: "a.swift", newPath: "a.swift")
+    let docA = DiffDocument(files: [], title: "a")
+    let clock = TestClock()
+    let state = DiffWindowState(
+      fetchChangedFiles: { _ in [fileA] },
+      loadDiffDocument: { _, _ in docA },
+      clock: clock
+    )
+    await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
+    state.markDiffFailed(DiffError(code: "render_failed", message: "boom"))
+    let generationBefore = state.renderGeneration
+
+    state.selectFile(fileA)
+
+    #expect(state.renderError == nil)
+    #expect(state.isRenderingDiff)
+    #expect(state.renderGeneration == generationBefore + 1)
+    #expect(state.diffDocument == docA)
+  }
+
+  @Test func refreshRetriesFailedRenderOfUnchangedDocument() async {
+    let fileA = DiffChangedFile(status: .modified, oldPath: "a.swift", newPath: "a.swift")
+    let docA = DiffDocument(files: [], title: "a")
+    let state = DiffWindowState(
+      fetchChangedFiles: { _ in [fileA] },
+      loadDiffDocument: { _, _ in docA }
+    )
+    await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
+    state.markDiffRendered()
+    state.markDiffFailed(DiffError(code: "render_failed", message: "boom"))
+    let generationBefore = state.renderGeneration
+
+    // Drive the reload directly, as `refresh()` would; the file's content is
+    // unchanged so the reloaded document is value-equal to the current one.
+    await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
+
+    #expect(state.renderError == nil)
+    #expect(state.isRenderingDiff)
+    #expect(state.renderGeneration == generationBefore + 1)
+    #expect(state.diffDocument == docA)
+  }
+
+  @Test func reselectingSameFileWithoutErrorIsANoOp() async {
+    let fileA = DiffChangedFile(status: .modified, oldPath: "a.swift", newPath: "a.swift")
+    let docA = DiffDocument(files: [], title: "a")
+    let clock = TestClock()
+    let state = DiffWindowState(
+      fetchChangedFiles: { _ in [fileA] },
+      loadDiffDocument: { _, _ in docA },
+      clock: clock
+    )
+    await state.loadAllFiles(worktreeURL: URL(fileURLWithPath: "/tmp"))
+    state.markDiffRendered()
+    let generationBefore = state.renderGeneration
+
+    state.selectFile(fileA)
+
+    #expect(!state.isRenderingDiff)
+    #expect(state.renderGeneration == generationBefore)
   }
 }
 
