@@ -1,11 +1,5 @@
 # Changelog
 
-## [2026.6.30](https://github.com/onevcat/Prowl/releases/tag/v2026.6.30)
-
-### Fixed
-
-- Resolved a crash that could occur when a repository scan produced duplicate worktree paths, causing Prowl to trap while building its internal worktree index.
-
 ## [2026.6.29](https://github.com/onevcat/Prowl/releases/tag/v2026.6.29)
 
 Smarter worktree creation — Prowl now suggests branch names using Apple's on-device AI, and the refreshed Add popover lets you clone remote repos without leaving the app.
