@@ -744,7 +744,7 @@ extension RepositoriesFeature {
           forKey: repositoryID
         ) ?? [:]
       let confirmedNoPrBranches =
-        state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeValue(
+        state.prRefreshNoPrBranchesByID.removeValue(
           forKey: repositoryID
         ) ?? []
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
@@ -773,7 +773,7 @@ extension RepositoriesFeature {
         state.prRefreshResultsByRepositoryID.removeValue(
           forKey: repositoryID
         ) ?? [:]
-      let _ = state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeValue(forKey: repositoryID)
+      _ = state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
       guard !mergedPRsByBranch.isEmpty,
         let repository = state.repositories[id: repositoryID]
@@ -820,12 +820,12 @@ extension RepositoriesFeature {
     // Accumulate confirmed-no-PR branches. Only clear when all repos for a
     // branch succeeded and none returned a PR — partial failures leave the
     // branch out of confirmedNoPrBranches so existing state is preserved.
-    var existingConfirmed = state.prRefreshConfirmedNoPrBranchesByRepositoryID[repositoryID] ?? []
+    var existingConfirmed = state.prRefreshNoPrBranchesByID[repositoryID] ?? []
     existingConfirmed.formUnion(confirmedNoPrBranches)
     // Remove any confirmed-no-PR entries that now have a PR (priority-based
     // merge may have resolved a later host's PR over an earlier "no PR").
     existingConfirmed.subtract(merged.keys)
-    state.prRefreshConfirmedNoPrBranchesByRepositoryID[repositoryID] = existingConfirmed
+    state.prRefreshNoPrBranchesByID[repositoryID] = existingConfirmed
     state.prRefreshResultsByRepositoryID[repositoryID] = merged
     state.prRefreshResultPrioritiesByRepositoryID[repositoryID] = resultPriorities
   }
@@ -846,7 +846,7 @@ extension RepositoriesFeature {
   ) {
     state.prRefreshBatchCountsByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultsByRepositoryID.removeValue(forKey: repositoryID)
-    state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeValue(forKey: repositoryID)
+    state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
     state.prRefreshRemotePrioritiesByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
   }
@@ -854,7 +854,7 @@ extension RepositoriesFeature {
   private func clearAllPullRequestRefreshTracking(state: inout State) {
     state.prRefreshBatchCountsByRepositoryID.removeAll()
     state.prRefreshResultsByRepositoryID.removeAll()
-    state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeAll()
+    state.prRefreshNoPrBranchesByID.removeAll()
     state.prRefreshRemotePrioritiesByRepositoryID.removeAll()
     state.prRefreshResultPrioritiesByRepositoryID.removeAll()
   }

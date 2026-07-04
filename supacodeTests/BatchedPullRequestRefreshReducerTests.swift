@@ -116,7 +116,7 @@ struct BatchedPullRequestRefreshReducerTests {
     ) {
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": githubPullRequest]
-      $0.prRefreshConfirmedNoPrBranchesByRepositoryID[context.repository.id] = []
+      $0.prRefreshNoPrBranchesByID[context.repository.id] = []
       $0.prRefreshResultPrioritiesByRepositoryID[context.repository.id] = ["feature": .max]
     }
 
@@ -134,7 +134,7 @@ struct BatchedPullRequestRefreshReducerTests {
     ) {
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshResultsByRepositoryID = [:]
-      $0.prRefreshConfirmedNoPrBranchesByRepositoryID = [:]
+      $0.prRefreshNoPrBranchesByID = [:]
       $0.prRefreshResultPrioritiesByRepositoryID = [:]
     }
     await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
@@ -211,7 +211,7 @@ struct BatchedPullRequestRefreshReducerTests {
     ) {
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": enterprisePullRequest]
-      $0.prRefreshConfirmedNoPrBranchesByRepositoryID[context.repository.id] = []
+      $0.prRefreshNoPrBranchesByID[context.repository.id] = []
       $0.prRefreshResultPrioritiesByRepositoryID[context.repository.id] = ["feature": 1]
     }
 
@@ -229,7 +229,7 @@ struct BatchedPullRequestRefreshReducerTests {
     ) {
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshResultsByRepositoryID = [:]
-      $0.prRefreshConfirmedNoPrBranchesByRepositoryID = [:]
+      $0.prRefreshNoPrBranchesByID = [:]
       $0.prRefreshResultPrioritiesByRepositoryID = [:]
     }
     await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
