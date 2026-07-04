@@ -387,6 +387,242 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.finish()
   }
 
+  @Test func coordinatorOutcomeConfirmedNoPrClearsStalePullRequest() async {
+    let context = makeContext()
+    let stalePullRequest = makePullRequestFixture(url: "https://github.com/khoi/alpha/pull/7")
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    var staleEntry = WorktreeInfoEntry()
+    staleEntry.pullRequest = stalePullRequest
+    initialState.worktreeInfoByID[context.featureWorktree.id] = staleEntry
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+
+    let outcome = PullRequestRefreshCoordinator.Outcome.refreshed(
+      repositoryID: context.repository.id,
+      repositoryRootURL: context.repoRootURL,
+      worktreeIDs: context.worktreeIDs,
+      prsByBranch: [:],
+      confirmedNoPrBranches: ["feature"]
+    )
+
+    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome)))
+    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
+      $0.worktreeInfoByID.removeValue(forKey: context.featureWorktree.id)
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func coordinatorOutcomeUnknownBranchStatusPreservesPullRequest() async {
+    let context = makeContext()
+    let stalePullRequest = makePullRequestFixture(url: "https://github.com/khoi/alpha/pull/7")
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    var staleEntry = WorktreeInfoEntry()
+    staleEntry.pullRequest = stalePullRequest
+    initialState.worktreeInfoByID[context.featureWorktree.id] = staleEntry
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+
+    let outcome = PullRequestRefreshCoordinator.Outcome.refreshed(
+      repositoryID: context.repository.id,
+      repositoryRootURL: context.repoRootURL,
+      worktreeIDs: context.worktreeIDs,
+      prsByBranch: [:],
+      confirmedNoPrBranches: []
+    )
+
+    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome)))
+    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded)
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+
+    #expect(store.state.worktreeInfoByID[context.featureWorktree.id]?.pullRequest == stalePullRequest)
+  }
+
+  @Test func confirmedNoPrClearIsSuppressedWhenAnotherHostBatchFailedFirst() async {
+    let context = makeContext()
+    let stalePullRequest = makePullRequestFixture(url: "https://ghe.example/khoi/alpha/pull/9")
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    initialState.prRefreshBatchCountsByRepositoryID[context.repository.id] = 2
+    var staleEntry = WorktreeInfoEntry()
+    staleEntry.pullRequest = stalePullRequest
+    initialState.worktreeInfoByID[context.featureWorktree.id] = staleEntry
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .failed(
+            repositoryID: context.repository.id,
+            worktreeIDs: context.worktreeIDs,
+            message: "enterprise host down"
+          )
+        ))
+    ) {
+      $0.prRefreshFailedBatchRepositoryIDs = [context.repository.id]
+      $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
+    }
+
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .refreshed(
+            repositoryID: context.repository.id,
+            repositoryRootURL: context.repoRootURL,
+            worktreeIDs: context.worktreeIDs,
+            prsByBranch: [:],
+            confirmedNoPrBranches: ["feature"]
+          )
+        ))
+    ) {
+      $0.prRefreshBatchCountsByRepositoryID = [:]
+      $0.prRefreshFailedBatchRepositoryIDs = []
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded)
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+
+    #expect(store.state.worktreeInfoByID[context.featureWorktree.id]?.pullRequest == stalePullRequest)
+  }
+
+  @Test func confirmedNoPrClearIsDiscardedWhenFinalHostBatchFails() async {
+    let context = makeContext()
+    let stalePullRequest = makePullRequestFixture(url: "https://ghe.example/khoi/alpha/pull/9")
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    initialState.prRefreshBatchCountsByRepositoryID[context.repository.id] = 2
+    var staleEntry = WorktreeInfoEntry()
+    staleEntry.pullRequest = stalePullRequest
+    initialState.worktreeInfoByID[context.featureWorktree.id] = staleEntry
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .refreshed(
+            repositoryID: context.repository.id,
+            repositoryRootURL: context.repoRootURL,
+            worktreeIDs: context.worktreeIDs,
+            prsByBranch: [:],
+            confirmedNoPrBranches: ["feature"]
+          )
+        ))
+    ) {
+      $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
+      $0.prRefreshResultsByRepositoryID[context.repository.id] = [:]
+      $0.prRefreshNoPrBranchesByID[context.repository.id] = ["feature"]
+      $0.prRefreshResultPrioritiesByRepositoryID[context.repository.id] = [:]
+    }
+
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .failed(
+            repositoryID: context.repository.id,
+            worktreeIDs: context.worktreeIDs,
+            message: "enterprise host down"
+          )
+        ))
+    ) {
+      $0.prRefreshBatchCountsByRepositoryID = [:]
+      $0.prRefreshResultsByRepositoryID = [:]
+      $0.prRefreshNoPrBranchesByID = [:]
+      $0.prRefreshResultPrioritiesByRepositoryID = [:]
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+
+    #expect(store.state.worktreeInfoByID[context.featureWorktree.id]?.pullRequest == stalePullRequest)
+  }
+
+  @Test func pullRequestFromLaterHostBatchOverridesEarlierConfirmedNoPr() async {
+    let context = makeContext()
+    let pullRequest = makePullRequestFixture()
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    initialState.prRefreshBatchCountsByRepositoryID[context.repository.id] = 2
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .refreshed(
+            repositoryID: context.repository.id,
+            repositoryRootURL: context.repoRootURL,
+            worktreeIDs: context.worktreeIDs,
+            prsByBranch: [:],
+            confirmedNoPrBranches: ["feature"]
+          )
+        ))
+    ) {
+      $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
+      $0.prRefreshResultsByRepositoryID[context.repository.id] = [:]
+      $0.prRefreshNoPrBranchesByID[context.repository.id] = ["feature"]
+      $0.prRefreshResultPrioritiesByRepositoryID[context.repository.id] = [:]
+    }
+
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .refreshed(
+            repositoryID: context.repository.id,
+            repositoryRootURL: context.repoRootURL,
+            worktreeIDs: context.worktreeIDs,
+            prsByBranch: ["feature": pullRequest],
+            confirmedNoPrBranches: []
+          )
+        ))
+    ) {
+      $0.prRefreshBatchCountsByRepositoryID = [:]
+      $0.prRefreshResultsByRepositoryID = [:]
+      $0.prRefreshNoPrBranchesByID = [:]
+      $0.prRefreshResultPrioritiesByRepositoryID = [:]
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
+      var entry = WorktreeInfoEntry()
+      entry.pullRequest = pullRequest
+      $0.worktreeInfoByID[context.featureWorktree.id] = entry
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
   @Test(.dependencies) func refreshSkippedWhenPullRequestStateFetchDisabled() async {
     let context = makeContext()
     let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])

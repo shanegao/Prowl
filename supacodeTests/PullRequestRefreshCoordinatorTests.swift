@@ -345,6 +345,90 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(refreshed.first?["feat-1"]?.title == "PR-upstream")
   }
 
+  @Test func allCandidateReposSucceedingConfirmsBranchesWithoutPullRequests() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, requests in
+        var dict: [RepoKey: [String: GithubPullRequest]] = [:]
+        for request in requests {
+          if request.repo == "upstream" {
+            dict[request.key] = ["feat-1": makeFixturePullRequest(repo: "upstream")]
+          } else {
+            dict[request.key] = [:]
+          }
+        }
+        return CrossRepoPullRequestResult(successByRepo: dict)
+      }
+    )
+
+    coordinator.enqueue(request(repo: "fork", repositoryID: "local", branches: ["feat-1", "feat-2"]))
+    coordinator.enqueue(request(repo: "upstream", repositoryID: "local", branches: ["feat-1", "feat-2"]))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await Task.yield()
+    await Task.yield()
+
+    let refreshed = await outcomes.snapshot().compactMap {
+      outcome -> ([String: GithubPullRequest], Set<String>)? in
+      if case .refreshed("local", _, _, let prsByBranch, let confirmedNoPrBranches) = outcome {
+        return (prsByBranch, confirmedNoPrBranches)
+      }
+      return nil
+    }
+    let result = try #require(refreshed.first)
+    #expect(refreshed.count == 1)
+    #expect(result.0["feat-1"]?.title == "PR-upstream")
+    #expect(result.1 == ["feat-2"])
+  }
+
+  @Test func partialCandidateRepoFailureLeavesBranchesUnconfirmed() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, requests in
+        var success: [RepoKey: [String: GithubPullRequest]] = [:]
+        var failed: [RepoKey: GithubCLIError] = [:]
+        for request in requests {
+          if request.repo == "upstream" {
+            failed[request.key] = .commandFailed("boom")
+          } else {
+            success[request.key] = [:]
+          }
+        }
+        return CrossRepoPullRequestResult(successByRepo: success, failedRepos: failed)
+      },
+      legacy: { _, _, _, _ in
+        throw GithubCLIError.commandFailed("fallback down too")
+      }
+    )
+
+    coordinator.enqueue(request(repo: "fork", repositoryID: "local", branches: ["feat-1", "feat-2"]))
+    coordinator.enqueue(request(repo: "upstream", repositoryID: "local", branches: ["feat-1", "feat-2"]))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await Task.yield()
+    await Task.yield()
+
+    let refreshed = await outcomes.snapshot().compactMap {
+      outcome -> ([String: GithubPullRequest], Set<String>)? in
+      if case .refreshed("local", _, _, let prsByBranch, let confirmedNoPrBranches) = outcome {
+        return (prsByBranch, confirmedNoPrBranches)
+      }
+      return nil
+    }
+    let result = try #require(refreshed.first)
+    #expect(refreshed.count == 1)
+    #expect(result.0.isEmpty)
+    #expect(result.1.isEmpty)
+  }
+
   @Test func duplicateRepoKeysFallbackOnceAndFanOutToEachRepository() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()

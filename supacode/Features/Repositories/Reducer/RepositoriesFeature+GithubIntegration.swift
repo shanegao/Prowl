@@ -743,10 +743,14 @@ extension RepositoriesFeature {
         state.prRefreshResultsByRepositoryID.removeValue(
           forKey: repositoryID
         ) ?? [:]
-      let confirmedNoPrBranches =
+      let hadFailedBatch = state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID) != nil
+      let accumulatedConfirmedNoPrBranches =
         state.prRefreshNoPrBranchesByID.removeValue(
           forKey: repositoryID
         ) ?? []
+      // A failed host batch means branch status on that host is unknown, even when
+      // it arrived before this final refreshed outcome — suppress confirmed clears.
+      let confirmedNoPrBranches = hadFailedBatch ? [] : accumulatedConfirmedNoPrBranches
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
       let prsByWorktreeID = pullRequestsByWorktreeID(
         repository: repository,
@@ -766,6 +770,7 @@ extension RepositoriesFeature {
         .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
       )
     case .failed(let repositoryID, let worktreeIDs, _):
+      state.prRefreshFailedBatchRepositoryIDs.insert(repositoryID)
       guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
         return .none
       }
@@ -773,6 +778,7 @@ extension RepositoriesFeature {
         state.prRefreshResultsByRepositoryID.removeValue(
           forKey: repositoryID
         ) ?? [:]
+      state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID)
       _ = state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
       guard !mergedPRsByBranch.isEmpty,
@@ -847,6 +853,7 @@ extension RepositoriesFeature {
     state.prRefreshBatchCountsByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultsByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
+    state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID)
     state.prRefreshRemotePrioritiesByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
   }
@@ -855,6 +862,7 @@ extension RepositoriesFeature {
     state.prRefreshBatchCountsByRepositoryID.removeAll()
     state.prRefreshResultsByRepositoryID.removeAll()
     state.prRefreshNoPrBranchesByID.removeAll()
+    state.prRefreshFailedBatchRepositoryIDs.removeAll()
     state.prRefreshRemotePrioritiesByRepositoryID.removeAll()
     state.prRefreshResultPrioritiesByRepositoryID.removeAll()
   }
@@ -884,8 +892,10 @@ extension RepositoriesFeature {
       if let pullRequest = prsByBranch[worktree.name] {
         prsByWorktreeID[worktreeID] = pullRequest
       } else if confirmedNoPrBranches.contains(worktree.name) {
-        // All repos confirmed no PR for this branch — explicitly clear.
-        prsByWorktreeID[worktreeID] = nil
+        // All repos confirmed no PR for this branch — explicitly clear. A nil
+        // literal through the subscript would remove the key instead of storing
+        // an explicit nil, so downstream would never see the clear.
+        prsByWorktreeID.updateValue(nil, forKey: worktreeID)
       }
       // Otherwise: unknown status (partial failure) — omit to preserve existing.
     }
