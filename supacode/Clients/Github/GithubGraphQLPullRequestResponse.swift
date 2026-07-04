@@ -7,17 +7,15 @@ nonisolated struct GithubGraphQLPullRequestResponse: Decodable {
     aliasMap: [String: String],
     owner: String,
     repo: String
-  ) -> [String: GithubPullRequest?] {
-    var results: [String: GithubPullRequest?] = [:]
-    // Iterate aliasMap (not pullRequestsByAlias) so every queried branch appears
-    // in the result — nil means "queried but no PR found", which is semantically
-    // different from "branch not queried at all".
-    for (alias, branch) in aliasMap {
-      guard let connection = data.repository.pullRequestsByAlias[alias] else {
-        results[branch] = nil
+  ) -> [String: GithubPullRequest] {
+    var results: [String: GithubPullRequest] = [:]
+    for (alias, connection) in data.repository.pullRequestsByAlias {
+      guard let branch = aliasMap[alias] else {
         continue
       }
-      results[branch] = connection.bestMatchingPullRequest(owner: owner, repo: repo)?.pullRequest
+      if let node = connection.bestMatchingPullRequest(owner: owner, repo: repo) {
+        results[branch] = node.pullRequest
+      }
     }
     return results
   }

@@ -662,7 +662,7 @@ struct GithubCLIClientTests {
     let result = try await client.batchPullRequestsAcrossRepositories("github.com", requests, nil)
 
     let alphaPRs = try #require(result.successByRepo[RepoKey(owner: "khoi", repo: "alpha")])
-    let pullRequest = try #require(alphaPRs["feat-1"] ?? nil)
+    let pullRequest = try #require(alphaPRs["feat-1"])
     #expect(pullRequest.number == 42)
   }
 
@@ -683,7 +683,7 @@ struct GithubCLIClientTests {
     let result = try await client.batchPullRequestsAcrossRepositories("github.com", requests, nil)
 
     let kingfisherPRs = try #require(result.successByRepo[RepoKey(owner: "onevcat", repo: "Kingfisher")])
-    #expect((kingfisherPRs["master"] ?? nil) == nil)
+    #expect(kingfisherPRs["master"] == nil)
   }
 
   @Test func batchAcrossRepositoriesAllowsPullRequestFromConfiguredHeadRemote() async throws {
@@ -724,7 +724,7 @@ struct GithubCLIClientTests {
     let result = try await client.batchPullRequestsAcrossRepositories("github.com", requests, nil)
 
     let upstreamPRs = try #require(result.successByRepo[RepoKey(owner: "supabitapp", repo: "supacode")])
-    #expect((upstreamPRs["feature"] ?? nil)?.number == 42)
+    #expect(upstreamPRs["feature"]?.number == 42)
   }
 
   @Test func executableResolutionIsSingleFlightAndReused() async {

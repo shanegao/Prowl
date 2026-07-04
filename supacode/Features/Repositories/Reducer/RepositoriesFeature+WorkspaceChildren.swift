@@ -89,7 +89,7 @@ extension RepositoriesFeature {
       [branch],
       nil
     )
-    return pullRequestsByBranch?[branch] ?? nil
+    return pullRequestsByBranch?[branch]
   }
 }
 

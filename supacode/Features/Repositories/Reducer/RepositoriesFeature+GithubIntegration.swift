@@ -724,7 +724,7 @@ extension RepositoriesFeature {
     outcome: PullRequestRefreshCoordinator.Outcome
   ) -> Effect<Action> {
     switch outcome {
-    case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch):
+    case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch, let confirmedNoPrBranches):
       guard let repository = state.repositories[id: repositoryID] else {
         state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
         clearPullRequestRefreshTracking(repositoryID: repositoryID, state: &state)
@@ -733,6 +733,7 @@ extension RepositoriesFeature {
       mergePullRequestRefreshResults(
         repositoryID: repositoryID,
         prsByBranch: prsByBranch,
+        confirmedNoPrBranches: confirmedNoPrBranches,
         state: &state
       )
       guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
@@ -742,11 +743,16 @@ extension RepositoriesFeature {
         state.prRefreshResultsByRepositoryID.removeValue(
           forKey: repositoryID
         ) ?? [:]
+      let confirmedNoPrBranches =
+        state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeValue(
+          forKey: repositoryID
+        ) ?? []
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
       let prsByWorktreeID = pullRequestsByWorktreeID(
         repository: repository,
         worktreeIDs: worktreeIDs,
-        prsByBranch: mergedPRsByBranch
+        prsByBranch: mergedPRsByBranch,
+        confirmedNoPrBranches: confirmedNoPrBranches
       )
       return .merge(
         .send(
@@ -767,6 +773,7 @@ extension RepositoriesFeature {
         state.prRefreshResultsByRepositoryID.removeValue(
           forKey: repositoryID
         ) ?? [:]
+      let _ = state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeValue(forKey: repositoryID)
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
       guard !mergedPRsByBranch.isEmpty,
         let repository = state.repositories[id: repositoryID]
@@ -781,7 +788,8 @@ extension RepositoriesFeature {
               pullRequestsByWorktreeID: pullRequestsByWorktreeID(
                 repository: repository,
                 worktreeIDs: worktreeIDs,
-                prsByBranch: mergedPRsByBranch
+                prsByBranch: mergedPRsByBranch,
+                confirmedNoPrBranches: []
               )
             )
           )
@@ -793,31 +801,31 @@ extension RepositoriesFeature {
 
   private func mergePullRequestRefreshResults(
     repositoryID: Repository.ID,
-    prsByBranch: [String: GithubPullRequest?],
+    prsByBranch: [String: GithubPullRequest],
+    confirmedNoPrBranches: Set<String>,
     state: inout State
   ) {
-    guard !prsByBranch.isEmpty else {
-      return
-    }
     var merged = state.prRefreshResultsByRepositoryID[repositoryID] ?? [:]
     var resultPriorities = state.prRefreshResultPrioritiesByRepositoryID[repositoryID] ?? [:]
     let remotePriorities = state.prRefreshRemotePrioritiesByRepositoryID[repositoryID] ?? [:]
     // Host batches race independently. Use the returned PR URL to recover its
     // source repo, then compare against the original remote order before replacing.
     for (branch, pullRequest) in prsByBranch {
-      if let pullRequest {
-        let priority = remotePriority(for: pullRequest, remotePriorities: remotePriorities)
-        if merged[branch] == nil || priority < (resultPriorities[branch] ?? .max) {
-          merged[branch] = pullRequest
-          resultPriorities[branch] = priority
-        }
-      } else if merged[branch] == nil {
-        // Explicitly no PR found for this branch, and we haven't seen a PR from
-        // another host yet — record nil so downstream consumers can clear stale state.
-        // If merged already has a PR, don't overwrite it with nil.
-        merged[branch] = nil
+      let priority = remotePriority(for: pullRequest, remotePriorities: remotePriorities)
+      if merged[branch] == nil || priority < (resultPriorities[branch] ?? .max) {
+        merged[branch] = pullRequest
+        resultPriorities[branch] = priority
       }
     }
+    // Accumulate confirmed-no-PR branches. Only clear when all repos for a
+    // branch succeeded and none returned a PR — partial failures leave the
+    // branch out of confirmedNoPrBranches so existing state is preserved.
+    var existingConfirmed = state.prRefreshConfirmedNoPrBranchesByRepositoryID[repositoryID] ?? []
+    existingConfirmed.formUnion(confirmedNoPrBranches)
+    // Remove any confirmed-no-PR entries that now have a PR (priority-based
+    // merge may have resolved a later host's PR over an earlier "no PR").
+    existingConfirmed.subtract(merged.keys)
+    state.prRefreshConfirmedNoPrBranchesByRepositoryID[repositoryID] = existingConfirmed
     state.prRefreshResultsByRepositoryID[repositoryID] = merged
     state.prRefreshResultPrioritiesByRepositoryID[repositoryID] = resultPriorities
   }
@@ -838,6 +846,7 @@ extension RepositoriesFeature {
   ) {
     state.prRefreshBatchCountsByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultsByRepositoryID.removeValue(forKey: repositoryID)
+    state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshRemotePrioritiesByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
   }
@@ -845,6 +854,7 @@ extension RepositoriesFeature {
   private func clearAllPullRequestRefreshTracking(state: inout State) {
     state.prRefreshBatchCountsByRepositoryID.removeAll()
     state.prRefreshResultsByRepositoryID.removeAll()
+    state.prRefreshConfirmedNoPrBranchesByRepositoryID.removeAll()
     state.prRefreshRemotePrioritiesByRepositoryID.removeAll()
     state.prRefreshResultPrioritiesByRepositoryID.removeAll()
   }
@@ -865,13 +875,19 @@ extension RepositoriesFeature {
   private func pullRequestsByWorktreeID(
     repository: Repository,
     worktreeIDs: [Worktree.ID],
-    prsByBranch: [String: GithubPullRequest?]
+    prsByBranch: [String: GithubPullRequest],
+    confirmedNoPrBranches: Set<String>
   ) -> [Worktree.ID: GithubPullRequest?] {
     var prsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
     for worktreeID in worktreeIDs {
-      if let worktree = repository.worktrees[id: worktreeID] {
-        prsByWorktreeID[worktreeID] = prsByBranch[worktree.name]
+      guard let worktree = repository.worktrees[id: worktreeID] else { continue }
+      if let pr = prsByBranch[worktree.name] {
+        prsByWorktreeID[worktreeID] = pr
+      } else if confirmedNoPrBranches.contains(worktree.name) {
+        // All repos confirmed no PR for this branch — explicitly clear.
+        prsByWorktreeID[worktreeID] = nil
       }
+      // Otherwise: unknown status (partial failure) — omit to preserve existing.
     }
     return prsByWorktreeID
   }

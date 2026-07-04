@@ -177,7 +177,7 @@ struct GithubCLIClient: Sendable {
   var resolveRemoteInfo: @Sendable (URL) async -> GithubRemoteInfo?
   var latestRun: @Sendable (URL, String, GithubAccountOverride?) async throws -> GithubWorkflowRun?
   var batchPullRequests:
-    @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest?]
+    @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest]
   var batchPullRequestsAcrossRepositories:
     @Sendable (String, [CrossRepoPullRequestRequest], GithubAccountOverride?) async throws -> CrossRepoPullRequestResult
   var mergePullRequest:
@@ -330,7 +330,7 @@ nonisolated private func latestRunFetcher(
 nonisolated private func batchPullRequestsFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest?] {
+) -> @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest] {
   { host, owner, repo, branches, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
@@ -365,7 +365,7 @@ nonisolated private let crossRepoBatchAliasLimit = 15
 nonisolated private let crossRepoBatchMaxConcurrentRequests = 3
 
 nonisolated private struct CrossRepoChunkOutcome: Sendable {
-  let successByRepo: [RepoKey: [String: GithubPullRequest?]]
+  let successByRepo: [RepoKey: [String: GithubPullRequest]]
   let failedRepos: [RepoKey: GithubCLIError]
 }
 
@@ -492,7 +492,7 @@ nonisolated private func loadCrossRepoChunks(
 nonisolated private func mergeCrossRepoChunkResults(
   _ outcomes: [CrossRepoChunkOutcome]
 ) -> CrossRepoPullRequestResult {
-  var success: [RepoKey: [String: GithubPullRequest?]] = [:]
+  var success: [RepoKey: [String: GithubPullRequest]] = [:]
   var failed: [RepoKey: GithubCLIError] = [:]
   for outcome in outcomes {
     for (key, prs) in outcome.successByRepo {
@@ -537,7 +537,7 @@ nonisolated private func fetchCrossRepoChunk(
   let response = try GithubCLIOutput.decode(CrossRepoPullRequestResponse.self, from: output, decoder: decoder)
 
   let errorMessagesByAlias = response.errorMessagesByAlias()
-  var success: [RepoKey: [String: GithubPullRequest?]] = [:]
+  var success: [RepoKey: [String: GithubPullRequest]] = [:]
   var failed: [RepoKey: GithubCLIError] = [:]
   for (alias, key) in plan.repoAliases {
     if let detail = errorMessagesByAlias[alias] {
@@ -669,14 +669,15 @@ nonisolated private func rankCrossRepoPullRequests(
   pullRequestsByAlias: [String: GithubGraphQLPullRequestResponse.PullRequestConnection],
   aliasMap: [String: String],
   allowedHeadRepositories: Set<RepoKey>
-) -> [String: GithubPullRequest?] {
-  var results: [String: GithubPullRequest?] = [:]
-  for (alias, branch) in aliasMap {
-    guard let connection = pullRequestsByAlias[alias] else {
-      results[branch] = nil
+) -> [String: GithubPullRequest] {
+  var results: [String: GithubPullRequest] = [:]
+  for (alias, connection) in pullRequestsByAlias {
+    guard let branch = aliasMap[alias] else {
       continue
     }
-    results[branch] = connection.bestMatchingPullRequest(allowedHeadRepositories: allowedHeadRepositories)?.pullRequest
+    if let node = connection.bestMatchingPullRequest(allowedHeadRepositories: allowedHeadRepositories) {
+      results[branch] = node.pullRequest
+    }
   }
   return results
 }
@@ -1054,9 +1055,9 @@ nonisolated private func loadPullRequestChunks(
   resolver: GithubCLIExecutableResolver,
   request: GithubPullRequestsRequest,
   chunks: [[String]]
-) async throws -> [Int: [String: GithubPullRequest?]] {
+) async throws -> [Int: [String: GithubPullRequest]] {
   try await withThrowingTaskGroup(
-    of: (Int, [String: GithubPullRequest?]).self
+    of: (Int, [String: GithubPullRequest]).self
   ) { group in
     var nextChunkIndex = 0
     let initialCount = min(batchPullRequestsMaxConcurrentRequests, chunks.count)
@@ -1075,7 +1076,7 @@ nonisolated private func loadPullRequestChunks(
       nextChunkIndex += 1
     }
 
-    var resultsByChunkIndex: [Int: [String: GithubPullRequest?]] = [:]
+    var resultsByChunkIndex: [Int: [String: GithubPullRequest]] = [:]
     while let (chunkIndex, prsByBranch) = try await group.next() {
       resultsByChunkIndex[chunkIndex] = prsByBranch
       if nextChunkIndex < chunks.count {
@@ -1099,10 +1100,10 @@ nonisolated private func loadPullRequestChunks(
 }
 
 nonisolated private func mergePullRequestChunkResults(
-  _ chunkResults: [Int: [String: GithubPullRequest?]],
+  _ chunkResults: [Int: [String: GithubPullRequest]],
   chunkCount: Int
-) -> [String: GithubPullRequest?] {
-  var results: [String: GithubPullRequest?] = [:]
+) -> [String: GithubPullRequest] {
+  var results: [String: GithubPullRequest] = [:]
   for chunkIndex in 0..<chunkCount {
     guard let prsByBranch = chunkResults[chunkIndex] else {
       continue
@@ -1118,7 +1119,7 @@ nonisolated private func fetchPullRequestsChunk(
   request: GithubPullRequestsRequest,
   chunk: [String],
   chunkIndex: Int
-) async throws -> (Int, [String: GithubPullRequest?]) {
+) async throws -> (Int, [String: GithubPullRequest]) {
   let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk)
   let output = try await runGh(
     shell: shell,

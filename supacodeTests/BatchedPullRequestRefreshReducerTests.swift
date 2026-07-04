@@ -109,12 +109,14 @@ struct BatchedPullRequestRefreshReducerTests {
             repositoryID: context.repository.id,
             repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
-            prsByBranch: ["feature": githubPullRequest]
+            prsByBranch: ["feature": githubPullRequest],
+            confirmedNoPrBranches: []
           )
         ))
     ) {
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": githubPullRequest]
+      $0.prRefreshConfirmedNoPrBranchesByRepositoryID[context.repository.id] = []
       $0.prRefreshResultPrioritiesByRepositoryID[context.repository.id] = ["feature": .max]
     }
 
@@ -125,12 +127,14 @@ struct BatchedPullRequestRefreshReducerTests {
             repositoryID: context.repository.id,
             repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
-            prsByBranch: [:]
+            prsByBranch: [:],
+            confirmedNoPrBranches: []
           )
         ))
     ) {
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshResultsByRepositoryID = [:]
+      $0.prRefreshConfirmedNoPrBranchesByRepositoryID = [:]
       $0.prRefreshResultPrioritiesByRepositoryID = [:]
     }
     await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
@@ -200,12 +204,14 @@ struct BatchedPullRequestRefreshReducerTests {
             repositoryID: context.repository.id,
             repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
-            prsByBranch: ["feature": enterprisePullRequest]
+            prsByBranch: ["feature": enterprisePullRequest],
+            confirmedNoPrBranches: []
           )
         ))
     ) {
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": enterprisePullRequest]
+      $0.prRefreshConfirmedNoPrBranchesByRepositoryID[context.repository.id] = []
       $0.prRefreshResultPrioritiesByRepositoryID[context.repository.id] = ["feature": 1]
     }
 
@@ -216,12 +222,14 @@ struct BatchedPullRequestRefreshReducerTests {
             repositoryID: context.repository.id,
             repositoryRootURL: context.repoRootURL,
             worktreeIDs: context.worktreeIDs,
-            prsByBranch: ["feature": originPullRequest]
+            prsByBranch: ["feature": originPullRequest],
+            confirmedNoPrBranches: []
           )
         ))
     ) {
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshResultsByRepositoryID = [:]
+      $0.prRefreshConfirmedNoPrBranchesByRepositoryID = [:]
       $0.prRefreshResultPrioritiesByRepositoryID = [:]
     }
     await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
@@ -281,7 +289,7 @@ struct BatchedPullRequestRefreshReducerTests {
     #expect(enqueued.value.count == 1)
   }
 
-  @Test func refreshClearsStalePullRequestsWhenGithubRemotesDisappear() async {
+  @Test func refreshPreservesPullRequestsWhenGithubRemotesUnavailable() async {
     let context = makeContext()
     let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
     let stalePullRequest = makePullRequestFixture(url: "https://github.com/khoi/alpha/pull/7")
@@ -339,7 +347,8 @@ struct BatchedPullRequestRefreshReducerTests {
       repositoryID: context.repository.id,
       repositoryRootURL: context.repoRootURL,
       worktreeIDs: context.worktreeIDs,
-      prsByBranch: ["feature": pullRequest]
+      prsByBranch: ["feature": pullRequest],
+      confirmedNoPrBranches: []
     )
 
     await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome)))

@@ -70,7 +70,8 @@ final class PullRequestRefreshCoordinator {
       repositoryID: Repository.ID,
       repositoryRootURL: URL,
       worktreeIDs: [Worktree.ID],
-      prsByBranch: [String: GithubPullRequest?]
+      prsByBranch: [String: GithubPullRequest],
+      confirmedNoPrBranches: Set<String>
     )
     case failed(
       repositoryID: Repository.ID,
@@ -337,7 +338,7 @@ final class PullRequestRefreshCoordinator {
 
   private func emitOutcomes(
     _ requests: [Request],
-    prsByRepo: [RepoKey: [String: GithubPullRequest?]],
+    prsByRepo: [RepoKey: [String: GithubPullRequest]],
     failedMessagesByRepo: [RepoKey: String]
   ) {
     for request in requests {
@@ -355,12 +356,21 @@ final class PullRequestRefreshCoordinator {
           )
         )
       } else {
+        // Only mark branches as "confirmed no PR" when all candidate repos
+        // succeeded — if any repo failed, the branch status is unknown and
+        // the reducer should preserve existing PR state.
+        let allCandidatesSucceeded =
+          !candidateKeys.isEmpty
+          && candidateKeys.allSatisfy { prsByRepo[$0] != nil && failedMessagesByRepo[$0] == nil }
+        let confirmedNoPrBranches: Set<String> =
+          allCandidatesSucceeded ? Set(request.branches).subtracting(prsByBranch.keys) : []
         resultHandler(
           .refreshed(
             repositoryID: request.repositoryID,
             repositoryRootURL: request.repositoryRootURL,
             worktreeIDs: request.worktreeIDs,
-            prsByBranch: prsByBranch
+            prsByBranch: prsByBranch,
+            confirmedNoPrBranches: confirmedNoPrBranches
           )
         )
       }
@@ -369,16 +379,13 @@ final class PullRequestRefreshCoordinator {
 
   private func mergedPullRequests(
     for request: Request,
-    prsByRepo: [RepoKey: [String: GithubPullRequest?]]
-  ) -> [String: GithubPullRequest?] {
-    var prsByBranch: [String: GithubPullRequest?] = [:]
+    prsByRepo: [RepoKey: [String: GithubPullRequest]]
+  ) -> [String: GithubPullRequest] {
+    var prsByBranch: [String: GithubPullRequest] = [:]
     for branch in request.branches {
       for repository in request.repositories {
-        let repoResult = prsByRepo[repository.key]
-        // Check if this repo even knows about this branch — if the key exists,
-        // use its value (PR or nil) and stop searching.
-        if let prs = repoResult, prs.keys.contains(branch) {
-          prsByBranch[branch] = prs[branch]
+        if let pullRequest = prsByRepo[repository.key]?[branch] {
+          prsByBranch[branch] = pullRequest
           break
         }
       }
@@ -440,12 +447,12 @@ final class PullRequestRefreshCoordinator {
   }
 
   private struct RepoFetchResults: Sendable {
-    var successByRepo: [RepoKey: [String: GithubPullRequest?]] = [:]
+    var successByRepo: [RepoKey: [String: GithubPullRequest]] = [:]
     var failedMessagesByRepo: [RepoKey: String] = [:]
   }
 
   private enum RepoFetchOutcome: Sendable {
-    case success(RepoKey, [String: GithubPullRequest?])
+    case success(RepoKey, [String: GithubPullRequest])
     case failed(RepoKey, String)
   }
 }
