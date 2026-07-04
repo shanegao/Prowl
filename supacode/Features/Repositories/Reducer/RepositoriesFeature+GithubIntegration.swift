@@ -881,8 +881,8 @@ extension RepositoriesFeature {
     var prsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
     for worktreeID in worktreeIDs {
       guard let worktree = repository.worktrees[id: worktreeID] else { continue }
-      if let pr = prsByBranch[worktree.name] {
-        prsByWorktreeID[worktreeID] = pr
+      if let pullRequest = prsByBranch[worktree.name] {
+        prsByWorktreeID[worktreeID] = pullRequest
       } else if confirmedNoPrBranches.contains(worktree.name) {
         // All repos confirmed no PR for this branch — explicitly clear.
         prsByWorktreeID[worktreeID] = nil
