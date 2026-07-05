@@ -70,7 +70,8 @@ final class PullRequestRefreshCoordinator {
       repositoryID: Repository.ID,
       repositoryRootURL: URL,
       worktreeIDs: [Worktree.ID],
-      prsByBranch: [String: GithubPullRequest]
+      prsByBranch: [String: GithubPullRequest],
+      confirmedNoPrBranches: Set<String>
     )
     case failed(
       repositoryID: Repository.ID,
@@ -342,12 +343,21 @@ final class PullRequestRefreshCoordinator {
           )
         )
       } else {
+        // Only mark branches as "confirmed no PR" when all candidate repos
+        // succeeded — if any repo failed, the branch status is unknown and
+        // the reducer should preserve existing PR state.
+        let allCandidatesSucceeded =
+          !candidateKeys.isEmpty
+          && candidateKeys.allSatisfy { prsByRepo[$0] != nil && failedMessagesByRepo[$0] == nil }
+        let confirmedNoPrBranches: Set<String> =
+          allCandidatesSucceeded ? Set(request.branches).subtracting(prsByBranch.keys) : []
         resultHandler(
           .refreshed(
             repositoryID: request.repositoryID,
             repositoryRootURL: request.repositoryRootURL,
             worktreeIDs: request.worktreeIDs,
-            prsByBranch: prsByBranch
+            prsByBranch: prsByBranch,
+            confirmedNoPrBranches: confirmedNoPrBranches
           )
         )
       }

@@ -724,7 +724,7 @@ extension RepositoriesFeature {
     outcome: PullRequestRefreshCoordinator.Outcome
   ) -> Effect<Action> {
     switch outcome {
-    case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch):
+    case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch, let confirmedNoPrBranches):
       guard let repository = state.repositories[id: repositoryID] else {
         state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
         clearPullRequestRefreshTracking(repositoryID: repositoryID, state: &state)
@@ -733,6 +733,7 @@ extension RepositoriesFeature {
       mergePullRequestRefreshResults(
         repositoryID: repositoryID,
         prsByBranch: prsByBranch,
+        confirmedNoPrBranches: confirmedNoPrBranches,
         state: &state
       )
       guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
@@ -742,11 +743,20 @@ extension RepositoriesFeature {
         state.prRefreshResultsByRepositoryID.removeValue(
           forKey: repositoryID
         ) ?? [:]
+      let hadFailedBatch = state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID) != nil
+      let accumulatedConfirmedNoPrBranches =
+        state.prRefreshNoPrBranchesByID.removeValue(
+          forKey: repositoryID
+        ) ?? []
+      // A failed host batch means branch status on that host is unknown, even when
+      // it arrived before this final refreshed outcome — suppress confirmed clears.
+      let confirmedNoPrBranches = hadFailedBatch ? [] : accumulatedConfirmedNoPrBranches
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
       let prsByWorktreeID = pullRequestsByWorktreeID(
         repository: repository,
         worktreeIDs: worktreeIDs,
-        prsByBranch: mergedPRsByBranch
+        prsByBranch: mergedPRsByBranch,
+        confirmedNoPrBranches: confirmedNoPrBranches
       )
       return .merge(
         .send(
@@ -760,6 +770,7 @@ extension RepositoriesFeature {
         .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
       )
     case .failed(let repositoryID, let worktreeIDs, _):
+      state.prRefreshFailedBatchRepositoryIDs.insert(repositoryID)
       guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
         return .none
       }
@@ -767,6 +778,8 @@ extension RepositoriesFeature {
         state.prRefreshResultsByRepositoryID.removeValue(
           forKey: repositoryID
         ) ?? [:]
+      state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID)
+      _ = state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
       guard !mergedPRsByBranch.isEmpty,
         let repository = state.repositories[id: repositoryID]
@@ -781,7 +794,8 @@ extension RepositoriesFeature {
               pullRequestsByWorktreeID: pullRequestsByWorktreeID(
                 repository: repository,
                 worktreeIDs: worktreeIDs,
-                prsByBranch: mergedPRsByBranch
+                prsByBranch: mergedPRsByBranch,
+                confirmedNoPrBranches: []
               )
             )
           )
@@ -794,11 +808,9 @@ extension RepositoriesFeature {
   private func mergePullRequestRefreshResults(
     repositoryID: Repository.ID,
     prsByBranch: [String: GithubPullRequest],
+    confirmedNoPrBranches: Set<String>,
     state: inout State
   ) {
-    guard !prsByBranch.isEmpty else {
-      return
-    }
     var merged = state.prRefreshResultsByRepositoryID[repositoryID] ?? [:]
     var resultPriorities = state.prRefreshResultPrioritiesByRepositoryID[repositoryID] ?? [:]
     let remotePriorities = state.prRefreshRemotePrioritiesByRepositoryID[repositoryID] ?? [:]
@@ -811,6 +823,15 @@ extension RepositoriesFeature {
         resultPriorities[branch] = priority
       }
     }
+    // Accumulate confirmed-no-PR branches. Only clear when all repos for a
+    // branch succeeded and none returned a PR — partial failures leave the
+    // branch out of confirmedNoPrBranches so existing state is preserved.
+    var existingConfirmed = state.prRefreshNoPrBranchesByID[repositoryID] ?? []
+    existingConfirmed.formUnion(confirmedNoPrBranches)
+    // Remove any confirmed-no-PR entries that now have a PR (priority-based
+    // merge may have resolved a later host's PR over an earlier "no PR").
+    existingConfirmed.subtract(merged.keys)
+    state.prRefreshNoPrBranchesByID[repositoryID] = existingConfirmed
     state.prRefreshResultsByRepositoryID[repositoryID] = merged
     state.prRefreshResultPrioritiesByRepositoryID[repositoryID] = resultPriorities
   }
@@ -831,6 +852,8 @@ extension RepositoriesFeature {
   ) {
     state.prRefreshBatchCountsByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultsByRepositoryID.removeValue(forKey: repositoryID)
+    state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
+    state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID)
     state.prRefreshRemotePrioritiesByRepositoryID.removeValue(forKey: repositoryID)
     state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
   }
@@ -838,6 +861,8 @@ extension RepositoriesFeature {
   private func clearAllPullRequestRefreshTracking(state: inout State) {
     state.prRefreshBatchCountsByRepositoryID.removeAll()
     state.prRefreshResultsByRepositoryID.removeAll()
+    state.prRefreshNoPrBranchesByID.removeAll()
+    state.prRefreshFailedBatchRepositoryIDs.removeAll()
     state.prRefreshRemotePrioritiesByRepositoryID.removeAll()
     state.prRefreshResultPrioritiesByRepositoryID.removeAll()
   }
@@ -858,13 +883,21 @@ extension RepositoriesFeature {
   private func pullRequestsByWorktreeID(
     repository: Repository,
     worktreeIDs: [Worktree.ID],
-    prsByBranch: [String: GithubPullRequest]
+    prsByBranch: [String: GithubPullRequest],
+    confirmedNoPrBranches: Set<String>
   ) -> [Worktree.ID: GithubPullRequest?] {
     var prsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
     for worktreeID in worktreeIDs {
-      if let worktree = repository.worktrees[id: worktreeID] {
-        prsByWorktreeID[worktreeID] = prsByBranch[worktree.name]
+      guard let worktree = repository.worktrees[id: worktreeID] else { continue }
+      if let pullRequest = prsByBranch[worktree.name] {
+        prsByWorktreeID[worktreeID] = pullRequest
+      } else if confirmedNoPrBranches.contains(worktree.name) {
+        // All repos confirmed no PR for this branch — explicitly clear. A nil
+        // literal through the subscript would remove the key instead of storing
+        // an explicit nil, so downstream would never see the clear.
+        prsByWorktreeID.updateValue(nil, forKey: worktreeID)
       }
+      // Otherwise: unknown status (partial failure) — omit to preserve existing.
     }
     return prsByWorktreeID
   }
@@ -886,18 +919,9 @@ extension RepositoriesFeature {
         gitClient: gitClient
       )
       guard !remoteInfos.isEmpty else {
-        let clearedPullRequestsByWorktreeID = Dictionary(
-          worktreeIDs.map { ($0, Optional<GithubPullRequest>.none) },
-          uniquingKeysWith: { first, _ in first }
-        )
-        await send(
-          .githubIntegration(
-            .repositoryPullRequestsLoaded(
-              repositoryID: repositoryID,
-              pullRequestsByWorktreeID: clearedPullRequestsByWorktreeID
-            )
-          )
-        )
+        // No GitHub remote configured for this repository — preserve existing PR
+        // values rather than clearing them, which would cause a flicker during
+        // refresh cycles.
         await send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
         return
       }

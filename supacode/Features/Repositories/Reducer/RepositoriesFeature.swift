@@ -337,6 +337,13 @@ struct RepositoriesFeature {
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var prRefreshBatchCountsByRepositoryID: [Repository.ID: Int] = [:]
     var prRefreshResultsByRepositoryID: [Repository.ID: [String: GithubPullRequest]] = [:]
+    /// Branches confirmed as having no PR (all repos succeeded, none returned a PR).
+    /// Used to clear stale PR state without flashing when only some repos succeed.
+    var prRefreshNoPrBranchesByID: [Repository.ID: Set<String>] = [:]
+    /// Repositories with at least one failed host batch in the current refresh cycle.
+    /// A failure means branch status on that host is unknown, so confirmed-no-PR
+    /// clears from the healthy hosts must be suppressed regardless of arrival order.
+    var prRefreshFailedBatchRepositoryIDs: Set<Repository.ID> = []
     /// Cross-host PR refresh batches complete independently; keep the intended remote
     /// order so same-branch collisions are resolved by priority, not arrival time.
     var prRefreshRemotePrioritiesByRepositoryID: [Repository.ID: [String: Int]] = [:]
