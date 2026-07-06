@@ -75,9 +75,9 @@ enum WorktreeProjectKind: CaseIterable {
   var preferredActions: [OpenWorktreeAction] {
     switch self {
     case .apple: [.xcode]
-    case .android: [.androidStudio, .intellij]
+    case .android: [.androidStudio, .intellij, .intellijEAP]
     case .dotnet: [.rider]
-    case .java: [.intellij]
+    case .java: [.intellij, .intellijEAP]
     case .golang: [.goland]
     case .rust: [.rustrover]
     case .cpp: [.clion]

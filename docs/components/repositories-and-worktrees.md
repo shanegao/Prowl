@@ -145,21 +145,22 @@ it from Prowl (closing its open terminals); it does **not** delete files on disk
 **Automatic** (the default), Prowl inspects the worktree's top-level files and
 prefers an app matching the project type: `.xcodeproj`/`.xcworkspace`/
 `Package.swift`/`Project.swift` → Xcode, Gradle files → Android Studio (then
-IntelliJ IDEA), `*.sln`/`*.csproj` → Rider, `pom.xml` → IntelliJ IDEA,
-`go.mod` → GoLand, `Cargo.toml` → RustRover, `CMakeLists.txt` → CLion,
-`composer.json` → PhpStorm, `Gemfile` → RubyMine, Python manifests → PyCharm,
-`package.json` → WebStorm. If the matching app isn't installed (or no project
-type is detected), it falls back to the generic priority — your first
-installed editor (Cursor → Zed → VS Code → Windsurf → …), falling through to
-Xcode and then **Finder only when no preferred app is found**. Use the
-**Open** dropdown in the worktree's detail toolbar to pick a different app
-(this pins it for the repo), or pick **Automatic** at the top of that dropdown
-to clear the pin and return to project-aware selection. You can also set a
-per-repo default (`openActionID`) / global default (`defaultEditorID`). Prowl
-detects: Finder, Terminal,
-`$EDITOR`, VS Code (+ Insiders), VSCodium, Cursor, Zed, Windsurf, Antigravity,
-Sublime Text, Xcode, Android Studio, JetBrains IDEs (IntelliJ IDEA, WebStorm,
-PyCharm, RustRover, Rider, GoLand, CLion, PhpStorm, RubyMine), GitHub Desktop
+IntelliJ IDEA, then IDEA EAP), `*.sln`/`*.csproj` → Rider, `pom.xml` →
+IntelliJ IDEA (then IDEA EAP), `go.mod` → GoLand, `Cargo.toml` → RustRover,
+`CMakeLists.txt` → CLion, `composer.json` → PhpStorm, `Gemfile` → RubyMine,
+Python manifests → PyCharm, `package.json` → WebStorm. If the matching app
+isn't installed (or no project type is detected), it falls back to the generic
+priority — your first installed editor (Cursor → Zed → Zed Preview →
+VS Code → Windsurf → …), falling through to Xcode and then **Finder only when
+no preferred app is found**. Use the **Open** dropdown in the worktree's
+detail toolbar to pick a different app (this pins it for the repo), or pick
+**Automatic** at the top of that dropdown to clear the pin and return to
+project-aware selection. You can also set a per-repo default (`openActionID`)
+/ global default (`defaultEditorID`). Prowl detects: Finder, Terminal,
+`$EDITOR`, VS Code (+ Insiders), VSCodium, Cursor, Zed (+ Preview), Windsurf,
+Antigravity, Sublime Text, Nova, Xcode, Android Studio, JetBrains IDEs
+(IntelliJ IDEA and IDEA EAP, WebStorm, PyCharm, RustRover, Rider, GoLand,
+CLion, PhpStorm, RubyMine), GitHub Desktop
 / Fork / Tower / GitKraken / Sourcetree / Sublime Merge / SmartGit / GitUp,
 and terminals (Alacritty, Ghostty, iTerm2, Kitty, Warp, WezTerm). If the
 chosen app isn't installed, Prowl shows an alert.
