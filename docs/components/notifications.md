@@ -67,6 +67,10 @@ top of its section. **Jump to Latest Unread** (`⌘⌥U`) takes you straight to 
   `hero`, or `supacodeClassic` = Prowl Classic, the default). Selecting a sound
   previews it. Replaces the legacy `notificationSoundEnabled` toggle (`true` →
   `supacodeClassic`, `false` → `never` on migration).
+- `muteNotificationsForActiveSurface` (default on) — skip the banner, sound, and
+  dock bounce when the notification comes from the pane you're already looking at
+  (selected worktree, focused pane, key + visible window). Sidebar reordering
+  still happens.
 - `moveNotifiedWorktreeToTop` — float notified worktree to top.
 - `commandFinishedNotificationEnabled` + `commandFinishedNotificationThreshold` —
   long-command notifications and their minimum duration.

@@ -13,7 +13,8 @@ struct AppFeatureDockTests {
         worktreeID: "/tmp/repo/wt-1",
         surfaceID: UUID(),
         title: "Done",
-        body: "Build succeeded"
+        body: "Build succeeded",
+        isViewed: false
       )
     )
   }

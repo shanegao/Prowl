@@ -32,12 +32,15 @@ extension AppFeature {
     state: inout State
   ) -> Effect<Action>? {
     switch event {
-    case .notificationReceived(let worktreeID, let surfaceID, let title, let body):
+    case .notificationReceived(let worktreeID, let surfaceID, let title, let body, let isViewed):
       return terminalNotificationReceivedEffect(
-        worktreeID: worktreeID,
-        surfaceID: surfaceID,
-        title: title,
-        body: body,
+        TerminalNotificationPayload(
+          worktreeID: worktreeID,
+          surfaceID: surfaceID,
+          title: title,
+          body: body,
+          isViewed: isViewed
+        ),
         state: state
       )
 
@@ -157,20 +160,38 @@ extension AppFeature {
     }
   }
 
+  struct TerminalNotificationPayload {
+    let worktreeID: Worktree.ID
+    let surfaceID: UUID
+    let title: String
+    let body: String
+    /// The surface is the one the user is actively looking at, so the mute
+    /// setting can suppress the redundant banner/sound/bounce for it.
+    let isViewed: Bool
+  }
+
   func terminalNotificationReceivedEffect(
-    worktreeID: Worktree.ID,
-    surfaceID: UUID,
-    title: String,
-    body: String,
+    _ notification: TerminalNotificationPayload,
     state: State
   ) -> Effect<Action> {
+    // Reordering the sidebar is organizational, not attention-grabbing, so it
+    // always runs. The banner / sound / dock bounce are suppressed when the user
+    // is already looking at the originating surface and the mute setting is on.
     var effects: [Effect<Action>] = [
-      .send(.repositories(.worktreeOrdering(.worktreeNotificationReceived(worktreeID))))
+      .send(.repositories(.worktreeOrdering(.worktreeNotificationReceived(notification.worktreeID))))
     ]
+    if state.settings.muteNotificationsForActiveSurface && notification.isViewed {
+      return .merge(effects)
+    }
     if state.settings.systemNotificationsEnabled {
       effects.append(
         .run { _ in
-          await systemNotificationClient.send(title, body, worktreeID, surfaceID)
+          await systemNotificationClient.send(
+            notification.title,
+            notification.body,
+            notification.worktreeID,
+            notification.surfaceID
+          )
         }
       )
     }

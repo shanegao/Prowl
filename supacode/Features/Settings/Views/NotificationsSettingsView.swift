@@ -34,6 +34,14 @@ struct NotificationsSettingsView: View {
           .help("Choose the sound played when a notification is received")
           .disabled(store.systemNotificationsEnabled)
           Toggle(
+            "Mute notifications for the active pane",
+            isOn: $store.muteNotificationsForActiveSurface
+          )
+          .help(
+            "Skip the banner, sound, and dock bounce when the notification comes from "
+              + "the pane you're already looking at."
+          )
+          Toggle(
             "Move notified worktree to top",
             isOn: $store.moveNotifiedWorktreeToTop
           )

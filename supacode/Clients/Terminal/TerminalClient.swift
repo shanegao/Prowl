@@ -60,7 +60,7 @@ struct TerminalClient {
 
   enum Event: Equatable {
     case customCommandSucceeded(worktreeID: Worktree.ID, name: String, durationMs: Int)
-    case notificationReceived(worktreeID: Worktree.ID, surfaceID: UUID, title: String, body: String)
+    case notificationReceived(worktreeID: Worktree.ID, surfaceID: UUID, title: String, body: String, isViewed: Bool)
     case notificationIndicatorChanged(count: Int)
     case tabCreated(worktreeID: Worktree.ID)
     case tabClosed(worktreeID: Worktree.ID, remainingTabs: Int)

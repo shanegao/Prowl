@@ -128,7 +128,7 @@ extension WorktreeTerminalState {
       )
       emitNotificationIndicatorIfNeeded(previousHasUnseen: previousHasUnseen)
     }
-    onNotificationReceived?(surfaceId, trimmedTitle, trimmedBody)
+    onNotificationReceived?(surfaceId, trimmedTitle, trimmedBody, isViewedSurface(surfaceId))
   }
 
   static func formatDuration(_ seconds: Int) -> String {
