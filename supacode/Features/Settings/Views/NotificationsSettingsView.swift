@@ -16,11 +16,23 @@ struct NotificationsSettingsView: View {
             isOn: $store.inAppNotificationsEnabled
           )
           .help("Show bell icon next to worktree")
-          Toggle(
-            "Play notification sound",
-            isOn: $store.notificationSoundEnabled
-          )
-          .help("Play a sound when a notification is received")
+          Picker(selection: $store.notificationSound) {
+            Text(NotificationSound.never.displayName).tag(NotificationSound.never)
+            Divider()
+            ForEach(NotificationSound.systemCases) { sound in
+              NotificationSoundLabel(sound: sound).tag(sound)
+            }
+            Divider()
+            NotificationSoundLabel(sound: .supacodeClassic).tag(NotificationSound.supacodeClassic)
+          } label: {
+            Text("Play notification sound")
+            Text(
+              "Ignored when system notifications are enabled, as they play sounds"
+                + " according to your settings."
+            )
+          }
+          .help("Choose the sound played when a notification is received")
+          .disabled(store.systemNotificationsEnabled)
           Toggle(
             "Move notified worktree to top",
             isOn: $store.moveNotifiedWorktreeToTop
@@ -109,6 +121,18 @@ struct NotificationsSettingsView: View {
       return "Allow notifications for Prowl in System Settings to show the Dock badge."
     case .badgeDisabled:
       return "Turn on “Badge app icon” for Prowl in System Settings > Notifications."
+    }
+  }
+}
+
+private struct NotificationSoundLabel: View {
+  let sound: NotificationSound
+
+  var body: some View {
+    if sound == GlobalSettings.default.notificationSound {
+      Text("\(sound.displayName) \(Text("Default").foregroundStyle(.secondary))")
+    } else {
+      Text(sound.displayName)
     }
   }
 }

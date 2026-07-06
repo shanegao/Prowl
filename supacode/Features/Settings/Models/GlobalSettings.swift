@@ -6,7 +6,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var updatesAutomaticallyCheckForUpdates: Bool
   var updatesAutomaticallyDownloadUpdates: Bool
   var inAppNotificationsEnabled: Bool
-  var notificationSoundEnabled: Bool
+  var notificationSound: NotificationSound
   var systemNotificationsEnabled: Bool
   var moveNotifiedWorktreeToTop: Bool
   var commandFinishedNotificationEnabled: Bool
@@ -51,7 +51,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyCheckForUpdates: true,
     updatesAutomaticallyDownloadUpdates: false,
     inAppNotificationsEnabled: true,
-    notificationSoundEnabled: true,
+    notificationSound: .supacodeClassic,
     systemNotificationsEnabled: false,
     moveNotifiedWorktreeToTop: true,
     commandFinishedNotificationEnabled: true,
@@ -95,7 +95,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyCheckForUpdates: Bool,
     updatesAutomaticallyDownloadUpdates: Bool,
     inAppNotificationsEnabled: Bool,
-    notificationSoundEnabled: Bool,
+    notificationSound: NotificationSound = .supacodeClassic,
     systemNotificationsEnabled: Bool = false,
     moveNotifiedWorktreeToTop: Bool,
     commandFinishedNotificationEnabled: Bool = true,
@@ -137,7 +137,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.updatesAutomaticallyCheckForUpdates = updatesAutomaticallyCheckForUpdates
     self.updatesAutomaticallyDownloadUpdates = updatesAutomaticallyDownloadUpdates
     self.inAppNotificationsEnabled = inAppNotificationsEnabled
-    self.notificationSoundEnabled = notificationSoundEnabled
+    self.notificationSound = notificationSound
     self.systemNotificationsEnabled = systemNotificationsEnabled
     self.moveNotifiedWorktreeToTop = moveNotifiedWorktreeToTop
     self.commandFinishedNotificationEnabled = commandFinishedNotificationEnabled
@@ -182,7 +182,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(updatesAutomaticallyCheckForUpdates, forKey: .updatesAutomaticallyCheckForUpdates)
     try container.encode(updatesAutomaticallyDownloadUpdates, forKey: .updatesAutomaticallyDownloadUpdates)
     try container.encode(inAppNotificationsEnabled, forKey: .inAppNotificationsEnabled)
-    try container.encode(notificationSoundEnabled, forKey: .notificationSoundEnabled)
+    try container.encode(notificationSound, forKey: .notificationSound)
     try container.encode(systemNotificationsEnabled, forKey: .systemNotificationsEnabled)
     try container.encode(moveNotifiedWorktreeToTop, forKey: .moveNotifiedWorktreeToTop)
     try container.encode(commandFinishedNotificationEnabled, forKey: .commandFinishedNotificationEnabled)
@@ -228,7 +228,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case updatesAutomaticallyCheckForUpdates
     case updatesAutomaticallyDownloadUpdates
     case inAppNotificationsEnabled
-    case notificationSoundEnabled
+    case notificationSound
     case systemNotificationsEnabled
     case moveNotifiedWorktreeToTop
     case commandFinishedNotificationEnabled
@@ -264,8 +264,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case shelfSpineTintFollowsRepositoryColor
     case externalDiffToolID
     case externalDiffCustomCommand
-    // Legacy key for migration
+    // Legacy keys for migration
     case automaticallyArchiveMergedWorktrees
+    case notificationSoundEnabled
   }
 
   init(from decoder: any Decoder) throws {
@@ -285,9 +286,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     inAppNotificationsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .inAppNotificationsEnabled)
       ?? Self.default.inAppNotificationsEnabled
-    notificationSoundEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled)
-      ?? Self.default.notificationSoundEnabled
+    notificationSound = try Self.decodeNotificationSound(from: container)
     systemNotificationsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .systemNotificationsEnabled)
       ?? Self.default.systemNotificationsEnabled
@@ -413,6 +412,23 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(String.self, forKey: .externalDiffCustomCommand)
       ?? Self.default.externalDiffCustomCommand
     return (toolID, customCommand)
+  }
+
+  /// Folds the removed `notificationSoundEnabled` toggle: off becomes `.never`,
+  /// on the default sound. `try?` keeps an unrecognized raw value (e.g. from a
+  /// newer build) from failing the whole decode — it flattens both a decode
+  /// throw and an absent key to `nil`, so either falls through to the legacy
+  /// key and then the default.
+  private static func decodeNotificationSound(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> NotificationSound {
+    if let sound = try? container.decodeIfPresent(NotificationSound.self, forKey: .notificationSound) {
+      return sound
+    }
+    if let legacyEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled) {
+      return legacyEnabled ? Self.default.notificationSound : .never
+    }
+    return Self.default.notificationSound
   }
 
   private static func decodeMergedWorktreeAction(
