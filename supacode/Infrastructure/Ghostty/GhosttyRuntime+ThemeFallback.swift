@@ -104,6 +104,7 @@ extension GhosttyRuntime {
     ghostty_config_load_default_files(updated)
     ghostty_config_load_recursive_files(updated)
     ghostty_config_load_cli_args(updated)
+    Self.loadTerminalProgramOverrides(into: updated)
     for url in overrideURLs {
       url.path.withCString { path in
         ghostty_config_load_file(updated, path)
