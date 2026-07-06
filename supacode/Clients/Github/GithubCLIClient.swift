@@ -195,8 +195,11 @@ struct GithubCLIClient: Sendable {
 extension GithubCLIClient: DependencyKey {
   static let liveValue = live()
 
-  static func live(shell: ShellClient = .liveValue) -> GithubCLIClient {
-    let resolver = GithubCLIExecutableResolver()
+  static func live(
+    shell: ShellClient = .liveValue,
+    fallbackExecutableURLs: [URL] = GithubCLIExecutableResolver.defaultFallbackExecutableURLs()
+  ) -> GithubCLIClient {
+    let resolver = GithubCLIExecutableResolver(fallbackExecutableURLs: fallbackExecutableURLs)
     return GithubCLIClient(
       defaultBranch: defaultBranchFetcher(shell: shell, resolver: resolver),
       resolveRemoteInfo: resolveRemoteInfoFetcher(shell: shell, resolver: resolver),

@@ -1,8 +1,15 @@
 import Foundation
 
 actor GithubCLIExecutableResolver {
+  nonisolated private static let logger = SupaLogger("GithubCLI")
+
+  private let fallbackExecutableURLs: [URL]
   private var cachedExecutableURL: URL?
   private var inFlightResolution: Task<URL, Error>?
+
+  init(fallbackExecutableURLs: [URL]) {
+    self.fallbackExecutableURLs = fallbackExecutableURLs
+  }
 
   func executableURL(shell: ShellClient) async throws -> URL {
     if let cachedExecutableURL {
@@ -45,7 +52,26 @@ actor GithubCLIExecutableResolver {
     ) {
       return executableURL
     }
+    if let executableURL = fallbackExecutableURLs.first(where: {
+      FileManager.default.isExecutableFile(atPath: $0.path)
+    }) {
+      // Shell PATH missed gh; note the fixed-path fallback so a mismatch with the user's terminal is traceable.
+      Self.logger.info("Resolved gh via fallback path \(executableURL.path); shell PATH resolution failed.")
+      return executableURL
+    }
     throw GithubCLIError.unavailable
+  }
+
+  nonisolated static func defaultFallbackExecutableURLs(
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> [URL] {
+    [
+      "/opt/homebrew/bin/gh",
+      "/usr/local/bin/gh",
+      environment["HOME"].map { "\($0)/.local/bin/gh" },
+    ]
+    .compactMap { $0 }
+    .map { URL(fileURLWithPath: $0) }
   }
 
   private func locateExecutableURL(

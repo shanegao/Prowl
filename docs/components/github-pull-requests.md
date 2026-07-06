@@ -63,7 +63,12 @@ Open the [Command Palette](command-palette.md) (`⌘P`) on a worktree that has a
 
 ## Requirements & settings
 
-- The **`gh` CLI** must be installed and authenticated (`gh auth login`).
+- The **`gh` CLI** must be installed and authenticated (`gh auth login`). Prowl
+  locates `gh` via `which` (directly, then through a login shell), falling back to
+  common install paths (`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`)
+  when the shell `PATH` misses it. Login-shell probing works even with a
+  non-POSIX login shell (nushell, pwsh, …) — Prowl falls back to `/bin/zsh` for
+  one-shot commands in that case.
 - `githubIntegrationEnabled` (global) gates all GitHub features.
 - Per repo: `fetchPullRequestState` (auto-fetch PR state; on by default — turn off
   for big/expensive repos), `pullRequestMergeStrategy` override, and
