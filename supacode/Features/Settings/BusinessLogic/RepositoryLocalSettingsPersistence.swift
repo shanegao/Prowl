@@ -10,11 +10,12 @@ nonisolated enum RepositoryLocalSettingsStorageKey: DependencyKey {
   static var liveValue: RepositoryLocalSettingsStorage {
     RepositoryLocalSettingsStorage(
       load: { try Data(contentsOf: $0) },
-      save: { data, url in
-        let directory = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: url, options: [.atomic])
-      }
+      // Per-repo settings live under `~/.prowl/repo/<name>/` (not inside the
+      // cloned repo), so they are user-owned config a dotfiles user may symlink
+      // — follow the link on write to preserve it (#478). Upstream keeps a
+      // non-following write for its in-repo `supacode.json`; that exception does
+      // not apply here because the fork stores these outside the repository.
+      save: { data, url in try SymlinkPreservingFileWriter.write(data, to: url) }
     )
   }
 
