@@ -8,8 +8,8 @@ nonisolated struct GithubPullRequest: Decodable, Equatable, Hashable {
   let deletions: Int
   let isDraft: Bool
   let reviewDecision: String?
-  let mergeable: String?
-  let mergeStateStatus: String?
+  var mergeable: String?
+  var mergeStateStatus: String?
   let updatedAt: Date?
   let url: String
   let headRefName: String?

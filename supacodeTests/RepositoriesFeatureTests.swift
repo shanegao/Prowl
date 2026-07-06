@@ -6257,6 +6257,229 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func repositoryPullRequestsLoadedPreservesMergeableWhenNewIsUnknown() async {
+    let repoRoot = "/tmp/repo"
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [featureWorktree])
+    let previousPR = GithubPullRequest(
+      number: 1,
+      title: "PR",
+      state: "OPEN",
+      additions: 10,
+      deletions: 5,
+      isDraft: false,
+      reviewDecision: nil,
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      updatedAt: nil,
+      url: "https://example.com/pull/1",
+      headRefName: "feature",
+      baseRefName: "main",
+      commitsCount: 1,
+      authorLogin: "khoi",
+      statusCheckRollup: nil
+    )
+    var newPR = previousPR
+    newPR.mergeable = "UNKNOWN"
+    newPR.mergeStateStatus = "BEHIND"
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: previousPR
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+    await store.send(
+      .githubIntegration(
+        .repositoryPullRequestsLoaded(
+          repositoryID: repository.id,
+          pullRequestsByWorktreeID: [featureWorktree.id: newPR]
+        ))
+    )
+    await store.finish()
+  }
+
+  @Test func repositoryPullRequestsLoadedPreservesMergeableButUpdatesOtherFields() async {
+    let repoRoot = "/tmp/repo"
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [featureWorktree])
+    let previousPR = GithubPullRequest(
+      number: 1,
+      title: "Old title",
+      state: "OPEN",
+      additions: 10,
+      deletions: 5,
+      isDraft: false,
+      reviewDecision: nil,
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      updatedAt: nil,
+      url: "https://example.com/pull/1",
+      headRefName: "feature",
+      baseRefName: "main",
+      commitsCount: 1,
+      authorLogin: "khoi",
+      statusCheckRollup: nil
+    )
+    let newPR = GithubPullRequest(
+      number: 1,
+      title: "New title",
+      state: "OPEN",
+      additions: 10,
+      deletions: 5,
+      isDraft: false,
+      reviewDecision: nil,
+      mergeable: "UNKNOWN",
+      mergeStateStatus: "BEHIND",
+      updatedAt: nil,
+      url: "https://example.com/pull/1",
+      headRefName: "feature",
+      baseRefName: "main",
+      commitsCount: 1,
+      authorLogin: "khoi",
+      statusCheckRollup: nil
+    )
+    var expectedPR = newPR
+    expectedPR.mergeable = "MERGEABLE"
+    expectedPR.mergeStateStatus = "CLEAN"
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: previousPR
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+    await store.send(
+      .githubIntegration(
+        .repositoryPullRequestsLoaded(
+          repositoryID: repository.id,
+          pullRequestsByWorktreeID: [featureWorktree.id: newPR]
+        ))
+    ) {
+      $0.worktreeInfoByID[featureWorktree.id]?.pullRequest = expectedPR
+    }
+  }
+
+  @Test func repositoryPullRequestsLoadedKeepsUnknownWhenNoPreviousPR() async {
+    let repoRoot = "/tmp/repo"
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [featureWorktree])
+    let newPR = GithubPullRequest(
+      number: 1,
+      title: "PR",
+      state: "OPEN",
+      additions: 10,
+      deletions: 5,
+      isDraft: false,
+      reviewDecision: nil,
+      mergeable: "UNKNOWN",
+      mergeStateStatus: nil,
+      updatedAt: nil,
+      url: "https://example.com/pull/1",
+      headRefName: "feature",
+      baseRefName: "main",
+      commitsCount: 1,
+      authorLogin: "khoi",
+      statusCheckRollup: nil
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+    await store.send(
+      .githubIntegration(
+        .repositoryPullRequestsLoaded(
+          repositoryID: repository.id,
+          pullRequestsByWorktreeID: [featureWorktree.id: newPR]
+        ))
+    ) {
+      $0.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+        addedLines: nil,
+        removedLines: nil,
+        pullRequest: newPR
+      )
+    }
+  }
+
+  @Test func repositoryPullRequestsLoadedKeepsUnknownWhenPreviousAlsoUnknown() async {
+    let repoRoot = "/tmp/repo"
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [featureWorktree])
+    let previousPR = GithubPullRequest(
+      number: 1,
+      title: "Old title",
+      state: "OPEN",
+      additions: 10,
+      deletions: 5,
+      isDraft: false,
+      reviewDecision: nil,
+      mergeable: "UNKNOWN",
+      mergeStateStatus: "BEHIND",
+      updatedAt: nil,
+      url: "https://example.com/pull/1",
+      headRefName: "feature",
+      baseRefName: "main",
+      commitsCount: 1,
+      authorLogin: "khoi",
+      statusCheckRollup: nil
+    )
+    let newPR = GithubPullRequest(
+      number: 1,
+      title: "New title",
+      state: "OPEN",
+      additions: 10,
+      deletions: 5,
+      isDraft: false,
+      reviewDecision: nil,
+      mergeable: "UNKNOWN",
+      mergeStateStatus: "BEHIND",
+      updatedAt: nil,
+      url: "https://example.com/pull/1",
+      headRefName: "feature",
+      baseRefName: "main",
+      commitsCount: 1,
+      authorLogin: "khoi",
+      statusCheckRollup: nil
+    )
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: previousPR
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+    await store.send(
+      .githubIntegration(
+        .repositoryPullRequestsLoaded(
+          repositoryID: repository.id,
+          pullRequestsByWorktreeID: [featureWorktree.id: newPR]
+        ))
+    ) {
+      $0.worktreeInfoByID[featureWorktree.id]?.pullRequest = newPR
+    }
+  }
+
   @Test func unarchiveWorktreeNoopsWhenNotArchived() async {
     let worktree = makeWorktree(id: "/tmp/wt", name: "owl")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
