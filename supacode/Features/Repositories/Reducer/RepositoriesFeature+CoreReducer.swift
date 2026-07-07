@@ -953,6 +953,8 @@ extension RepositoriesFeature {
             )
           )
         )
+      case .plainRepositoryBecameGitRepository:
+        return .send(.reloadRepositories(animated: true))
       }
 
     case .worktreeBranchNameLoaded(let worktreeID, let name):

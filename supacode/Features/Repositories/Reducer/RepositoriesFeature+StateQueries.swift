@@ -148,6 +148,16 @@ extension RepositoriesFeature.State {
     return worktrees.filter { !archivedSet.contains($0.id) }
   }
 
+  /// Roots of plain (non-workspace) folders that should be watched for `.git`
+  /// initialization. When `git init` creates a `.git` directory inside one of
+  /// these folders, the watcher emits an event so the reducer can upgrade the
+  /// entry from `.plain` to `.git` and discover its worktrees.
+  func plainRepositoryRootsForInfoWatcher() -> [URL] {
+    repositories
+      .filter { $0.kind == .plain && !$0.isWorkspace }
+      .map { $0.rootURL }
+  }
+
   /// Child repositories materialized inside every workspace, resolved to their
   /// on-disk working directory. Used both to refresh their live status and to
   /// render their sidebar rows. Child id is the working-directory path string.

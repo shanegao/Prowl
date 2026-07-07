@@ -392,6 +392,42 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.repositoriesChanged)
   }
 
+  @Test func plainRepositoryBecameGitRepositoryReloadsRepositories() async {
+    let repoRoot = "/tmp/new-project"
+    let rootURL = URL(fileURLWithPath: repoRoot)
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let plainRepository = makeRepository(
+      id: repoRoot, name: "new-project", kind: .plain, worktrees: [])
+    let store = TestStore(initialState: makeState(repositories: [plainRepository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: repoRoot, kind: .plain)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { _ in }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { _ in rootURL }
+      $0.gitClient.worktrees = { _ in [mainWorktree] }
+      $0.gitClient.pruneWorktrees = { _ in }
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+
+    await store.send(
+      .worktreeInfoEvent(.plainRepositoryBecameGitRepository(rootURL)))
+    await store.receive(\.reloadRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories[id: plainRepository.id] = makeRepository(
+        id: repoRoot,
+        name: "new-project",
+        kind: .git,
+        worktrees: [mainWorktree]
+      )
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+  }
+
   @Test func repositoryRemoteConfigurationChangedRefreshesPullRequestsAndCodeHost() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)

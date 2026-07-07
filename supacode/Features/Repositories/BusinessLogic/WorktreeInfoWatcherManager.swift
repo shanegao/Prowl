@@ -95,6 +95,8 @@ final class WorktreeInfoWatcherManager {
   private var worktreeFileEventMonitors: [Worktree.ID: WorktreeFileEventMonitoring] = [:]
   private var worktreeRegistryMonitors: [URL: WorktreeRegistryMonitoring] = [:]
   private var remoteConfigMonitors: [URL: RemoteConfigMonitoring] = [:]
+  private var plainRepositoryMonitors: [URL: WorktreeFileEventMonitoring] = [:]
+  private let plainRepositoryDebouncer: KeyedDebouncer<URL>
   private let branchChangedDebouncer: KeyedDebouncer<Worktree.ID>
   private let repositoryWorktreesDebouncer: KeyedDebouncer<URL>
   private let remoteConfigDebouncer: KeyedDebouncer<URL>
@@ -152,6 +154,7 @@ final class WorktreeInfoWatcherManager {
     repositoryWorktreesDebouncer = KeyedDebouncer(interval: repositoryWorktreesEventDebounceInterval, clock: clock)
     remoteConfigDebouncer = KeyedDebouncer(interval: remoteConfigEventDebounceInterval, clock: clock)
     restartDebouncer = KeyedDebouncer(interval: .seconds(5), clock: clock)
+    plainRepositoryDebouncer = KeyedDebouncer(interval: .seconds(1), clock: clock)
     // Callers always pass an explicit per-worktree delay; the instance interval
     // is only a nominal default.
     lineChangesRefreshDebouncer = KeyedDebouncer(interval: defaultLineChangesTiming.eventDebounce, clock: clock)
@@ -169,6 +172,8 @@ final class WorktreeInfoWatcherManager {
       scheduleLineChangesRefreshForAllWorktrees()
     case .setPullRequestTrackingEnabled(let isEnabled):
       setPullRequestTrackingEnabled(isEnabled)
+    case .setPlainRepositoryRoots(let roots):
+      setPlainRepositoryRoots(roots)
     case .stop:
       stopAll()
     }
@@ -373,6 +378,39 @@ final class WorktreeInfoWatcherManager {
     lineChangesRefreshDebouncer.cancel(worktreeID)
   }
 
+  private func setPlainRepositoryRoots(_ roots: [URL]) {
+    let desiredRoots = Set(roots.map { $0.standardizedFileURL })
+    let currentRoots = Set(plainRepositoryMonitors.keys)
+    for root in currentRoots.subtracting(desiredRoots) {
+      plainRepositoryMonitors[root]?.cancel()
+      plainRepositoryMonitors.removeValue(forKey: root)
+      plainRepositoryDebouncer.cancel(root)
+    }
+    for root in desiredRoots.subtracting(currentRoots) {
+      guard
+        let monitor = FSEventsWorktreeFileEventMonitor(
+          rootURL: root,
+          onEvent: { [weak self] in
+            self?.handlePlainRepositoryFileEvent(root)
+          }
+        )
+      else {
+        return
+      }
+      plainRepositoryMonitors[root] = monitor
+    }
+  }
+
+  private func handlePlainRepositoryFileEvent(_ root: URL) {
+    plainRepositoryDebouncer.schedule(root) { [weak self] in
+      guard let self else { return }
+      let dotGitURL = root.appending(path: ".git")
+      if FileManager.default.fileExists(atPath: dotGitURL.path(percentEncoded: false)) {
+        emit(.plainRepositoryBecameGitRepository(root))
+      }
+    }
+  }
+
   private func stopAll() {
     for watcher in headWatchers.values {
       watcher.monitor.cancel()
@@ -397,10 +435,15 @@ final class WorktreeInfoWatcherManager {
     for monitor in remoteConfigMonitors.values {
       monitor.cancel()
     }
+    for monitor in plainRepositoryMonitors.values {
+      monitor.cancel()
+    }
+    plainRepositoryDebouncer.cancelAll()
     headWatchers.removeAll()
     worktreeFileEventMonitors.removeAll()
     worktreeRegistryMonitors.removeAll()
     remoteConfigMonitors.removeAll()
+    plainRepositoryMonitors.removeAll()
     pullRequestTasks.removeAll()
     lineChangeSafetyTasks.removeAll()
     deferredLineChangeIDs.removeAll()
