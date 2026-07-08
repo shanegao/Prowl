@@ -249,8 +249,12 @@ extension RepositoriesFeature {
           continue
         }
         let loadedPullRequest = pullRequestsByWorktreeID[worktreeID] ?? nil
-        let pullRequest = Self.displayPullRequest(loadedPullRequest, for: worktree)
+        let displayedPullRequest = Self.displayPullRequest(loadedPullRequest, for: worktree)
         let previousPullRequest = state.worktreeInfoByID[worktreeID]?.pullRequest
+        let pullRequest = Self.preservingMergeableState(
+          displayedPullRequest,
+          previous: previousPullRequest
+        )
         guard previousPullRequest != pullRequest else {
           continue
         }
@@ -958,6 +962,22 @@ extension RepositoriesFeature {
   ) -> GithubPullRequest? {
     if worktree.isMain, pullRequest?.state.uppercased() == "MERGED" {
       return nil
+    }
+    return pullRequest
+  }
+
+  nonisolated private static func preservingMergeableState(
+    _ pullRequest: GithubPullRequest?,
+    previous: GithubPullRequest?
+  ) -> GithubPullRequest? {
+    guard var pullRequest else { return pullRequest }
+    let newMergeable = pullRequest.mergeable?.uppercased()
+    let previousMergeable = previous?.mergeable?.uppercased()
+    let isUnknown = newMergeable == "UNKNOWN"
+    let hasKnownPrevious = previousMergeable != nil && previousMergeable != "UNKNOWN"
+    if isUnknown && hasKnownPrevious, let previous {
+      pullRequest.mergeable = previous.mergeable
+      pullRequest.mergeStateStatus = previous.mergeStateStatus
     }
     return pullRequest
   }
