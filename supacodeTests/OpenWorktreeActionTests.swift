@@ -44,6 +44,14 @@ struct OpenWorktreeActionTests {
     #expect(OpenWorktreeAction.zedPreview.bundleIdentifier == "dev.zed.Zed-Preview")
   }
 
+  // Persisted in settings and kept byte-identical to upstream; intellijEAP intentionally
+  // breaks the kebab-case convention.
+  @Test func newActionsHaveStableSettingsIDs() {
+    #expect(OpenWorktreeAction.zedPreview.settingsID == "zed-preview")
+    #expect(OpenWorktreeAction.intellijEAP.settingsID == "intellijEAP")
+    #expect(OpenWorktreeAction.nova.settingsID == "nova")
+  }
+
   @Test func jetBrainsIDEsAreInEditorPriority() {
     let editors = OpenWorktreeAction.editorPriority
     #expect(editors.contains(.androidStudio))
