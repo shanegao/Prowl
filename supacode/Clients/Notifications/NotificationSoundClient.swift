@@ -21,7 +21,13 @@ private enum NotificationSoundCache {
     guard let source = sound.source else { return nil }
     switch source {
     case .system(let name):
-      return NSSound(named: name)
+      // The hard-coded system sound list can drift across macOS releases; a
+      // dropped sound would otherwise die silently.
+      guard let made = NSSound(named: name) else {
+        SupaLogger("Notifications").warning("System sound \(name) is unavailable; in-app sound will not play.")
+        return nil
+      }
+      return made
     case .bundled(let resource, let fileExtension):
       // The bundled chime is a packaging invariant; a missing or unreadable
       // file means the sound is silently dead, so leave a trail.
