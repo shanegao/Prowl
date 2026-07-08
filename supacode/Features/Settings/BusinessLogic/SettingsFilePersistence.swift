@@ -11,11 +11,11 @@ nonisolated enum SettingsFileStorageKey: DependencyKey {
   static var liveValue: SettingsFileStorage {
     SettingsFileStorage(
       load: { try Data(contentsOf: $0) },
-      save: { data, url in
-        let directory = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: url, options: [.atomic])
-      }
+      // Follows a symlinked destination to its real file so a user who links
+      // `~/.prowl/settings.json` (and the repository-entries / appearances
+      // files that share this closure) into a dotfiles repo keeps the link
+      // instead of having it replaced with a plain file on every save (#478).
+      save: { data, url in try SymlinkPreservingFileWriter.write(data, to: url) }
     )
   }
   static var previewValue: SettingsFileStorage { .inMemory() }
