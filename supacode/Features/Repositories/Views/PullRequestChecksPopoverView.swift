@@ -59,6 +59,8 @@ struct PullRequestChecksPopoverView: View {
           }
           .buttonStyle(.plain)
           .focusable(false)
+          .onHover { _ in }
+          .pointerStyle(.link)
           .help(openPullRequestHelpText)
           .modifier(KeyboardShortcutModifier(shortcut: openPullRequestShortcut?.keyboardShortcut))
           .font(.headline)
@@ -200,6 +202,6 @@ private struct LinkLabel: View {
         isHovering = hovering
       }
       .pointerStyle(.link)
-      .accessibilityHint("Open check details on GitHub")
+      .accessibilityHint("Open on GitHub")
   }
 }
