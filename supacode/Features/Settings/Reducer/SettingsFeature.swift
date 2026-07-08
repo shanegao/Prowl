@@ -13,7 +13,7 @@ struct SettingsFeature {
     var updatesAutomaticallyCheckForUpdates: Bool
     var updatesAutomaticallyDownloadUpdates: Bool
     var inAppNotificationsEnabled: Bool
-    var notificationSoundEnabled: Bool
+    var notificationSound: NotificationSound
     var systemNotificationsEnabled: Bool
     var moveNotifiedWorktreeToTop: Bool
     var commandFinishedNotificationEnabled: Bool
@@ -71,7 +71,7 @@ struct SettingsFeature {
       updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
       updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
-      notificationSoundEnabled = settings.notificationSoundEnabled
+      notificationSound = settings.notificationSound
       systemNotificationsEnabled = settings.systemNotificationsEnabled
       moveNotifiedWorktreeToTop = settings.moveNotifiedWorktreeToTop
       commandFinishedNotificationEnabled = settings.commandFinishedNotificationEnabled
@@ -119,7 +119,7 @@ struct SettingsFeature {
         updatesAutomaticallyCheckForUpdates: updatesAutomaticallyCheckForUpdates,
         updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
         inAppNotificationsEnabled: inAppNotificationsEnabled,
-        notificationSoundEnabled: notificationSoundEnabled,
+        notificationSound: notificationSound,
         systemNotificationsEnabled: systemNotificationsEnabled,
         moveNotifiedWorktreeToTop: moveNotifiedWorktreeToTop,
         commandFinishedNotificationEnabled: commandFinishedNotificationEnabled,
@@ -204,6 +204,7 @@ struct SettingsFeature {
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
+  @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
 
@@ -239,7 +240,7 @@ struct SettingsFeature {
         state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
         state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
-        state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
+        state.notificationSound = normalizedSettings.notificationSound
         state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
         state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
         state.commandFinishedNotificationEnabled = normalizedSettings.commandFinishedNotificationEnabled
@@ -276,6 +277,18 @@ struct SettingsFeature {
         state.externalDiffCustomCommand = normalizedSettings.externalDiffCustomCommand
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
+
+      case .binding(\.notificationSound):
+        let sound = state.notificationSound
+        // Preview the chosen sound, but only on the in-app path: with system
+        // notifications on, the banner plays the macOS default instead. `.never`
+        // has nothing to audition.
+        let shouldPreview = !state.systemNotificationsEnabled && sound != .never
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return .merge(
+          persist(state),
+          shouldPreview ? .run { _ in await notificationSoundClient.play(sound) } : .none
+        )
 
       case .binding:
         state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)

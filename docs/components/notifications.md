@@ -32,7 +32,8 @@ Custom commands also post a success toast when they exit 0.
 
 Whether these become **macOS system banners** depends on
 `systemNotificationsEnabled`; in-app alerts depend on `inAppNotificationsEnabled`.
-A standalone sound (`notificationSoundEnabled`) plays only when system
+A standalone sound (`notificationSound` — a picker offering Never, the macOS
+system sounds, and the bundled Prowl Classic chime) plays only when system
 notifications are **disabled** — when banners are on, the banner carries its own
 sound.
 
@@ -62,7 +63,10 @@ top of its section. **Jump to Latest Unread** (`⌘⌥U`) takes you straight to 
 
 - `inAppNotificationsEnabled` — in-app alerts / bell indicators.
 - `systemNotificationsEnabled` — macOS system banners.
-- `notificationSoundEnabled` — play a sound.
+- `notificationSound` — which sound to play (`never`, a system sound such as
+  `hero`, or `supacodeClassic` = Prowl Classic, the default). Selecting a sound
+  previews it. Replaces the legacy `notificationSoundEnabled` toggle (`true` →
+  `supacodeClassic`, `false` → `never` on migration).
 - `moveNotifiedWorktreeToTop` — float notified worktree to top.
 - `commandFinishedNotificationEnabled` + `commandFinishedNotificationThreshold` —
   long-command notifications and their minimum duration.

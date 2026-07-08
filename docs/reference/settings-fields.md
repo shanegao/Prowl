@@ -30,7 +30,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `updatesAutomaticallyCheckForUpdates` | Bool | `true` | Background update checks. |
 | `updatesAutomaticallyDownloadUpdates` | Bool | `false` | Auto-download updates. |
 | `inAppNotificationsEnabled` | Bool | `true` | In-app alerts / bell indicators. |
-| `notificationSoundEnabled` | Bool | `true` | Play a notification sound. |
+| `notificationSound` | enum (`never` / system sound raw values like `hero` / `supacodeClassic`) | `supacodeClassic` | Sound played for notifications when system banners are off; `never` disables it. Migrates the legacy `notificationSoundEnabled` Bool (`true` → `supacodeClassic`, `false` → `never`); unknown raw values fall back to the default. |
 | `systemNotificationsEnabled` | Bool | `false` | macOS system banners. |
 | `moveNotifiedWorktreeToTop` | Bool | `true` | Float a notified worktree to top. |
 | `commandFinishedNotificationEnabled` | Bool | `true` | Notify when a long command finishes. |
