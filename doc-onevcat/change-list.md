@@ -4,12 +4,63 @@
 
 | Key | Value |
 | --- | --- |
-| Commit | `1d888dbc30f564ed9e8ed26b55c13da961b0887f` |
-| Tag | post-v0.10.2 |
-| Date | 2026-06-05 |
+| Commit | `bcbc40599fa9e9180981993c20fb4ffa1c7479a1` |
+| Tag | post-v0.10.5 |
+| Date | 2026-07-06 |
 
 All upstream changes up to and including this commit have been reviewed.
 Future upstream checks should only inspect commits **after** this baseline.
+
+---
+
+## 2026-07-09 — Review through post-v0.10.5
+
+### Upstream changes reviewed
+
+Reviewed 70 commits on `supabitapp/supacode` from `1d888dbc` (post-v0.10.2, 2026-06-05) through
+`bcbc4059` (post-v0.10.5, 2026-07-06), spanning upstream releases v0.10.3 → v0.10.5. Per-commit
+verdicts and decision rationale are recorded in
+`doc-onevcat/plans/2026-07-06-upstream-sync-batch.md` (PR #547). The fork is now aligned to this
+tip; the next `/check-upstream-changes` run only needs to diff against `bcbc4059`.
+
+### Ported into the fork
+
+| Upstream | Fork |
+| --- | --- |
+| `70786d2d` #410 / `82c101c1` #460 / `4e0aeb54` #482 / `ad4db32a` #535 — gh detection & login-shell hardening | PR #541 (`43625674`) |
+| `3886a052` #447 Zed Preview / `c135b9d6` #496 IDEA EAP / `566bf4c4` #506 Nova open actions | PR #542 (`c1ead67f`) |
+| `7a5c9ab1` #458 — Report the host app as TERM_PROGRAM | PR #543 (`ea9a1fd0`) |
+| `99d27826` #478 — Preserve symlinked JSON config files on write | PR #544 (`c2708678`) |
+| `ce03d3c3` #511 — Customizable notification sound picker | PR #545 (`199a9e2f`) |
+| `f15420ce` #562 — Mute notifications for the viewed surface | PR #546 (`9d8ba6b1`) |
+
+Fork adaptations worth noting: the sound picker defaults (and migrates legacy `true`) to the
+fork's classic chime instead of upstream's Hero; the mute feature threads `isViewed` through the
+event pipeline and treats canvas-managed surfaces as not-viewed (stale window flags would
+otherwise silently drop notifications).
+
+### Already present in the fork (no action)
+
+Duplicate `WorktreeID` crash (#517), duplicate worktree paths (#480), terminal focus after
+command palette closes (#566), Clone Repository flow (#524), terminal zoom memoization (#454),
+Dismiss All popover (#409), build warnings (#513), GoLand/Rider/PhpStorm mappings — see the plan
+doc for the per-commit equivalence table.
+
+### Reviewed and skipped (decision recorded)
+
+Window appearance rewrite + status inspector (#570/#577), keybinding conflict zone
+(#459/#461/#416), OSC 3008 agent-presence track, toolchain self-diagnosis (#468), zmx track,
+hook-driven agent integrations (Hermes/Kimi/Copilot CLI/OpenCode), upstream CLI socket acks
+(#556), release/CI housekeeping, `c38c325d` #423 OpenTarget refactor (editor cases added in fork
+shape instead), and a low-risk UI-polish list kept as future cherry candidates. Rationale for
+each is in the plan doc.
+
+### Deferred with tracking
+
+- Searchable base-ref filter (`e37bebad` #387/#411) → Linear **CLAW-99** (fork approach captured
+  in the issue).
+- Remote SSH track (`88e50398` #407 + 6 follow-ups, ≈ +12k/−3.7k lines) → Linear **CLAW-98**
+  (staged adoption options recorded).
 
 ---
 
