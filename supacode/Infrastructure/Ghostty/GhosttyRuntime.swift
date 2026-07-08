@@ -337,8 +337,44 @@ final class GhosttyRuntime {
     ghostty_config_load_default_files(config)
     ghostty_config_load_recursive_files(config)
     ghostty_config_load_cli_args(config)
+    loadTerminalProgramOverrides(into: config)
     ghostty_config_finalize(config)
     return config
+  }
+
+  /// Reports Prowl in `TERM_PROGRAM` so programs detect the real host terminal;
+  /// loaded after the user config so it wins. The version is always emitted
+  /// because Ghostty's `env` map can override a key but not clear its seeded
+  /// value, so a blank value falls back to a placeholder.
+  nonisolated static func terminalProgramOverrides(version: String?) -> String {
+    // Trim like Ghostty's `env` parser, which strips whitespace then drops a
+    // now-empty value, leaving its seeded version.
+    let trimmed = version?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolved = trimmed.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
+    return """
+      env = TERM_PROGRAM=prowl
+      env = TERM_PROGRAM_VERSION=\(resolved)
+      """
+  }
+
+  nonisolated private static var appVersion: String? {
+    let info = Bundle.main.infoDictionary
+    let candidates = [info?["CFBundleShortVersionString"], info?["CFBundleVersion"]]
+    return candidates.lazy.compactMap { $0 as? String }.first { !$0.isEmpty }
+  }
+
+  nonisolated static func loadTerminalProgramOverrides(into config: ghostty_config_t) {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("prowl-ghostty-term-program.conf")
+    do {
+      try terminalProgramOverrides(version: appVersion).write(to: url, atomically: true, encoding: .utf8)
+    } catch {
+      ghosttyLogger.warning("Failed to write TERM_PROGRAM override file: \(error.localizedDescription)")
+      return
+    }
+    url.path.withCString { path in
+      ghostty_config_load_file(config, path)
+    }
   }
 
   func keyboardShortcut(for action: String) -> KeyboardShortcut? {

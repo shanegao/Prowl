@@ -101,6 +101,11 @@ sequences:
 `--capture` in the CLI **requires OSC 133** on the target pane; without it you get
 `CAPTURE_UNSUPPORTED` (read the screen with `read --wait-stable` instead).
 
+Every pane's environment reports **`TERM_PROGRAM=prowl`** (with
+`TERM_PROGRAM_VERSION` set to the app version), so scripts and agents can detect
+they're running inside Prowl rather than standalone Ghostty. `TERM` itself stays
+`xterm-ghostty` — terminfo-based feature detection is unaffected.
+
 ## Command-finished behavior
 
 When a command finishes (via OSC 133), Prowl can:
