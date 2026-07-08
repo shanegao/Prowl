@@ -1,3 +1,4 @@
+import ComposableArchitecture
 import SwiftUI
 import YiTong
 
@@ -6,9 +7,19 @@ struct DiffWindowContentView: View {
   @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
   @AppStorage("diffViewStyle") private var diffStyleRaw = DiffStyle.split.rawValue
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Shared(.settingsFile) private var settingsFile
+  @Environment(\.colorScheme) private var colorScheme
 
   private var diffStyle: DiffStyle {
     DiffStyle(rawValue: diffStyleRaw) ?? .split
+  }
+
+  private var resolvedDiffAppearance: DiffAppearance {
+    switch settingsFile.global.appearanceMode {
+    case .system: colorScheme == .dark ? .dark : .light
+    case .light: .light
+    case .dark: .dark
+    }
   }
 
   private var selectedFileID: Binding<String?> {
@@ -62,6 +73,9 @@ struct DiffWindowContentView: View {
         .help("Diff Style")
       }
     }
+    .background {
+      WindowAppearanceSetter(colorScheme: settingsFile.global.appearanceMode.colorScheme)
+    }
   }
 
   private func toggleSidebar() {
@@ -101,6 +115,7 @@ struct DiffWindowContentView: View {
         DiffView(
           document: document,
           configuration: DiffConfiguration(
+            appearance: resolvedDiffAppearance,
             style: diffStyle,
             showsFileHeaders: false,
           ),

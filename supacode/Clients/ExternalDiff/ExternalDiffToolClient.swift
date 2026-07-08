@@ -19,10 +19,12 @@ extension ExternalDiffToolClient: DependencyKey {
 
     switch settings.tool {
     case .builtIn:
+      @Shared(.settingsFile) var settingsFile
       DiffWindowManager.shared.show(
         worktreeURL: worktree.workingDirectory,
         branchName: worktree.name,
-        resolvedKeybindings: resolvedKeybindings
+        resolvedKeybindings: resolvedKeybindings,
+        colorScheme: settingsFile.global.appearanceMode.colorScheme
       )
 
     case .hunk:

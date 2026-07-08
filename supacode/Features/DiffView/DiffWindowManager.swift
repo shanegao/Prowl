@@ -15,7 +15,8 @@ final class DiffWindowManager {
   func show(
     worktreeURL: URL,
     branchName: String,
-    resolvedKeybindings: ResolvedKeybindingMap = .appDefaults
+    resolvedKeybindings: ResolvedKeybindingMap = .appDefaults,
+    colorScheme: ColorScheme? = nil
   ) {
     state.load(worktreeURL: worktreeURL, branchName: branchName)
     skipNextFocusRefresh = true
@@ -24,11 +25,14 @@ final class DiffWindowManager {
         .environment(\.resolvedKeybindings, resolvedKeybindings)
     )
 
+    let appearance = NSAppearance.from(colorScheme)
+
     if let existingWindow = window {
       if let hostingController = existingWindow.contentViewController as? NSHostingController<AnyView> {
         hostingController.rootView = rootView
       }
       existingWindow.title = windowTitle(branchName: branchName)
+      existingWindow.appearance = appearance
       if existingWindow.isMiniaturized {
         existingWindow.deminiaturize(nil)
       }
@@ -47,6 +51,7 @@ final class DiffWindowManager {
     newWindow.toolbarStyle = .unified
     newWindow.toolbar = NSToolbar(identifier: "DiffToolbar")
     newWindow.isReleasedWhenClosed = false
+    newWindow.appearance = appearance
     newWindow.minSize = NSSize(width: 600, height: 400)
     let hasSavedFrame = UserDefaults.standard.string(forKey: "NSWindow Frame DiffWindow") != nil
     newWindow.setFrameAutosaveName("DiffWindow")
@@ -91,5 +96,16 @@ final class DiffWindowManager {
       return
     }
     state.refresh()
+  }
+}
+
+extension NSAppearance {
+  fileprivate static func from(_ colorScheme: ColorScheme?) -> NSAppearance? {
+    switch colorScheme {
+    case .none: nil
+    case .light: NSAppearance(named: .aqua)
+    case .dark: NSAppearance(named: .darkAqua)
+    @unknown default: nil
+    }
   }
 }
