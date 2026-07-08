@@ -158,7 +158,10 @@ final class WorktreeTerminalState {
   }
 
   var isSelected: () -> Bool = { false }
-  var onNotificationReceived: ((UUID, String, String) -> Void)?
+  /// `isViewed` is true when the notification's surface is the one the user is
+  /// actively looking at (selected worktree, focused pane, key + visible window),
+  /// so the reducer can suppress a redundant banner/sound for it.
+  var onNotificationReceived: ((_ surfaceId: UUID, _ title: String, _ body: String, _ isViewed: Bool) -> Void)?
   var onNotificationIndicatorChanged: (() -> Void)?
   var onTabCreated: (() -> Void)?
   var onTabClosed: (() -> Void)?

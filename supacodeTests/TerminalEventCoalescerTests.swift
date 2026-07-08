@@ -40,7 +40,8 @@ struct TerminalEventCoalescerTests {
       worktreeID: "w1",
       surfaceID: UUID(),
       title: "Build",
-      body: "done"
+      body: "done",
+      isViewed: false
     )
     let first = coalescer.shouldEmit(event)
     // Two identical notifications are two distinct user-facing events.

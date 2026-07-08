@@ -649,6 +649,18 @@ extension WorktreeTerminalState {
     return focusedSurfaceIdByTab[selectedTabId] == surfaceId
   }
 
+  /// Whether the user is actively looking at `surfaceId` right now: its worktree
+  /// is selected, it is the focused pane of the selected tab (`isFocusedSurface`
+  /// already implies both), and the app window is key and visible. Unknown window
+  /// state (`nil`) is treated as not-viewed so a notification is never silently
+  /// dropped. Canvas mode is also treated as not-viewed: the normal-mode window
+  /// observers are torn down there, so `lastWindowIsKey`/`lastWindowIsVisible`
+  /// freeze at their pre-canvas values and a backgrounded app would keep muting.
+  func isViewedSurface(_ surfaceId: UUID) -> Bool {
+    guard !isCanvasManaged else { return false }
+    return isSelected() && isFocusedSurface(surfaceId) && lastWindowIsKey == true && lastWindowIsVisible == true
+  }
+
   func updateRunningState(for tabId: TerminalTabID) {
     guard let tree = trees[tabId] else { return }
     let now = Date()

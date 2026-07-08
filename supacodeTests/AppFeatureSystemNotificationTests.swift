@@ -155,7 +155,8 @@ struct AppFeatureSystemNotificationTests {
           worktreeID: "/tmp/repo/wt-1",
           surfaceID: surfaceID,
           title: "Done",
-          body: "Build succeeded"
+          body: "Build succeeded",
+          isViewed: false
         )
       )
     )
@@ -166,6 +167,80 @@ struct AppFeatureSystemNotificationTests {
     #expect(sends.value.first?.body == "Build succeeded")
     #expect(sends.value.first?.worktreeID == "/tmp/repo/wt-1")
     #expect(sends.value.first?.surfaceID == surfaceID)
+  }
+
+  @Test(.dependencies) func notificationMutedForViewedSurfaceSkipsBannerSoundAndBounce() async {
+    var globalSettings = GlobalSettings.default
+    globalSettings.muteNotificationsForActiveSurface = true
+    globalSettings.systemNotificationsEnabled = true
+    globalSettings.notificationSound = .funk
+    globalSettings.dockBounceMode = .once
+    let sends = LockIsolated(0)
+    let plays = LockIsolated(0)
+    let bounces = LockIsolated(0)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        settings: SettingsFeature.State(settings: globalSettings)
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.systemNotificationClient.send = { _, _, _, _ in sends.withValue { $0 += 1 } }
+      $0.notificationSoundClient.play = { _ in plays.withValue { $0 += 1 } }
+      $0.dockClient.bounce = { _ in bounces.withValue { $0 += 1 } }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .terminalEvent(
+        .notificationReceived(
+          worktreeID: "/tmp/repo/wt-1",
+          surfaceID: UUID(),
+          title: "Done",
+          body: "Build succeeded",
+          isViewed: true
+        )
+      )
+    )
+    await store.finish()
+
+    // The user is already looking at the pane, so no attention-grabbing channel fires.
+    #expect(sends.value == 0)
+    #expect(plays.value == 0)
+    #expect(bounces.value == 0)
+  }
+
+  @Test(.dependencies) func notificationForViewedSurfaceStillNotifiesWhenMuteDisabled() async {
+    var globalSettings = GlobalSettings.default
+    globalSettings.muteNotificationsForActiveSurface = false
+    globalSettings.systemNotificationsEnabled = true
+    let sends = LockIsolated(0)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        settings: SettingsFeature.State(settings: globalSettings)
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.systemNotificationClient.send = { _, _, _, _ in sends.withValue { $0 += 1 } }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .terminalEvent(
+        .notificationReceived(
+          worktreeID: "/tmp/repo/wt-1",
+          surfaceID: UUID(),
+          title: "Done",
+          body: "Build succeeded",
+          isViewed: true
+        )
+      )
+    )
+    await store.finish()
+
+    // Mute is off, so a viewed surface still posts the banner.
+    #expect(sends.value == 1)
   }
 
   @Test(.dependencies) func notificationReceivedSkipsLocalSoundWhenSystemNotificationsEnabled() async {
@@ -191,7 +266,8 @@ struct AppFeatureSystemNotificationTests {
           worktreeID: "/tmp/repo/wt-1",
           surfaceID: UUID(),
           title: "Done",
-          body: "Build succeeded"
+          body: "Build succeeded",
+          isViewed: false
         )
       )
     )
@@ -228,7 +304,8 @@ struct AppFeatureSystemNotificationTests {
           worktreeID: "/tmp/repo/wt-1",
           surfaceID: UUID(),
           title: "Done",
-          body: "Build succeeded"
+          body: "Build succeeded",
+          isViewed: false
         )
       )
     )
@@ -267,7 +344,8 @@ struct AppFeatureSystemNotificationTests {
           worktreeID: "/tmp/repo/wt-1",
           surfaceID: UUID(),
           title: "Done",
-          body: "Build succeeded"
+          body: "Build succeeded",
+          isViewed: false
         )
       )
     )

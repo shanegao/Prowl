@@ -245,8 +245,16 @@ final class WorktreeTerminalManager {
     state.isSelected = { [weak self] in
       self?.selectedWorktreeID == worktree.id
     }
-    state.onNotificationReceived = { [weak self] surfaceID, title, body in
-      self?.emit(.notificationReceived(worktreeID: worktree.id, surfaceID: surfaceID, title: title, body: body))
+    state.onNotificationReceived = { [weak self] surfaceID, title, body, isViewed in
+      self?.emit(
+        .notificationReceived(
+          worktreeID: worktree.id,
+          surfaceID: surfaceID,
+          title: title,
+          body: body,
+          isViewed: isViewed
+        )
+      )
     }
     state.onNotificationIndicatorChanged = { [weak self] in
       self?.emitNotificationIndicatorCountIfNeeded()

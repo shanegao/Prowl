@@ -15,6 +15,7 @@ struct SettingsFeature {
     var inAppNotificationsEnabled: Bool
     var notificationSound: NotificationSound
     var systemNotificationsEnabled: Bool
+    var muteNotificationsForActiveSurface: Bool
     var moveNotifiedWorktreeToTop: Bool
     var commandFinishedNotificationEnabled: Bool
     var commandFinishedNotificationThreshold: Int
@@ -73,6 +74,7 @@ struct SettingsFeature {
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
       notificationSound = settings.notificationSound
       systemNotificationsEnabled = settings.systemNotificationsEnabled
+      muteNotificationsForActiveSurface = settings.muteNotificationsForActiveSurface
       moveNotifiedWorktreeToTop = settings.moveNotifiedWorktreeToTop
       commandFinishedNotificationEnabled = settings.commandFinishedNotificationEnabled
       commandFinishedNotificationThreshold = settings.commandFinishedNotificationThreshold
@@ -121,6 +123,7 @@ struct SettingsFeature {
         inAppNotificationsEnabled: inAppNotificationsEnabled,
         notificationSound: notificationSound,
         systemNotificationsEnabled: systemNotificationsEnabled,
+        muteNotificationsForActiveSurface: muteNotificationsForActiveSurface,
         moveNotifiedWorktreeToTop: moveNotifiedWorktreeToTop,
         commandFinishedNotificationEnabled: commandFinishedNotificationEnabled,
         commandFinishedNotificationThreshold: commandFinishedNotificationThreshold,
@@ -242,6 +245,7 @@ struct SettingsFeature {
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
         state.notificationSound = normalizedSettings.notificationSound
         state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
+        state.muteNotificationsForActiveSurface = normalizedSettings.muteNotificationsForActiveSurface
         state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
         state.commandFinishedNotificationEnabled = normalizedSettings.commandFinishedNotificationEnabled
         state.commandFinishedNotificationThreshold = normalizedSettings.commandFinishedNotificationThreshold
