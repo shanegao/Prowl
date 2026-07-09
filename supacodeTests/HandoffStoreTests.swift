@@ -145,6 +145,47 @@ struct HandoffStoreTests {
     #expect(current.contains(".prowl/handoff/sessions/"))
   }
 
+  @Test func saveWritesUniqueSessionContextExcerptsForSameTimestamp() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+    let sessionContext = HandoffStore.SessionContext(
+      agent: "codex",
+      paneID: "pane-123",
+      paneTitle: "codex",
+      source: "terminal-scrollback",
+      confidence: "fallback",
+      excerptText: "first excerpt"
+    )
+
+    let first = try store.save(
+      outgoingAgent: "codex",
+      sessionContext: sessionContext,
+      note: nil,
+      now: fixedDate
+    )
+    let second = try store.save(
+      outgoingAgent: "codex",
+      sessionContext: sessionContext,
+      note: nil,
+      now: fixedDate
+    )
+
+    let firstPath = try #require(first.sessionContext?.excerptPath)
+    let secondPath = try #require(second.sessionContext?.excerptPath)
+    #expect(firstPath != secondPath)
+    #expect(secondPath.hasSuffix("-2.md"))
+
+    let firstURL = store.handoffDirectory.appending(
+      path: firstPath.replacingOccurrences(of: "handoff/", with: "")
+    )
+    let secondURL = store.handoffDirectory.appending(
+      path: secondPath.replacingOccurrences(of: "handoff/", with: "")
+    )
+    #expect(FileManager.default.fileExists(atPath: firstURL.path(percentEncoded: false)))
+    #expect(FileManager.default.fileExists(atPath: secondURL.path(percentEncoded: false)))
+  }
+
   @Test func saveTwiceDoesNotDuplicateAutogenBlock() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
@@ -200,6 +241,29 @@ struct HandoffStoreTests {
     #expect(archivedRelative?.contains("codex-to-claude") == true)
     // current.md remains for the receiving agent.
     #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
+  }
+
+  @Test func archiveCurrentKeepsExistingSameTimestampArchives() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+
+    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
+    let first = try #require(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate))
+    let second = try #require(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate))
+
+    #expect(first != second)
+    #expect(first.hasSuffix(".md"))
+    #expect(second.hasSuffix("-2.md"))
+
+    let firstURL = store.handoffDirectory.appending(
+      path: first.replacingOccurrences(of: "handoff/", with: "")
+    )
+    let secondURL = store.handoffDirectory.appending(
+      path: second.replacingOccurrences(of: "handoff/", with: "")
+    )
+    #expect(FileManager.default.fileExists(atPath: firstURL.path(percentEncoded: false)))
+    #expect(FileManager.default.fileExists(atPath: secondURL.path(percentEncoded: false)))
   }
 
   @Test func readStatusReportsExistenceAndLastLog() throws {

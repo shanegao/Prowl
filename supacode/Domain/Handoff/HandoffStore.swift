@@ -206,13 +206,10 @@ nonisolated struct HandoffStore: Sendable {
     guard fileManager.fileExists(atPath: currentURL.path(percentEncoded: false)) else { return nil }
     try fileManager.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
 
-    let name = "\(Self.fileStamp(now))-\(Self.slug(from))-to-\(Self.slug(toAgent)).md"
-    let destination = archiveDirectory.appending(path: name)
-    if fileManager.fileExists(atPath: destination.path(percentEncoded: false)) {
-      try fileManager.removeItem(at: destination)
-    }
+    let stem = "\(Self.fileStamp(now))-\(Self.slug(from))-to-\(Self.slug(toAgent))"
+    let destination = Self.availableFileURL(in: archiveDirectory, stem: stem, fileExtension: "md")
     try fileManager.copyItem(at: currentURL, to: destination)
-    return "handoff/archive/\(name)"
+    return "handoff/archive/\(destination.lastPathComponent)"
   }
 
   // MARK: - Log
@@ -313,9 +310,9 @@ nonisolated struct HandoffStore: Sendable {
   private func writeSessionContext(_ context: SessionContext?, now: Date) throws -> HandoffSessionPayload? {
     guard let context else { return nil }
 
-    let fileName = "\(Self.fileStamp(now))-\(Self.slug(context.paneID)).md"
-    let destination = sessionDirectory.appending(path: fileName)
-    let relativePath = "handoff/sessions/\(fileName)"
+    let stem = "\(Self.fileStamp(now))-\(Self.slug(context.paneID))"
+    let destination = Self.availableFileURL(in: sessionDirectory, stem: stem, fileExtension: "md")
+    let relativePath = "handoff/sessions/\(destination.lastPathComponent)"
     let payload = HandoffSessionPayload(
       agent: context.agent,
       sessionID: context.sessionID,
@@ -455,6 +452,17 @@ nonisolated struct HandoffStore: Sendable {
       character.isLetter || character.isNumber ? character : "-"
     }
     return String(allowed)
+  }
+
+  private static func availableFileURL(in directory: URL, stem: String, fileExtension: String) -> URL {
+    let fileManager = FileManager.default
+    var candidate = directory.appending(path: "\(stem).\(fileExtension)")
+    var suffix = 2
+    while fileManager.fileExists(atPath: candidate.path(percentEncoded: false)) {
+      candidate = directory.appending(path: "\(stem)-\(suffix).\(fileExtension)")
+      suffix += 1
+    }
+    return candidate
   }
 
   static func parseShortstat(_ text: String) -> (insertions: Int, deletions: Int) {

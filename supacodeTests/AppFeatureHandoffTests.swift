@@ -122,6 +122,39 @@ struct AppFeatureHandoffTests {
     #expect(FileManager.default.fileExists(atPath: store2.currentURL.path(percentEncoded: false)))
   }
 
+  @Test(.dependencies) func handoffDelegateDoesNotLaunchWhenArtifactPreparationFails() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let repositories = makeWorkspaceState(root: root)
+    try FileManager.default.removeItem(at: root)
+    try "not a directory".write(to: root, atomically: true, encoding: .utf8)
+
+    let state = AppFeature.State(
+      repositories: repositories,
+      settings: SettingsFeature.State()
+    )
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.handoffToAgent("claude"))))
+    await store.receive(\.repositories.showToast) {
+      guard case .warning(let message) = $0.repositories.statusToast else {
+        Issue.record("Expected warning toast")
+        return
+      }
+      #expect(message.hasPrefix("Hand off failed:"))
+    }
+
+    #expect(sent.value.isEmpty)
+  }
+
   @Test(.dependencies) func agentDoneAutoSavesExistingHandoffArtifact() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }

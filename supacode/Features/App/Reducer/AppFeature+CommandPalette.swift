@@ -294,12 +294,20 @@ extension AppFeature {
     let kickoff = HandoffCommandHandler.kickoff(for: agent)
     let rootURL = worktree.workingDirectory
     let sessionContext = terminalClient.handoffSessionContext(worktree.id)
-    return .run { _ in
+    return .run { send in
       let store = HandoffStore(rootURL: rootURL)
       let now = Date()
-      _ = try? store.save(outgoingAgent: outgoing, sessionContext: sessionContext, note: nil, now: now)
-      _ = try? store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
-      try? store.appendLog("\(outgoing ?? "agent") → \(agent)  (command palette)", now: now)
+      do {
+        _ = try store.save(outgoingAgent: outgoing, sessionContext: sessionContext, note: nil, now: now)
+        _ = try store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
+        try store.appendLog("\(outgoing ?? "agent") → \(agent)  (command palette)", now: now)
+      } catch {
+        await MainActor.run {
+          appLogger.warning("[Handoff] command palette failed for \(rootURL.path(percentEncoded: false)): \(error)")
+        }
+        await send(.repositories(.showToast(.warning("Hand off failed: \(error.localizedDescription)"))))
+        return
+      }
       await terminalClient.send(
         .createTabWithInput(
           worktree,

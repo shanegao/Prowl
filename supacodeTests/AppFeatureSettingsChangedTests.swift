@@ -78,6 +78,7 @@ struct AppFeatureSettingsChangedTests {
     }
 
     await store.send(.terminalEvent(.agentEntryChanged(entry))) {
+      $0.handoffAutoSaveDisplayStates[entry.id] = .working
       $0.repositories.activeAgents.$isPanelHidden.withLock { $0 = false }
     }
     await store.receive(\.repositories.activeAgents.agentEntryChanged) {
@@ -96,7 +97,9 @@ struct AppFeatureSettingsChangedTests {
       AppFeature()
     }
 
-    await store.send(.terminalEvent(.agentEntryChanged(entry)))
+    await store.send(.terminalEvent(.agentEntryChanged(entry))) {
+      $0.handoffAutoSaveDisplayStates[entry.id] = .working
+    }
     await store.receive(\.repositories.activeAgents.agentEntryChanged) {
       $0.repositories.activeAgents.entries = [entry]
     }
