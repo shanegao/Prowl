@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026.7.10](https://github.com/onevcat/Prowl/releases/tag/v2026.7.10)
+
+This release focuses on notification control, PR status reliability, and a few editor and terminal integration additions.
+
+### New
+- Added a notification sound picker in Settings → Notifications: choose from system sounds, "Prowl Classic", or turn sounds off entirely. Selecting a sound plays a quick preview.
+- Added a "Mute notifications for the active pane" setting (on by default): when a notification comes from the pane you're already viewing, the banner, sound, and dock bounce are skipped since you're already looking at it. Turn it off in Settings → Notifications if you want notifications even while viewing the pane.
+- Terminal sessions now report `TERM_PROGRAM=prowl` (with `TERM_PROGRAM_VERSION`), so shell scripts and coding agents can detect they're running inside Prowl.
+- Added Open actions for Zed Preview, IntelliJ IDEA EAP, and Nova in the worktree "Open" menu.
+
+### Fixed
+- Fixed PR status badges flickering to "Blocked" or briefly disappearing during refresh, including when GitHub temporarily reports an unresolved mergeable state.
+- Fixed the Diff window (⌘⇧Y) following the system appearance instead of Prowl's own Dark/Light/System setting.
+- Fixed symlinked config files (e.g. `settings.json` linked into a dotfiles repo) being replaced with a regular file on save, breaking the symlink.
+- Fixed spurious "not a git repository" errors when your login shell isn't zsh or bash (nushell, pwsh, csh, sh/dash/ksh), which could also make Prowl fail to detect `gh`.
+
 ## [2026.7.4](https://github.com/onevcat/Prowl/releases/tag/v2026.7.4)
 
 ### New
