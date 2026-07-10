@@ -16,8 +16,18 @@ public enum HandoffAgentSupport {
     "qwen",
   ]
 
+  public static let launchableAgents = ["claude", "codex"]
+
   public static var supportedAgentsDescription: String {
     supportedAgents.joined(separator: ", ")
+  }
+
+  public static var launchableAgentsDescription: String {
+    launchableAgents.joined(separator: ", ")
+  }
+
+  public static func canLaunch(_ agent: String) -> Bool {
+    launchableAgents.contains(agent)
   }
 
   public static func normalize(_ agent: String) -> String? {

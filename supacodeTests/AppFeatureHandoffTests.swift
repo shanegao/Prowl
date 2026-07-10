@@ -143,6 +143,9 @@ struct AppFeatureHandoffTests {
     // The handoff artifact was materialized in the workspace root.
     let store2 = HandoffStore(rootURL: root)
     #expect(FileManager.default.fileExists(atPath: store2.currentURL.path(percentEncoded: false)))
+    let log = try String(contentsOf: store2.logURL, encoding: .utf8)
+    #expect(log.contains("launch=requested"))
+    #expect(!log.contains("agent → claude  (command palette)"))
   }
 
   @Test(.dependencies) func handoffDelegateDoesNotLaunchWhenArtifactPreparationFails() async throws {

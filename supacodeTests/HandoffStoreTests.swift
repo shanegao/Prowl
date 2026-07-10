@@ -1,3 +1,4 @@
+import ComposableArchitecture
 import Foundation
 import Testing
 
@@ -268,6 +269,35 @@ struct HandoffStoreTests {
 
     let updated = try String(contentsOf: store.currentURL, encoding: .utf8)
     #expect(updated.contains("Finish the checkout flow."))
+  }
+
+  @Test func saveMergesProseChangedBeforeCurrentArtifactWrite() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let didEdit = LockIsolated(false)
+    let store = HandoffStore(
+      rootURL: root,
+      beforeCurrentArtifactConfirmation: { currentURL in
+        guard
+          didEdit.withValue({ edited in
+            defer { edited = true }
+            return !edited
+          })
+        else { return }
+        var content = try String(contentsOf: currentURL, encoding: .utf8)
+        content = content.replacing(
+          "<!-- one-paragraph task goal; stable across the whole run -->",
+          with: "Preserve this concurrent objective."
+        )
+        try content.write(to: currentURL, atomically: true, encoding: .utf8)
+      }
+    )
+
+    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
+
+    let updated = try String(contentsOf: store.currentURL, encoding: .utf8)
+    #expect(updated.contains("Preserve this concurrent objective."))
+    #expect(updated.contains("Outgoing agent (detected): codex"))
   }
 
   // MARK: - log + archive

@@ -22,12 +22,18 @@ import Foundation
 /// `nonisolated` annotation is required (mirrors `ProjectWorkspace`).
 nonisolated struct HandoffStore: Sendable {
   private static let logLock = NSLock()
+  private static let currentArtifactLock = NSLock()
 
   /// The runnable target's root directory: a workspace root or a worktree root.
   let rootURL: URL
+  private let beforeCurrentArtifactConfirmation: (@Sendable (URL) throws -> Void)?
 
-  init(rootURL: URL) {
+  init(
+    rootURL: URL,
+    beforeCurrentArtifactConfirmation: (@Sendable (URL) throws -> Void)? = nil
+  ) {
     self.rootURL = rootURL.standardizedFileURL
+    self.beforeCurrentArtifactConfirmation = beforeCurrentArtifactConfirmation
   }
 
   // MARK: - Paths
@@ -183,9 +189,21 @@ nonisolated struct HandoffStore: Sendable {
       now: now
     )
 
-    let existing = (try? String(contentsOf: currentURL, encoding: .utf8)) ?? Self.template
-    let merged = Self.replaceAutogen(in: existing, with: appendix)
-    try merged.write(to: currentURL, atomically: true, encoding: .utf8)
+    try Self.currentArtifactLock.withLock {
+      var existing = (try? String(contentsOf: currentURL, encoding: .utf8)) ?? Self.template
+      for _ in 0..<8 {
+        let merged = Self.replaceAutogen(in: existing, with: appendix)
+        try beforeCurrentArtifactConfirmation?(currentURL)
+        let confirmed = (try? String(contentsOf: currentURL, encoding: .utf8)) ?? Self.template
+        guard confirmed == existing else {
+          existing = confirmed
+          continue
+        }
+        try merged.write(to: currentURL, atomically: true, encoding: .utf8)
+        return
+      }
+      throw CurrentArtifactWriteError.changedRepeatedly
+    }
 
     let total = repos.reduce(0) { $0 + $1.changedFileCount }
     let logLine = "save  agent=\(outgoingAgent ?? "unknown")  repos=\(repos.count)  changed=\(total)"
@@ -198,6 +216,14 @@ nonisolated struct HandoffStore: Sendable {
       repos: repos,
       changedFiles: changedFiles
     )
+  }
+
+  private enum CurrentArtifactWriteError: LocalizedError {
+    case changedRepeatedly
+
+    var errorDescription: String? {
+      "The handoff artifact kept changing while Prowl refreshed its generated context."
+    }
   }
 
   // MARK: - Archive

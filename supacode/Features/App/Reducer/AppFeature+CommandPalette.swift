@@ -309,7 +309,10 @@ extension AppFeature {
             now: now
           )
           _ = try store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
-          try store.appendLog("\(outgoing ?? "agent") → \(agent)  (command palette)", now: now)
+          try store.appendLog(
+            "handoff prepared  from=\(outgoing ?? "agent")  to=\(agent)  launch=requested  source=command-palette",
+            now: now
+          )
         }.value
       } catch {
         await MainActor.run {

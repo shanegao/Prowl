@@ -76,7 +76,7 @@ nonisolated struct HandoffTranscriptResolver {
       sessionID: latest.sessionID,
       transcriptPath: latest.url.path(percentEncoded: false),
       source: "claude-project-jsonl",
-      confidence: "high"
+      confidence: "medium"
     )
   }
 
@@ -100,7 +100,7 @@ nonisolated struct HandoffTranscriptResolver {
       sessionID: latest.sessionID,
       transcriptPath: latest.url.path(percentEncoded: false),
       source: "codex-rollout-jsonl",
-      confidence: "high"
+      confidence: "medium"
     )
   }
 
@@ -151,14 +151,15 @@ nonisolated struct HandoffTranscriptResolver {
         )
       }
       .sorted { lhs, rhs in lhs.modifiedAt > rhs.modifiedAt }
-    for candidate in candidates {
-      guard let metadata = sessionIDReader(candidate.url) else { continue }
+    let matches = candidates.compactMap { candidate -> (url: URL, sessionID: String)? in
+      guard let metadata = sessionIDReader(candidate.url) else { return nil }
       if let rootPath, metadata.cwd.map(Self.normalizedPath(_:)) != rootPath {
-        continue
+        return nil
       }
       return (url: candidate.url, sessionID: metadata.sessionID)
     }
-    return nil
+    guard matches.count == 1 else { return nil }
+    return matches[0]
   }
 
   private struct TranscriptCandidate {

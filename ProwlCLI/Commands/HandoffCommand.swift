@@ -50,7 +50,9 @@ struct HandoffToCommand: ParsableCommand {
     abstract: "Save + archive the handoff, then launch the receiving agent in a new tab."
   )
 
-  @Argument(help: "The agent to hand off to. Supported: \(HandoffAgentSupport.supportedAgentsDescription).")
+  @Argument(
+    help: "The agent to hand off to. Launch supported: \(HandoffAgentSupport.launchableAgentsDescription); use --no-launch for other detected agents."
+  )
   var agent: String
 
   @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
@@ -72,6 +74,12 @@ struct HandoffToCommand: ParsableCommand {
         throw ExitError(
           code: CLIErrorCode.invalidArgument,
           message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
+        )
+      }
+      if !noLaunch, !HandoffAgentSupport.canLaunch(normalizedAgent) {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
         )
       }
       let envelope = CommandEnvelope(

@@ -24,7 +24,7 @@ struct HandoffTranscriptResolverTests {
     #expect(name == "-Users-mikoto--prowl-repos-Prowl-feature-s-branch")
   }
 
-  @Test func resolvesLatestClaudeTranscriptForProjectDirectory() throws {
+  @Test func doesNotResolveAmbiguousClaudeTranscriptForProjectDirectory() throws {
     let home = try makeTempRoot()
     defer { remove(home) }
     let rootURL = URL(fileURLWithPath: "/Users/mikoto/Documents/Repos/github/Prowl", isDirectory: true)
@@ -50,11 +50,7 @@ struct HandoffTranscriptResolverTests {
 
     let resolved = HandoffTranscriptResolver(homeDirectory: home).resolve(agent: "claude", rootURL: rootURL)
 
-    #expect(resolved?.sessionID == "new-session")
-    #expect(resolved?.source == "claude-project-jsonl")
-    #expect(resolved?.confidence == "high")
-    #expect(resolved?.transcriptPath.hasSuffix("/latest.jsonl") == true)
-    #expect(FileManager.default.fileExists(atPath: resolved?.transcriptPath ?? ""))
+    #expect(resolved == nil)
   }
 
   @Test func resolvesLatestCodexTranscriptMatchingCWD() throws {
@@ -82,9 +78,31 @@ struct HandoffTranscriptResolverTests {
 
     #expect(resolved?.sessionID == "matched")
     #expect(resolved?.source == "codex-rollout-jsonl")
-    #expect(resolved?.confidence == "high")
+    #expect(resolved?.confidence == "medium")
     #expect(resolved?.transcriptPath.hasSuffix("/rollout-matched.jsonl") == true)
     #expect(FileManager.default.fileExists(atPath: resolved?.transcriptPath ?? ""))
+  }
+
+  @Test func codexResolverDoesNotGuessBetweenSessionsWithTheSameCWD() throws {
+    let home = try makeTempRoot()
+    defer { remove(home) }
+    let rootURL = home.appending(path: "Project", directoryHint: .isDirectory)
+    let sessions = home.appending(path: ".codex/sessions/2026/06/17", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+    let rootPath = rootURL.path(percentEncoded: false)
+    for sessionID in ["pane-a", "pane-b"] {
+      try """
+      {"type":"session_meta","payload":{"id":"\(sessionID)","cwd":"\(rootPath)"}}
+      """.write(
+        to: sessions.appending(path: "\(sessionID).jsonl"),
+        atomically: true,
+        encoding: .utf8
+      )
+    }
+
+    let resolved = HandoffTranscriptResolver(homeDirectory: home).resolve(agent: "codex", rootURL: rootURL)
+
+    #expect(resolved == nil)
   }
 
   @Test func codexResolverDoesNotMatchDifferentCWD() throws {

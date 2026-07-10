@@ -84,10 +84,10 @@ prowl handoff status     [target]
 - **`save`** refreshes the auto appendix from live git state and logs a line.
 - **`to <agent>`** does `save`, archives the current artifact, then launches the
   receiving agent in a **new tab** whose kickoff prompt points it at
-  `.prowl/handoff/current.md`. `--no-launch` archives + saves only. Accepted
-  tokens follow Prowl's detected-agent list: `pi`, `claude`, `codex`, `gemini`,
-  `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`,
-  `qwen`.
+  `.prowl/handoff/current.md`. Interactive launch is verified for `claude` and
+  `codex`. `--no-launch` archives + saves only and accepts the full detected-agent
+  token list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`,
+  `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`.
 - **`status`** reports the artifact path, whether it exists, the detected current
   agent, and the last log line.
 
@@ -115,6 +115,8 @@ a workspace.
   git state (`status` / `diff --stat`).
 - Auto-save uses the same read-only `save` path and only updates targets with an
   existing `.prowl/handoff/current.md`.
+- Before replacing the generated block, save confirms that `current.md` has not
+  changed and retries the merge when an agent or editor updated the prose.
 - `to` only **adds** a tab; it never closes the outgoing agent's session, so you
   can still read or roll back from it.
 - It always saves + archives **before** launching, so a fresh artifact exists even

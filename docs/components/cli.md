@@ -239,9 +239,10 @@ prowl handoff status     [target]
   `.prowl/handoff/archive/<ts>-<from>-to-<to>.md`, then launch the receiving
   agent in a **new tab** whose kickoff prompt points it at
   `.prowl/handoff/current.md`. Returns the launched `pane`. `--no-launch`
-  archives + saves only (you take over manually). Accepted tokens match Prowl's
-  detected-agent list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`,
-  `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`.
+  archives + saves only (you take over manually). Interactive launch is verified
+  for `claude` and `codex`; `--no-launch` accepts the full detected-agent list:
+  `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`, `opencode`,
+  `copilot`, `kimi`, `droid`, `amp`, `qwen`.
 - **`status`** — report the artifact path, whether it exists, the agent
   currently detected in the target, and the last handoff-log line.
 
@@ -255,7 +256,9 @@ The outgoing agent is whatever Prowl detects in the target's pane (see
 `artifact_path`, `outgoing_agent`, `to_agent`, `repos`, `changed_file_count`,
 `archived_path`, `session_context`, and `launched_pane`. `session_context` includes
 the generated excerpt path plus native `session_id` / `transcript_path` when
-Prowl can resolve Claude Code or Codex JSONL metadata. Full feature guide:
+Prowl can unambiguously resolve Claude Code or Codex JSONL metadata. When more
+than one native session matches the same target, Prowl keeps the terminal excerpt
+and omits the ambiguous native transcript. Full feature guide:
 [handoff](handoff.md).
 
 The generated `.prowl/handoff/` directory contains its own `.gitignore`, so its

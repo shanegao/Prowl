@@ -28,7 +28,7 @@ final class HandoffCommandHandler: CommandHandler {
   typealias LaunchProvider = @MainActor (HandoffResolvedTarget, String) -> HandoffLaunchedPane?
 
   /// Agents this command can launch (it injects an agent-specific kickoff command).
-  static let supportedAgents = HandoffAgentSupport.supportedAgents
+  static let supportedAgents = HandoffAgentSupport.launchableAgents
 
   private let resolveProvider: ResolveProvider
   private let launchProvider: LaunchProvider
@@ -56,7 +56,13 @@ final class HandoffCommandHandler: CommandHandler {
           message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
         )
       }
-      _ = toAgent
+      if input.launch, !HandoffAgentSupport.canLaunch(toAgent) {
+        let launchable = HandoffAgentSupport.launchableAgentsDescription
+        return errorResponse(
+          code: CLIErrorCode.invalidArgument,
+          message: "handoff can only launch: \(launchable). Use --no-launch for other agents."
+        )
+      }
     }
 
     let target: HandoffResolvedTarget

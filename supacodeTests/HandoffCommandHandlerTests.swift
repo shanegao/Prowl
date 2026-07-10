@@ -151,6 +151,19 @@ struct HandoffCommandHandlerTests {
     #expect(payload.toAgent == "gemini")
   }
 
+  @Test func toRejectsLaunchForAgentWithoutVerifiedLauncher() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let handler = makeHandler(root: root, outgoingAgent: "codex")
+
+    let response = await handler.handle(
+      envelope: envelope(HandoffInput(action: .toAgent, toAgent: "gemini"))
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.invalidArgument)
+  }
+
   @Test func toRejectsUnknownAgent() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
