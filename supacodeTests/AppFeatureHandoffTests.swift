@@ -226,9 +226,9 @@ struct AppFeatureHandoffTests {
     await store.send(.commandPalette(.delegate(.handoffToAgent("codex"))))
     await store.finish()
 
-    let current = try String(contentsOf: HandoffStore(rootURL: root).currentURL, encoding: .utf8)
-    #expect(current.contains("Outgoing agent (detected): claude"))
-    #expect(!current.contains("Outgoing agent (detected): codex"))
+    let context = try String(contentsOf: HandoffStore(rootURL: root).contextURL, encoding: .utf8)
+    #expect(context.contains("Outgoing agent (detected): claude"))
+    #expect(!context.contains("Outgoing agent (detected): codex"))
   }
 
   @Test(.dependencies) func agentDoneAutoSavesExistingHandoffArtifact() async throws {
@@ -287,9 +287,9 @@ struct AppFeatureHandoffTests {
     #expect(store.state.handoffAutoSaveLastSavedAt[surfaceID] == Date(timeIntervalSince1970: 1_760_000_000))
     await store.finish()
 
-    let current = try String(contentsOf: handoffStore.currentURL, encoding: .utf8)
-    #expect(current.contains("Session ID: session-1"))
-    #expect(current.contains(".prowl/handoff/sessions/"))
+    let context = try String(contentsOf: handoffStore.contextURL, encoding: .utf8)
+    #expect(context.contains("Session ID: session-1"))
+    #expect(context.contains(".prowl/handoff/sessions/"))
     let sessionFiles = try FileManager.default.contentsOfDirectory(
       at: handoffStore.sessionDirectory,
       includingPropertiesForKeys: nil
@@ -379,8 +379,8 @@ struct AppFeatureHandoffTests {
     await store.send(.terminalEvent(.agentEntryChanged(done)))
     await store.finish()
 
-    let current = try String(contentsOf: worktreeStore.currentURL, encoding: .utf8)
-    #expect(current.contains("Outgoing agent (detected): codex"))
+    let context = try String(contentsOf: worktreeStore.contextURL, encoding: .utf8)
+    #expect(context.contains("Outgoing agent (detected): codex"))
     #expect(HandoffStore(rootURL: repositoryRoot).hasCurrentArtifact == false)
   }
 

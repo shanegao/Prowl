@@ -224,21 +224,20 @@ launch the receiving agent. Centred on [workspaces](workspaces.md), but works fo
 any runnable target. Three subcommands:
 
 ```bash
-prowl handoff save       [target] [--note "…"]              # refresh appendix + session excerpt
+prowl handoff save       [target] [--note "…"]              # refresh context + session excerpt
 prowl handoff to <agent> [target] [--note "…"] [--no-launch]
 prowl handoff status     [target]
 ```
 
-- **`save`** — refresh the `## Context Appendix (auto)` block in
-  `.prowl/handoff/current.md` from live git state (per-repo branch + change
-  counts, changed-file list, detected outgoing agent, and captured session
-  excerpt) and append a line to `.prowl/handoff/log.md`. It only rewrites the
-  auto block between the `PROWL AUTOGEN` markers; the agent-authored prose
-  sections are left untouched. Seeds `current.md` from a template on first run.
+- **`save`** — refresh `.prowl/handoff/context.md` from live git state (per-repo
+  branch + change counts, changed-file list, detected outgoing agent, and
+  captured session excerpt) and append a line to `.prowl/handoff/log.md`.
+  `current.md` contains agent-authored prose and is seeded from a template on the
+  first run; later saves never rewrite it.
 - **`to <agent>`** — `save`, then archive the current artifact to
   `.prowl/handoff/archive/<ts>-<from>-to-<to>.md`, then launch the receiving
   agent in a **new tab** whose kickoff prompt points it at
-  `.prowl/handoff/current.md`. Returns the launched `pane`. `--no-launch`
+  `.prowl/handoff/current.md` and generated `context.md`. Returns the launched `pane`. `--no-launch`
   archives + saves only (you take over manually). Interactive launch is verified
   for `claude` and `codex`; `--no-launch` accepts the full detected-agent list:
   `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`, `opencode`,

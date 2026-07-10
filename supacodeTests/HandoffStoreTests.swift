@@ -1,4 +1,3 @@
-import ComposableArchitecture
 import Foundation
 import Testing
 
@@ -42,52 +41,6 @@ struct HandoffStoreTests {
   }
 
   private let fixedDate = Date(timeIntervalSince1970: 1_760_000_000)
-
-  // MARK: - replaceAutogen (pure)
-
-  @Test func replaceAutogenSwapsBlockAndKeepsProse() {
-    let original = """
-      # Handoff
-
-      ## Objective
-      Ship the login redesign.
-
-      \(HandoffStore.beginMarker)
-      old appendix
-      \(HandoffStore.endMarker)
-      """
-    let block = "\(HandoffStore.beginMarker)\nNEW APPENDIX\n\(HandoffStore.endMarker)"
-
-    let result = HandoffStore.replaceAutogen(in: original, with: block)
-
-    #expect(result.contains("Ship the login redesign."))
-    #expect(result.contains("NEW APPENDIX"))
-    #expect(!result.contains("old appendix"))
-    // Exactly one AUTOGEN block survives.
-    #expect(result.components(separatedBy: HandoffStore.beginMarker).count - 1 == 1)
-  }
-
-  @Test func replaceAutogenAppendsWhenNoMarkers() {
-    let original = "# Handoff\n\n## Objective\nDo the thing.\n"
-    let block = "\(HandoffStore.beginMarker)\nappendix\n\(HandoffStore.endMarker)"
-
-    let result = HandoffStore.replaceAutogen(in: original, with: block)
-
-    #expect(result.contains("Do the thing."))
-    #expect(result.contains(HandoffStore.beginMarker))
-    #expect(result.contains("appendix"))
-  }
-
-  @Test func replaceAutogenToleratesMissingEndMarker() {
-    let original = "intro\n\(HandoffStore.beginMarker)\ndangling"
-    let block = "\(HandoffStore.beginMarker)\nfresh\n\(HandoffStore.endMarker)"
-
-    let result = HandoffStore.replaceAutogen(in: original, with: block)
-
-    #expect(result.contains("intro"))
-    #expect(result.contains("fresh"))
-    #expect(!result.contains("dangling"))
-  }
 
   // MARK: - parseShortstat (pure)
 
@@ -136,8 +89,8 @@ struct HandoffStoreTests {
     let result = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
 
     #expect(result.changedFiles.contains { $0.contains("交接记录.md") })
-    let current = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(current.contains("交接记录.md"))
+    let context = try String(contentsOf: store.contextURL, encoding: .utf8)
+    #expect(context.contains("交接记录.md"))
   }
 
   @Test func saveSeedsArtifactWithAppendixForNonGitRoot() throws {
@@ -148,10 +101,11 @@ struct HandoffStoreTests {
     let result = try store.save(outgoingAgent: "codex", note: "wip", now: fixedDate)
 
     #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
-    let content = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(content.contains("## Objective"))  // template prose preserved
-    #expect(content.contains("Outgoing agent (detected): codex"))
-    #expect(content.contains("(not a git repo)"))
+    let current = try String(contentsOf: store.currentURL, encoding: .utf8)
+    #expect(current.contains("## Objective"))
+    let context = try String(contentsOf: store.contextURL, encoding: .utf8)
+    #expect(context.contains("Outgoing agent (detected): codex"))
+    #expect(context.contains("(not a git repo)"))
     #expect(result.outgoingAgent == "codex")
     // A non-git root contributes no git repos summary count.
     #expect(result.totalChangedFiles == 0)
@@ -189,10 +143,10 @@ struct HandoffStoreTests {
     #expect(excerpt.contains("Native transcript: /tmp/codex.jsonl"))
     #expect(excerpt.contains("Implemented handoff session context."))
 
-    let current = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(current.contains("Session Context:"))
-    #expect(current.contains("Session ID: codex-session"))
-    #expect(current.contains(".prowl/handoff/sessions/"))
+    let context = try String(contentsOf: store.contextURL, encoding: .utf8)
+    #expect(context.contains("Session Context:"))
+    #expect(context.contains("Session ID: codex-session"))
+    #expect(context.contains(".prowl/handoff/sessions/"))
   }
 
   @Test func saveWritesUniqueSessionContextExcerptsForSameTimestamp() throws {
@@ -236,7 +190,7 @@ struct HandoffStoreTests {
     #expect(FileManager.default.fileExists(atPath: secondURL.path(percentEncoded: false)))
   }
 
-  @Test func saveTwiceDoesNotDuplicateAutogenBlock() throws {
+  @Test func saveTwiceReplacesGeneratedContext() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
@@ -244,9 +198,7 @@ struct HandoffStoreTests {
     _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
     _ = try store.save(outgoingAgent: "claude", note: nil, now: fixedDate)
 
-    let content = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(content.components(separatedBy: HandoffStore.beginMarker).count - 1 == 1)
-    // Latest agent wins in the appendix.
+    let content = try String(contentsOf: store.contextURL, encoding: .utf8)
     #expect(content.contains("Outgoing agent (detected): claude"))
     #expect(!content.contains("Outgoing agent (detected): codex"))
   }
@@ -268,36 +220,25 @@ struct HandoffStoreTests {
     _ = try store.save(outgoingAgent: "claude", note: nil, now: fixedDate)
 
     let updated = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(updated.contains("Finish the checkout flow."))
+    #expect(updated == content)
+    let context = try String(contentsOf: store.contextURL, encoding: .utf8)
+    #expect(context.contains("Outgoing agent (detected): claude"))
   }
 
-  @Test func saveMergesProseChangedBeforeCurrentArtifactWrite() throws {
+  @Test func saveNeverRewritesCurrentArtifactAfterScaffold() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
-    let didEdit = LockIsolated(false)
-    let store = HandoffStore(
-      rootURL: root,
-      beforeCurrentArtifactConfirmation: { currentURL in
-        guard
-          didEdit.withValue({ edited in
-            defer { edited = true }
-            return !edited
-          })
-        else { return }
-        var content = try String(contentsOf: currentURL, encoding: .utf8)
-        content = content.replacing(
-          "<!-- one-paragraph task goal; stable across the whole run -->",
-          with: "Preserve this concurrent objective."
-        )
-        try content.write(to: currentURL, atomically: true, encoding: .utf8)
-      }
-    )
+    let store = HandoffStore(rootURL: root)
+    try store.ensureScaffold()
+    let prose = "# Handoff\n\n## Objective\nPreserve this concurrent objective.\n"
+    try prose.write(to: store.currentURL, atomically: true, encoding: .utf8)
 
     _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
 
     let updated = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(updated.contains("Preserve this concurrent objective."))
-    #expect(updated.contains("Outgoing agent (detected): codex"))
+    #expect(updated == prose)
+    let context = try String(contentsOf: store.contextURL, encoding: .utf8)
+    #expect(context.contains("Outgoing agent (detected): codex"))
   }
 
   // MARK: - log + archive
@@ -318,6 +259,12 @@ struct HandoffStoreTests {
     #expect(archivedRelative != nil)
     #expect(archivedRelative?.hasPrefix("handoff/archive/") == true)
     #expect(archivedRelative?.contains("codex-to-claude") == true)
+    let archiveURL = store.handoffDirectory.appending(
+      path: try #require(archivedRelative).replacing("handoff/", with: "")
+    )
+    let archive = try String(contentsOf: archiveURL, encoding: .utf8)
+    #expect(archive.contains("## Objective"))
+    #expect(archive.contains("# Handoff Context (generated)"))
     // current.md remains for the receiving agent.
     #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
   }

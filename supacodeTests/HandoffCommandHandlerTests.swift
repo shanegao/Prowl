@@ -77,7 +77,7 @@ struct HandoffCommandHandlerTests {
 
     let store = HandoffStore(rootURL: root)
     #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
-    let content = try String(contentsOf: store.currentURL, encoding: .utf8)
+    let content = try String(contentsOf: store.contextURL, encoding: .utf8)
     #expect(content.contains("Session Context:"))
     #expect(content.contains(".prowl/handoff/sessions/"))
   }

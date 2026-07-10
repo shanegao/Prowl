@@ -228,9 +228,9 @@ final class HandoffCommandHandler: CommandHandler {
 
   nonisolated static func kickoff(for agent: String) -> String {
     let instruction =
-      "Take over this Prowl workspace task. Read .prowl/handoff/current.md (the full handoff) "
-      + "and .prowl/workspace.json (repo layout, if present), then continue from Next Steps. "
-      + "If current.md lists a Session Context excerpt, read that file before changing code. "
+      "Take over this Prowl workspace task. Read .prowl/handoff/current.md (agent notes), "
+      + ".prowl/handoff/context.md (generated state), and .prowl/workspace.json (repo layout, if present), "
+      + "then continue from Next Steps. If context.md lists a Session Context excerpt, read it before changing code. "
       + "Ask before any commit/push or destructive git."
     return "\(agent) \"\(instruction)\""
   }

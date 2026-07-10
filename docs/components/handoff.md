@@ -26,7 +26,8 @@ Everything lives under the target's `.prowl/handoff/` directory:
 ```text
 <root>/.prowl/handoff/
   .gitignore            self-ignore all local handoff state
-  current.md            active handoff artifact (the cross-agent contract)
+  current.md            agent-authored handoff artifact (the cross-agent contract)
+  context.md            Prowl-generated repository and session state
   log.md                append-only handoff history
   archive/<ts>-<from>-to-<to>.md
   sessions/<ts>-<pane>.md
@@ -36,16 +37,16 @@ Prowl creates `.prowl/handoff/.gitignore` with `*`, so the entire directory is
 self-ignoring when the target is a git repository or worktree. No edit to the
 repository's root `.gitignore` is required.
 
-`current.md` has two parts:
+`current.md` contains only agent-authored prose: `Objective`, `Current State`,
+`What Has Been Done`, `Open Questions`, `Risks`, `Next Steps`, and
+`Suggested Prompt For Next Agent`. The outgoing agent maintains these sections;
+Prowl creates the template but never rewrites this file during a save.
 
-- **Agent-authored prose** — `Objective`, `Current State`, `What Has Been Done`,
-  `Open Questions`, `Risks`, `Next Steps`, `Suggested Prompt For Next Agent`. The
-  outgoing agent maintains these; they carry intent and decisions.
-- **A Prowl-generated `## Context Appendix (auto)`** between
-  `<!-- BEGIN PROWL AUTOGEN … -->` / `<!-- END PROWL AUTOGEN -->` markers — the
-  detected outgoing agent, a pointer to the captured session excerpt, each
-  repo's branch and change counts, and the changed files. Prowl regenerates
-  *only* this block on every `save`; it never touches the prose.
+`context.md` contains the detected outgoing agent, a pointer to the captured
+session excerpt, each repo's branch and change counts, and the changed files.
+Prowl atomically replaces this generated file on every `save`. Separating it from
+`current.md` prevents background saves from overwriting prose being edited by an
+agent or editor. Archives combine a read-only snapshot of both files.
 
 `sessions/<ts>-<pane>.md` is a normalized excerpt from the outgoing pane. Today it
 captures the current terminal screen/scrollback and records the detected agent,
@@ -53,8 +54,9 @@ session id, pane, source, confidence, and native transcript path when one is
 available. Claude Code sessions are resolved from
 `~/.claude/projects/<encoded-cwd>/*.jsonl`; Codex sessions are resolved from
 `~/.codex/sessions/**/rollout-*.jsonl` by matching the rollout `cwd`. When native
-metadata is found, `confidence` is `high`; otherwise Prowl still writes the
-terminal excerpt with fallback confidence.
+exactly one native session matches, `confidence` is `medium`; ambiguous native
+matches are omitted. Prowl still writes the terminal excerpt with fallback
+confidence.
 
 ## The protocol
 
@@ -64,7 +66,7 @@ reads it):
 
 ```markdown
 ## Handoff protocol (this is a Prowl workspace)
-- On start: read `.prowl/handoff/current.md` and `.prowl/workspace.json`. Continue from "Next Steps".
+- On start: read `.prowl/handoff/current.md`, `.prowl/handoff/context.md`, and `.prowl/workspace.json`. Continue from "Next Steps".
 - Before you stop or hand off: update `.prowl/handoff/current.md` so another agent can resume cold.
 - To hand the task to another agent, run:  `prowl handoff to <agent>`.
 - Never commit/push or run destructive git unless asked. Do not put secrets in the handoff file.
@@ -76,7 +78,7 @@ step — the receiving agent then opens in a new tab pointed at the artifact.
 ## The `prowl handoff` command
 
 ```bash
-prowl handoff save       [target] [--note "…"]              # refresh appendix + session excerpt + log
+prowl handoff save       [target] [--note "…"]              # refresh context + session excerpt + log
 prowl handoff to <agent> [target] [--note "…"] [--no-launch]
 prowl handoff status     [target]
 ```
@@ -84,7 +86,7 @@ prowl handoff status     [target]
 - **`save`** refreshes the auto appendix from live git state and logs a line.
 - **`to <agent>`** does `save`, archives the current artifact, then launches the
   receiving agent in a **new tab** whose kickoff prompt points it at
-  `.prowl/handoff/current.md`. Interactive launch is verified for `claude` and
+  `.prowl/handoff/current.md` and `.prowl/handoff/context.md`. Interactive launch is verified for `claude` and
   `codex`. `--no-launch` archives + saves only and accepts the full detected-agent
   token list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`,
   `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`.
@@ -115,8 +117,8 @@ a workspace.
   git state (`status` / `diff --stat`).
 - Auto-save uses the same read-only `save` path and only updates targets with an
   existing `.prowl/handoff/current.md`.
-- Before replacing the generated block, save confirms that `current.md` has not
-  changed and retries the merge when an agent or editor updated the prose.
+- Save writes generated state only to `context.md`; after scaffolding it never
+  rewrites agent-authored `current.md`.
 - `to` only **adds** a tab; it never closes the outgoing agent's session, so you
   can still read or roll back from it.
 - It always saves + archives **before** launching, so a fresh artifact exists even
