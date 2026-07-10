@@ -83,11 +83,11 @@ prowl handoff to <agent> [target] [--note "…"] [--no-launch]
 prowl handoff status     [target]
 ```
 
-- **`save`** refreshes the auto appendix from live git state and logs a line.
+- **`save`** refreshes generated context from live git state and logs a line.
 - **`to <agent>`** does `save`, archives the current artifact, then launches the
   receiving agent in a **new tab** whose kickoff prompt points it at
-  `.prowl/handoff/current.md` and `.prowl/handoff/context.md`. Interactive launch is verified for `claude` and
-  `codex`. `--no-launch` archives + saves only and accepts the full detected-agent
+  `.prowl/handoff/current.md` and `.prowl/handoff/context.md`. Interactive launch
+  is verified for `claude` and `codex`. `--no-launch` archives + saves only and accepts the full detected-agent
   token list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`,
   `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`.
 - **`status`** reports the artifact path, whether it exists, the detected current
@@ -131,7 +131,7 @@ a workspace.
 ## Gotchas
 
 - Handoff is workspace-centric; in a plain git worktree the same `.prowl/handoff/`
-  works but the appendix covers just that one repo.
+  works but generated context covers just that one repo.
 - The artifact's prose is only as good as what the outgoing agent wrote — the
   protocol in `AGENTS.md`/`CLAUDE.md` is what keeps it honest.
 - Launching uses the interactive agent (so you can step in); don't use
