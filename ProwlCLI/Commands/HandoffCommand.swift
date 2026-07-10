@@ -25,6 +25,9 @@ struct HandoffSaveCommand: ParsableCommand {
   @OptionGroup var selector: SelectorOptions
   @OptionGroup var options: GlobalOptions
 
+  @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
+  var target: String?
+
   @Option(name: .long, help: "Optional note appended to the handoff log.")
   var note: String?
 
@@ -32,7 +35,9 @@ struct HandoffSaveCommand: ParsableCommand {
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let envelope = CommandEnvelope(
         output: options.outputMode,
-        command: .handoff(HandoffInput(action: .save, selector: try selector.resolve(), note: note))
+        command: .handoff(
+          HandoffInput(action: .save, selector: try selector.resolve(positionalTarget: target), note: note)
+        )
       )
       try CLIRunner.execute(envelope)
     }
@@ -47,6 +52,9 @@ struct HandoffToCommand: ParsableCommand {
 
   @Argument(help: "The agent to hand off to. Supported: \(HandoffAgentSupport.supportedAgentsDescription).")
   var agent: String
+
+  @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
+  var target: String?
 
   @OptionGroup var selector: SelectorOptions
   @OptionGroup var options: GlobalOptions
@@ -71,7 +79,7 @@ struct HandoffToCommand: ParsableCommand {
         command: .handoff(
           HandoffInput(
             action: .toAgent,
-            selector: try selector.resolve(),
+            selector: try selector.resolve(positionalTarget: target),
             toAgent: normalizedAgent,
             note: note,
             launch: !noLaunch
@@ -92,11 +100,16 @@ struct HandoffStatusCommand: ParsableCommand {
   @OptionGroup var selector: SelectorOptions
   @OptionGroup var options: GlobalOptions
 
+  @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
+  var target: String?
+
   mutating func run() throws {
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let envelope = CommandEnvelope(
         output: options.outputMode,
-        command: .handoff(HandoffInput(action: .status, selector: try selector.resolve()))
+        command: .handoff(
+          HandoffInput(action: .status, selector: try selector.resolve(positionalTarget: target))
+        )
       )
       try CLIRunner.execute(envelope)
     }
