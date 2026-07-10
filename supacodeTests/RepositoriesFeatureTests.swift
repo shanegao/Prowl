@@ -1850,6 +1850,7 @@ struct RepositoriesFeatureTests {
         #expect(url.path(percentEncoded: false) == root)
         return [worktree]
       }
+      $0.gitClient.repositoryWebURL = { _ in nil }
     }
 
     await store.send(.loadPersistedRepositories)
@@ -1866,6 +1867,55 @@ struct RepositoriesFeatureTests {
       [PersistedRepositoryEntry(path: root, kind: .git)]
     ]
     #expect(savedEntries.value == expectedSavedEntries)
+  }
+
+  @Test func loadPersistedRepositoriesResolvesSymlinkedGitRepositoryRoot() async throws {
+    let tempRoot = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let realRoot = tempRoot.appending(path: "real", directoryHint: .isDirectory)
+    let symlinkRoot = tempRoot.appending(path: "link", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: tempRoot) }
+    try FileManager.default.createDirectory(at: realRoot, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: symlinkRoot, withDestinationURL: realRoot)
+
+    let realPath = realRoot.standardizedFileURL.path(percentEncoded: false)
+    let symlinkPath = symlinkRoot.standardizedFileURL.path(percentEncoded: false)
+    let worktree = makeWorktree(id: realPath, name: "main", repoRoot: realPath)
+    let repository = makeRepository(id: realPath, name: "real", kind: .git, worktrees: [worktree])
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: symlinkPath, kind: .git)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        #expect(url.standardizedFileURL.path(percentEncoded: false) == symlinkPath)
+        return realRoot
+      }
+      $0.gitClient.worktrees = { url in
+        #expect(url.standardizedFileURL.path(percentEncoded: false) == realPath)
+        return [worktree]
+      }
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [realRoot.standardizedFileURL]
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedEntries.value == [[PersistedRepositoryEntry(path: realPath, kind: .git)]])
   }
 
   @Test func loadPersistedRepositoriesDoesNotUpgradePlainFolderWhenOnlyAncestorIsGitRoot() async {
@@ -1983,6 +2033,7 @@ struct RepositoriesFeatureTests {
         #expect(url.path(percentEncoded: false) == root)
         return [worktree]
       }
+      $0.gitClient.repositoryWebURL = { _ in nil }
     }
 
     await store.send(.loadPersistedRepositories)

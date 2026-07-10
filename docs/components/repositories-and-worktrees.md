@@ -41,7 +41,8 @@ root; "not a git repository" → plain folder).
 Pick one or more directories. Prowl detects git vs plain, de-duplicates, and
 persists the list. Paths that don't exist or can't be read are reported in an
 alert after the load. Repositories added after the initial app load are selected
-automatically.
+automatically. If a repository was added through a symbolic link, Prowl resolves
+and stores its actual git root so branches and worktrees continue to load.
 
 ## Creating a worktree
 
