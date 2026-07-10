@@ -203,12 +203,18 @@ extension AppFeature {
     let saveDate = now
     return .run { _ in
       do {
-        _ = try store.save(
-          outgoingAgent: agent,
-          sessionContext: sessionContext,
-          note: note,
-          now: saveDate
-        )
+        _ = try await Task.detached {
+          let resolvedSessionContext = HandoffTranscriptResolver().resolve(
+            sessionContext: sessionContext,
+            rootURL: rootURL
+          )
+          return try store.save(
+            outgoingAgent: agent,
+            sessionContext: resolvedSessionContext,
+            note: note,
+            now: saveDate
+          )
+        }.value
       } catch {
         await MainActor.run {
           appLogger.warning("[HandoffAutoSave] failed for \(rootURL.path(percentEncoded: false)): \(error)")
@@ -238,7 +244,7 @@ extension AppFeature {
   ) -> URL? {
     for repository in state.repositories.repositories {
       if let worktree = repository.worktrees[id: worktreeID] {
-        return worktree.repositoryRootURL
+        return worktree.workingDirectory
       }
       if repository.id == worktreeID,
         repository.capabilities.supportsRunnableFolderActions,

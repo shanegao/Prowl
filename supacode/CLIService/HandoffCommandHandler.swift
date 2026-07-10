@@ -92,9 +92,13 @@ final class HandoffCommandHandler: CommandHandler {
     let note = input.note
     do {
       let result = try await Task.detached {
-        try store.save(
-          outgoingAgent: outgoing,
+        let sessionContext = HandoffTranscriptResolver().resolve(
           sessionContext: target.sessionContext,
+          rootURL: store.rootURL
+        )
+        return try store.save(
+          outgoingAgent: outgoing,
+          sessionContext: sessionContext,
           note: note,
           now: timestamp
         )
@@ -103,7 +107,7 @@ final class HandoffCommandHandler: CommandHandler {
     } catch {
       return errorResponse(
         code: CLIErrorCode.handoffFailed,
-        message: "Failed to save handoff: \(error.localizedDescription)"
+        message: "Failed to save handoff: \(String(describing: error))"
       )
     }
   }
@@ -127,9 +131,13 @@ final class HandoffCommandHandler: CommandHandler {
     do {
       // Refresh the appendix, then archive the current artifact before launching.
       saveResult = try await Task.detached {
-        try store.save(
-          outgoingAgent: outgoing,
+        let sessionContext = HandoffTranscriptResolver().resolve(
           sessionContext: target.sessionContext,
+          rootURL: store.rootURL
+        )
+        return try store.save(
+          outgoingAgent: outgoing,
+          sessionContext: sessionContext,
           note: nil,
           now: timestamp
         )
@@ -140,7 +148,7 @@ final class HandoffCommandHandler: CommandHandler {
     } catch {
       return errorResponse(
         code: CLIErrorCode.handoffFailed,
-        message: "Failed to prepare handoff: \(error.localizedDescription)"
+        message: "Failed to prepare handoff: \(String(describing: error))"
       )
     }
 
@@ -148,6 +156,14 @@ final class HandoffCommandHandler: CommandHandler {
     if input.launch {
       launched = launchProvider(target, Self.kickoff(for: toAgent))
       if launched == nil {
+        let archiveSuffix = archivedPath.map { "  archive=\($0)" } ?? ""
+        let noteSuffix = input.note.map { "  note=\"\($0.replacing("\n", with: " "))\"" } ?? ""
+        try? await Task.detached {
+          try store.appendLog(
+            "\(from) → \(toAgent)  launch=failed\(archiveSuffix)\(noteSuffix)",
+            now: timestamp
+          )
+        }.value
         return errorResponse(code: CLIErrorCode.handoffFailed, message: "Failed to launch \(toAgent).")
       }
     }
@@ -173,13 +189,19 @@ final class HandoffCommandHandler: CommandHandler {
   // MARK: - status
 
   private func handleStatus(target: HandoffResolvedTarget, store: HandoffStore) async -> CommandResponse {
-    let status = await Task.detached { store.readStatus() }.value
+    let (status, sessionContext) = await Task.detached {
+      let sessionContext = HandoffTranscriptResolver().resolve(
+        sessionContext: target.sessionContext,
+        rootURL: store.rootURL
+      )
+      return (store.readStatus(), sessionContext)
+    }.value
     return success(
       payload: HandoffCommandPayload(
         action: .status,
         artifactPath: status.artifactPath,
         outgoingAgent: target.outgoingAgent,
-        sessionContext: target.sessionContext.map {
+        sessionContext: sessionContext.map {
           HandoffSessionPayload(
             agent: $0.agent,
             sessionID: $0.sessionID,

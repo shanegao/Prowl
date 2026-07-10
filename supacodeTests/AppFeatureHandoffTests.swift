@@ -41,6 +41,29 @@ struct AppFeatureHandoffTests {
     return state
   }
 
+  private func makeGitWorktreeState(repositoryRoot: URL, worktreeRoot: URL) -> RepositoriesFeature.State {
+    let repositoryRoot = repositoryRoot.standardizedFileURL
+    let worktreeRoot = worktreeRoot.standardizedFileURL
+    let worktree = Worktree(
+      id: worktreeRoot.path(percentEncoded: false),
+      name: "feature-handoff",
+      detail: "feature-handoff",
+      workingDirectory: worktreeRoot,
+      repositoryRootURL: repositoryRoot
+    )
+    let repository = Repository(
+      id: repositoryRoot.path(percentEncoded: false),
+      rootURL: repositoryRoot,
+      name: "App",
+      worktrees: [worktree]
+    )
+    var state = RepositoriesFeature.State()
+    state.repositories = [repository]
+    state.repositoryRoots = [repositoryRoot]
+    state.selection = .worktree(worktree.id)
+    return state
+  }
+
   // MARK: - Command palette item presence
 
   @Test func workspaceShowsHandoffCommands() throws {
@@ -155,6 +178,56 @@ struct AppFeatureHandoffTests {
     #expect(sent.value.isEmpty)
   }
 
+  @Test(.dependencies) func handoffDelegateAttributesFocusedAgent() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let codexSurfaceID = uuid(3)
+    let claudeSurfaceID = uuid(4)
+    var repositories = makeWorkspaceState(root: root)
+    repositories.activeAgents.entries = [
+      activeAgentEntry(
+        id: codexSurfaceID,
+        worktreeID: root.path(percentEncoded: false),
+        surfaceID: codexSurfaceID,
+        displayState: .working,
+        agent: .codex
+      ),
+      activeAgentEntry(
+        id: claudeSurfaceID,
+        worktreeID: root.path(percentEncoded: false),
+        surfaceID: claudeSurfaceID,
+        displayState: .working,
+        agent: .claude
+      ),
+    ]
+    let state = AppFeature.State(
+      repositories: repositories,
+      settings: SettingsFeature.State()
+    )
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.handoffSessionContext = { _ in
+        HandoffStore.SessionContext(
+          agent: "claude",
+          paneID: claudeSurfaceID.uuidString,
+          paneTitle: "claude",
+          source: "terminal-scrollback",
+          confidence: "fallback",
+          excerptText: "focused claude context"
+        )
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.handoffToAgent("codex"))))
+    await store.finish()
+
+    let current = try String(contentsOf: HandoffStore(rootURL: root).currentURL, encoding: .utf8)
+    #expect(current.contains("Outgoing agent (detected): claude"))
+    #expect(!current.contains("Outgoing agent (detected): codex"))
+  }
+
   @Test(.dependencies) func agentDoneAutoSavesExistingHandoffArtifact() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
@@ -263,12 +336,58 @@ struct AppFeatureHandoffTests {
     #expect(handoffStore.hasCurrentArtifact == false)
   }
 
+  @Test(.dependencies) func agentDoneAutoSavesToNonMainWorktreeRoot() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let repositoryRoot = root.appending(path: "main", directoryHint: .isDirectory)
+    let worktreeRoot = root.appending(path: "feature", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: repositoryRoot, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: worktreeRoot, withIntermediateDirectories: true)
+    let worktreeStore = HandoffStore(rootURL: worktreeRoot)
+    try worktreeStore.ensureScaffold()
+
+    let surfaceID = uuid(10)
+    var state = AppFeature.State(
+      repositories: makeGitWorktreeState(repositoryRoot: repositoryRoot, worktreeRoot: worktreeRoot),
+      settings: SettingsFeature.State()
+    )
+    state.settings.autoShowActiveAgentsPanel = false
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+    }
+    store.exhaustivity = .off
+
+    let working = activeAgentEntry(
+      id: surfaceID,
+      worktreeID: worktreeRoot.path(percentEncoded: false),
+      surfaceID: surfaceID,
+      displayState: .working
+    )
+    let done = activeAgentEntry(
+      id: surfaceID,
+      worktreeID: worktreeRoot.path(percentEncoded: false),
+      surfaceID: surfaceID,
+      displayState: .done
+    )
+
+    await store.send(.terminalEvent(.agentEntryChanged(working)))
+    await store.send(.terminalEvent(.agentEntryChanged(done)))
+    await store.finish()
+
+    let current = try String(contentsOf: worktreeStore.currentURL, encoding: .utf8)
+    #expect(current.contains("Outgoing agent (detected): codex"))
+    #expect(HandoffStore(rootURL: repositoryRoot).hasCurrentArtifact == false)
+  }
+
   private func activeAgentEntry(
     id: UUID,
     worktreeID: Worktree.ID,
     tabID: TerminalTabID = TerminalTabID(rawValue: UUID()),
     surfaceID: UUID,
-    displayState: AgentDisplayState
+    displayState: AgentDisplayState,
+    agent: DetectedAgent = .codex
   ) -> ActiveAgentEntry {
     ActiveAgentEntry(
       id: id,
@@ -276,11 +395,11 @@ struct AppFeatureHandoffTests {
       worktreeName: "Checkout Flow",
       workingDirectory: nil,
       tabID: tabID,
-      tabTitle: "codex",
+      tabTitle: agent.rawValue,
       surfaceID: surfaceID,
       paneIndex: 1,
-      iconLookupToken: DetectedAgent.codex.iconLookupToken,
-      agent: .codex,
+      iconLookupToken: agent.iconLookupToken,
+      agent: agent,
       rawState: displayState == .working ? .working : .idle,
       displayState: displayState,
       lastChangedAt: Date(timeIntervalSince1970: 1_760_000_000)

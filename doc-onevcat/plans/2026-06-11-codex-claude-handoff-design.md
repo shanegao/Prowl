@@ -107,6 +107,7 @@ Codex 和 Claude Code 是**两个各自独立的进程**，各自维护内部对
 <workspace>/.prowl/
   workspace.json                         # 静态：多仓配置（已存在）
   handoff/
+    .gitignore                           # `*`，让本地 handoff 状态自忽略
     current.md                           # 活跃 handoff 工件（跨 agent 的「契约」）
     log.md                               # append-only：每次交接一行（from→to / 时间 / 摘要）
     archive/

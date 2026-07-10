@@ -258,6 +258,9 @@ the generated excerpt path plus native `session_id` / `transcript_path` when
 Prowl can resolve Claude Code or Codex JSONL metadata. Full feature guide:
 [handoff](handoff.md).
 
+The generated `.prowl/handoff/` directory contains its own `.gitignore`, so its
+artifacts and terminal excerpts do not appear in `git status`.
+
 After a target has an existing `.prowl/handoff/current.md`, the app also
 auto-runs the same save path when Prowl sees the detected agent move from
 **working** to **done** or **blocked**. This auto-save is throttled per pane and

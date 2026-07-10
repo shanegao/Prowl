@@ -1731,6 +1731,32 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(result.stdout.contains("pane-9"), "Missing launched pane id: \(result.stdout)")
   }
 
+  func testHandoffToWithoutLaunchTextExplainsExistingFlag() throws {
+    let socketPath = temporarySocketPath(suffix: "handoff-to-no-launch-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "handoff",
+      schemaVersion: "prowl.cli.handoff.v1",
+      data: RawJSON(encoding: HandoffCommandPayload(
+        action: .toAgent,
+        artifactPath: "/Projects/App/.prowl/handoff/current.md",
+        outgoingAgent: "codex",
+        toAgent: "claude",
+        archivedPath: "handoff/archive/2026-06-12T1430-codex-to-claude.md"
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["handoff", "to", "claude", "--no-launch"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("no (--no-launch); take over manually"), result.stdout)
+    XCTAssertFalse(result.stdout.contains("use --no-launch handoff"), result.stdout)
+  }
+
   // MARK: - Helpers
 
   private func makeHandoffPayload(action: HandoffAction) -> HandoffCommandPayload {

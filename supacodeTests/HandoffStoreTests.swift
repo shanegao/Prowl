@@ -18,6 +18,28 @@ struct HandoffStoreTests {
     try? FileManager.default.removeItem(at: url)
   }
 
+  private func runGit(_ arguments: [String], in directory: URL) throws -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.arguments = ["-C", directory.path(percentEncoded: false)] + arguments
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+    try process.run()
+    let output = stdout.fileHandleForReading.readDataToEndOfFile()
+    let errorOutput = stderr.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+      throw NSError(
+        domain: "HandoffStoreTests.Git",
+        code: Int(process.terminationStatus),
+        userInfo: [NSLocalizedDescriptionKey: String(data: errorOutput, encoding: .utf8) ?? "git failed"]
+      )
+    }
+    return String(data: output, encoding: .utf8) ?? ""
+  }
+
   private let fixedDate = Date(timeIntervalSince1970: 1_760_000_000)
 
   // MARK: - replaceAutogen (pure)
@@ -89,6 +111,33 @@ struct HandoffStoreTests {
   }
 
   // MARK: - save (filesystem; non-git root)
+
+  @Test func scaffoldSelfIgnoresHandoffInGitRepository() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    _ = try runGit(["init", "--quiet"], in: root)
+    let store = HandoffStore(rootURL: root)
+
+    try store.ensureScaffold()
+
+    let ignore = try String(contentsOf: store.ignoreURL, encoding: .utf8)
+    #expect(ignore == "*\n")
+    #expect(try runGit(["status", "--porcelain"], in: root).isEmpty)
+  }
+
+  @Test func saveKeepsNonASCIIChangedFileNamesReadable() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    _ = try runGit(["init", "--quiet"], in: root)
+    try "draft".write(to: root.appending(path: "交接记录.md"), atomically: true, encoding: .utf8)
+    let store = HandoffStore(rootURL: root)
+
+    let result = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
+
+    #expect(result.changedFiles.contains { $0.contains("交接记录.md") })
+    let current = try String(contentsOf: store.currentURL, encoding: .utf8)
+    #expect(current.contains("交接记录.md"))
+  }
 
   @Test func saveSeedsArtifactWithAppendixForNonGitRoot() throws {
     let root = try makeTempRoot()
@@ -241,6 +290,29 @@ struct HandoffStoreTests {
     #expect(archivedRelative?.contains("codex-to-claude") == true)
     // current.md remains for the receiving agent.
     #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
+  }
+
+  @Test func appendLogPreservesConcurrentEntries() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+    let date = fixedDate
+
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      for index in 0..<40 {
+        group.addTask {
+          try store.appendLog("event=\(index)", now: date)
+        }
+      }
+      try await group.waitForAll()
+    }
+
+    let log = try String(contentsOf: store.logURL, encoding: .utf8)
+    let entries = log.split(separator: "\n").filter { $0.hasPrefix("- ") }
+    #expect(entries.count == 40)
+    for index in 0..<40 {
+      #expect(entries.contains { $0.contains("event=\(index)") })
+    }
   }
 
   @Test func archiveCurrentKeepsExistingSameTimestampArchives() throws {

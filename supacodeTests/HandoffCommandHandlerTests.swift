@@ -179,6 +179,10 @@ struct HandoffCommandHandlerTests {
 
     #expect(response.ok == false)
     #expect(response.error?.code == CLIErrorCode.handoffFailed)
+    let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
+    #expect(log.contains("codex → claude"))
+    #expect(log.contains("launch=failed"))
+    #expect(log.contains("archive=handoff/archive/"))
   }
 
   @Test func statusReflectsExistence() async throws {

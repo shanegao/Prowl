@@ -17,11 +17,11 @@ struct HandoffTranscriptResolverTests {
   }
 
   @Test func claudeProjectDirectoryNameMatchesClaudeCodeConvention() {
-    let rootURL = URL(fileURLWithPath: "/Users/mikoto/Documents/Repos/github/Prowl", isDirectory: true)
+    let rootURL = URL(fileURLWithPath: "/Users/mikoto/.prowl/repos/Prowl/feature's branch", isDirectory: true)
 
     let name = HandoffTranscriptResolver.claudeProjectDirectoryName(for: rootURL)
 
-    #expect(name == "-Users-mikoto-Documents-Repos-github-Prowl")
+    #expect(name == "-Users-mikoto--prowl-repos-Prowl-feature-s-branch")
   }
 
   @Test func resolvesLatestClaudeTranscriptForProjectDirectory() throws {

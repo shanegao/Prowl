@@ -33,6 +33,29 @@ nonisolated struct HandoffTranscriptResolver {
     }
   }
 
+  func resolve(
+    sessionContext: HandoffStore.SessionContext?,
+    rootURL: URL
+  ) -> HandoffStore.SessionContext? {
+    guard let sessionContext else { return nil }
+    guard sessionContext.sessionID == nil,
+      sessionContext.transcriptPath == nil,
+      let transcript = resolve(agent: sessionContext.agent, rootURL: rootURL)
+    else {
+      return sessionContext
+    }
+    return HandoffStore.SessionContext(
+      agent: sessionContext.agent,
+      sessionID: transcript.sessionID,
+      paneID: sessionContext.paneID,
+      paneTitle: sessionContext.paneTitle,
+      source: transcript.source,
+      confidence: transcript.confidence,
+      transcriptPath: transcript.transcriptPath,
+      excerptText: sessionContext.excerptText
+    )
+  }
+
   private func resolveClaude(rootURL: URL) -> HandoffTranscriptReference? {
     let projectDirectory =
       homeDirectory
@@ -118,27 +141,28 @@ nonisolated struct HandoffTranscriptResolver {
     matchingRoot rootPath: String?,
     sessionIDReader: (URL) -> (sessionID: String, cwd: String?)?
   ) -> (url: URL, sessionID: String)? {
-    urls
-      .compactMap { url -> TranscriptCandidate? in
-        guard let metadata = sessionIDReader(url) else { return nil }
-        if let rootPath, metadata.cwd.map(Self.normalizedPath(_:)) != rootPath {
-          return nil
-        }
+    let candidates =
+      urls
+      .map { url -> TranscriptCandidate in
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
         return TranscriptCandidate(
           url: url,
-          sessionID: metadata.sessionID,
           modifiedAt: values?.contentModificationDate ?? .distantPast
         )
       }
       .sorted { lhs, rhs in lhs.modifiedAt > rhs.modifiedAt }
-      .first
-      .map { (url: $0.url, sessionID: $0.sessionID) }
+    for candidate in candidates {
+      guard let metadata = sessionIDReader(candidate.url) else { continue }
+      if let rootPath, metadata.cwd.map(Self.normalizedPath(_:)) != rootPath {
+        continue
+      }
+      return (url: candidate.url, sessionID: metadata.sessionID)
+    }
+    return nil
   }
 
   private struct TranscriptCandidate {
     let url: URL
-    let sessionID: String
     let modifiedAt: Date
   }
 
@@ -196,7 +220,11 @@ nonisolated struct HandoffTranscriptResolver {
   }
 
   static func claudeProjectDirectoryName(for rootURL: URL) -> String {
-    normalizedPath(rootURL).replacing("/", with: "-")
+    String(
+      normalizedPath(rootURL).map { character in
+        character.isLetter || character.isNumber ? character : "-"
+      }
+    )
   }
 
   private static func normalizedPath(_ url: URL) -> String {

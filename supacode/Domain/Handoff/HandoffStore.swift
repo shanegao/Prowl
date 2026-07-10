@@ -21,6 +21,8 @@ import Foundation
 /// `Task.detached`). The module defaults to `MainActor` isolation, so the
 /// `nonisolated` annotation is required (mirrors `ProjectWorkspace`).
 nonisolated struct HandoffStore: Sendable {
+  private static let logLock = NSLock()
+
   /// The runnable target's root directory: a workspace root or a worktree root.
   let rootURL: URL
 
@@ -36,6 +38,7 @@ nonisolated struct HandoffStore: Sendable {
       .appending(path: "handoff", directoryHint: .isDirectory)
   }
   var currentURL: URL { handoffDirectory.appending(path: "current.md") }
+  var ignoreURL: URL { handoffDirectory.appending(path: ".gitignore") }
   var logURL: URL { handoffDirectory.appending(path: "log.md") }
   var archiveDirectory: URL { handoffDirectory.appending(path: "archive", directoryHint: .isDirectory) }
   var sessionDirectory: URL { handoffDirectory.appending(path: "sessions", directoryHint: .isDirectory) }
@@ -148,6 +151,9 @@ nonisolated struct HandoffStore: Sendable {
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+    if !fileManager.fileExists(atPath: ignoreURL.path(percentEncoded: false)) {
+      try "*\n".write(to: ignoreURL, atomically: true, encoding: .utf8)
+    }
     if !fileManager.fileExists(atPath: currentURL.path(percentEncoded: false)) {
       try Self.template.write(to: currentURL, atomically: true, encoding: .utf8)
     }
@@ -217,9 +223,17 @@ nonisolated struct HandoffStore: Sendable {
   func appendLog(_ event: String, now: Date) throws {
     try FileManager.default.createDirectory(at: handoffDirectory, withIntermediateDirectories: true)
     let line = "- \(Self.iso(now))  \(event)\n"
-    let existing = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-    let header = existing.isEmpty ? "# Handoff log\n\n" : ""
-    try (existing + header + line).write(to: logURL, atomically: true, encoding: .utf8)
+    Self.logLock.lock()
+    defer { Self.logLock.unlock() }
+
+    let fileManager = FileManager.default
+    if !fileManager.fileExists(atPath: logURL.path(percentEncoded: false)) {
+      try "# Handoff log\n\n".write(to: logURL, atomically: true, encoding: .utf8)
+    }
+    let handle = try FileHandle(forWritingTo: logURL)
+    defer { try? handle.close() }
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(line.utf8))
   }
 
   // MARK: - Status
@@ -276,7 +290,7 @@ nonisolated struct HandoffStore: Sendable {
       }
       let branch = Self.git(["rev-parse", "--abbrev-ref", "HEAD"], in: repo.url)?
         .trimmingCharacters(in: .whitespacesAndNewlines)
-      let porcelain = Self.git(["status", "--porcelain"], in: repo.url) ?? ""
+      let porcelain = Self.git(["-c", "core.quotePath=false", "status", "--porcelain"], in: repo.url) ?? ""
       let changedCount = porcelain.split(separator: "\n", omittingEmptySubsequences: true).count
       let (insertions, deletions) = Self.parseShortstat(Self.git(["diff", "HEAD", "--shortstat"], in: repo.url) ?? "")
       return RepoSummary(
@@ -295,7 +309,7 @@ nonisolated struct HandoffStore: Sendable {
     var files: [String] = []
     for repo in repos where repo.isGit {
       let repoURL = URL(fileURLWithPath: repo.path, isDirectory: true)
-      let porcelain = Self.git(["status", "--porcelain"], in: repoURL) ?? ""
+      let porcelain = Self.git(["-c", "core.quotePath=false", "status", "--porcelain"], in: repoURL) ?? ""
       for line in porcelain.split(separator: "\n", omittingEmptySubsequences: true) {
         let entry = String(line.dropFirst(3))  // strip 2-char status + space
         let relative = entry.contains(" -> ") ? String(entry.split(separator: " -> ").last ?? "") : entry

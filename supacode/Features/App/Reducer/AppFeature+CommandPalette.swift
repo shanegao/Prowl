@@ -289,18 +289,28 @@ extension AppFeature {
     guard let worktree = state.repositories.selectedTerminalWorktree else {
       return .none
     }
-    let outgoing = state.repositories.activeAgents.entries
-      .first { $0.worktreeID == worktree.id }?.agent.rawValue
     let kickoff = HandoffCommandHandler.kickoff(for: agent)
     let rootURL = worktree.workingDirectory
     let sessionContext = terminalClient.handoffSessionContext(worktree.id)
+    let outgoing = sessionContext?.agent
     return .run { send in
       let store = HandoffStore(rootURL: rootURL)
       let now = Date()
       do {
-        _ = try store.save(outgoingAgent: outgoing, sessionContext: sessionContext, note: nil, now: now)
-        _ = try store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
-        try store.appendLog("\(outgoing ?? "agent") → \(agent)  (command palette)", now: now)
+        try await Task.detached {
+          let resolvedSessionContext = HandoffTranscriptResolver().resolve(
+            sessionContext: sessionContext,
+            rootURL: rootURL
+          )
+          _ = try store.save(
+            outgoingAgent: outgoing,
+            sessionContext: resolvedSessionContext,
+            note: nil,
+            now: now
+          )
+          _ = try store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
+          try store.appendLog("\(outgoing ?? "agent") → \(agent)  (command palette)", now: now)
+        }.value
       } catch {
         await MainActor.run {
           appLogger.warning("[Handoff] command palette failed for \(rootURL.path(percentEncoded: false)): \(error)")

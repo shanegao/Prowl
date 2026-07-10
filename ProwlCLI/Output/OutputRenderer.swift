@@ -311,7 +311,7 @@ enum OutputRenderer {
       if let pane = payload.launchedPane {
         lines.append("  \("launched:".dim) \(to.green) → \(pane.paneTitle.green)  \(pane.paneID.dim)")
       } else {
-        lines.append("  \("launched:".dim) \("no (use --no-launch handoff; take over manually)".dim)")
+        lines.append("  \("launched:".dim) \("no (--no-launch); take over manually".dim)")
       }
       lines.append(contentsOf: renderHandoffRepos(payload.repos))
     }

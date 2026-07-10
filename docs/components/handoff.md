@@ -25,11 +25,16 @@ Everything lives under the target's `.prowl/handoff/` directory:
 
 ```text
 <root>/.prowl/handoff/
+  .gitignore            self-ignore all local handoff state
   current.md            active handoff artifact (the cross-agent contract)
   log.md                append-only handoff history
   archive/<ts>-<from>-to-<to>.md
   sessions/<ts>-<pane>.md
 ```
+
+Prowl creates `.prowl/handoff/.gitignore` with `*`, so the entire directory is
+self-ignoring when the target is a git repository or worktree. No edit to the
+repository's root `.gitignore` is required.
 
 `current.md` has two parts:
 
@@ -116,9 +121,8 @@ a workspace.
   if the launch is interrupted.
 - Keep secrets/tokens out of the handoff file (the protocol asks agents not to
   write them).
-- Add `.prowl/handoff/` to the workspace's `.gitignore`; session excerpts can
-  contain terminal context that belongs in local handoff state, not source
-  control.
+- `.prowl/handoff/` is self-ignoring; session excerpts can contain terminal
+  context that belongs in local handoff state, not source control.
 
 ## Gotchas
 
