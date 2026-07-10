@@ -531,6 +531,90 @@ struct WorktreeInfoWatcherManagerTests {
     try FileManager.default.removeItem(at: tempRepository.tempRoot)
   }
 
+  @Test func plainRepositoryMonitorFailuresDoNotSkipRemainingRoots() {
+    let roots = (0..<3).map { index in
+      URL(fileURLWithPath: "/tmp/plain-repository-\(index)", isDirectory: true)
+    }
+    let monitorStore = TestPlainRepositoryFileEventMonitorStore(failedRoots: Set(roots))
+    let manager = WorktreeInfoWatcherManager(
+      plainRepositoryFileEventMonitorFactory: monitorStore.makeMonitor
+    )
+
+    manager.handleCommand(.setPlainRepositoryRoots(roots))
+
+    #expect(Set(monitorStore.attemptedRoots) == Set(roots.map(\.standardizedFileURL)))
+    manager.handleCommand(.stop)
+  }
+
+  @Test func plainRepositoryMonitorsTrackRootChangesAndStop() throws {
+    let firstRoot = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let secondRoot = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let monitorStore = TestPlainRepositoryFileEventMonitorStore()
+    let manager = WorktreeInfoWatcherManager(
+      plainRepositoryFileEventMonitorFactory: monitorStore.makeMonitor
+    )
+
+    manager.handleCommand(.setPlainRepositoryRoots([firstRoot, secondRoot]))
+    let firstMonitor = try #require(monitorStore.monitor(for: firstRoot))
+    let secondMonitor = try #require(monitorStore.monitor(for: secondRoot))
+
+    manager.handleCommand(.setPlainRepositoryRoots([secondRoot]))
+    #expect(firstMonitor.isCanceled)
+    #expect(!secondMonitor.isCanceled)
+
+    manager.handleCommand(.stop)
+    #expect(secondMonitor.isCanceled)
+  }
+
+  @Test func plainRepositoryGitEventEmitsOnceUntilDotGitDisappears() async throws {
+    let clock = TestClock()
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let dotGitURL = root.appending(path: ".git", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: dotGitURL, withIntermediateDirectories: true)
+    let monitorStore = TestPlainRepositoryFileEventMonitorStore()
+    let manager = WorktreeInfoWatcherManager(
+      plainRepositoryFileEventMonitorFactory: monitorStore.makeMonitor,
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setPlainRepositoryRoots([root]))
+    let monitor = try #require(monitorStore.monitor(for: root))
+
+    monitor.emit()
+    await drainAsyncEvents()
+    await clock.advance(by: .seconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.plainRepositoryGitEventCount(rootURL: root) == 1)
+
+    monitor.emit()
+    await drainAsyncEvents()
+    await clock.advance(by: .seconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.plainRepositoryGitEventCount(rootURL: root) == 1)
+
+    try FileManager.default.removeItem(at: dotGitURL)
+    monitor.emit()
+    await drainAsyncEvents()
+    await clock.advance(by: .seconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.plainRepositoryGitEventCount(rootURL: root) == 1)
+
+    try FileManager.default.createDirectory(at: dotGitURL, withIntermediateDirectories: true)
+    monitor.emit()
+    await drainAsyncEvents()
+    await clock.advance(by: .seconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.plainRepositoryGitEventCount(rootURL: root) == 2)
+
+    manager.handleCommand(.stop)
+    await task.value
+  }
+
   @Test func adaptiveTimingResolvesFromIndexEntryCount() async throws {
     let clock = TestClock()
     let tempRepository = try makeTempRepository(worktreeNames: ["sparrow"])
@@ -746,6 +830,17 @@ actor EventCollector {
       }
     }
   }
+
+  func plainRepositoryGitEventCount(rootURL: URL) -> Int {
+    let expectedURL = rootURL.standardizedFileURL
+    return events.reduce(into: 0) { result, event in
+      if case .plainRepositoryBecameGitRepository(let emittedURL) = event,
+        emittedURL.standardizedFileURL == expectedURL
+      {
+        result += 1
+      }
+    }
+  }
 }
 
 private struct TempWorktree {
@@ -890,6 +985,33 @@ private final class TestWorktreeFileEventMonitor: WorktreeFileEventMonitoring {
 
   func cancel() {
     isCanceled = true
+  }
+}
+
+@MainActor
+private final class TestPlainRepositoryFileEventMonitorStore {
+  private let failedRoots: Set<URL>
+  private var monitors: [URL: TestWorktreeFileEventMonitor] = [:]
+  private(set) var attemptedRoots: [URL] = []
+
+  init(failedRoots: Set<URL> = []) {
+    self.failedRoots = Set(failedRoots.map(\.standardizedFileURL))
+  }
+
+  func makeMonitor(
+    rootURL: URL,
+    onEvent: @escaping @MainActor @Sendable () -> Void
+  ) -> WorktreeFileEventMonitoring? {
+    let root = rootURL.standardizedFileURL
+    attemptedRoots.append(root)
+    guard !failedRoots.contains(root) else { return nil }
+    let monitor = TestWorktreeFileEventMonitor(onEvent: onEvent)
+    monitors[root] = monitor
+    return monitor
+  }
+
+  func monitor(for rootURL: URL) -> TestWorktreeFileEventMonitor? {
+    monitors[rootURL.standardizedFileURL]
   }
 }
 

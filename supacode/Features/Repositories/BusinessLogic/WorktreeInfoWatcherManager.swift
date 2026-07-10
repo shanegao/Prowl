@@ -10,6 +10,11 @@ final class WorktreeInfoWatcherManager {
       _ worktree: Worktree,
       _ onEvent: @escaping @MainActor @Sendable () -> Void
     ) -> WorktreeFileEventMonitoring?
+  typealias PlainRepositoryFileEventMonitorFactory =
+    @MainActor @Sendable (
+      _ rootURL: URL,
+      _ onEvent: @escaping @MainActor @Sendable () -> Void
+    ) -> WorktreeFileEventMonitoring?
   typealias WorktreeHeadEventMonitorFactory =
     @MainActor @Sendable (
       _ worktreeID: Worktree.ID,
@@ -86,6 +91,7 @@ final class WorktreeInfoWatcherManager {
   private let lineChangePhaseOffset: WorktreePhaseOffset
   private let pullRequestPhaseOffset: RepositoryPhaseOffset
   private let worktreeFileEventMonitorFactory: WorktreeFileEventMonitorFactory
+  private let plainRepositoryFileEventMonitorFactory: PlainRepositoryFileEventMonitorFactory
   private let worktreeHeadEventMonitorFactory: WorktreeHeadEventMonitorFactory
   private let worktreeRegistryMonitorFactory: WorktreeRegistryMonitorFactory
   private let remoteConfigMonitorFactory: RemoteConfigMonitorFactory
@@ -96,6 +102,7 @@ final class WorktreeInfoWatcherManager {
   private var worktreeRegistryMonitors: [URL: WorktreeRegistryMonitoring] = [:]
   private var remoteConfigMonitors: [URL: RemoteConfigMonitoring] = [:]
   private var plainRepositoryMonitors: [URL: WorktreeFileEventMonitoring] = [:]
+  private var plainRepositoryRootsWithGitEvent: Set<URL> = []
   private let plainRepositoryDebouncer: KeyedDebouncer<URL>
   private let branchChangedDebouncer: KeyedDebouncer<Worktree.ID>
   private let repositoryWorktreesDebouncer: KeyedDebouncer<URL>
@@ -125,6 +132,8 @@ final class WorktreeInfoWatcherManager {
     pullRequestPhaseOffset: @escaping RepositoryPhaseOffset = WorktreeInfoWatcherManager.defaultPullRequestPhaseOffset,
     worktreeFileEventMonitorFactory: @escaping WorktreeFileEventMonitorFactory =
       WorktreeInfoWatcherManager.defaultWorktreeFileEventMonitorFactory,
+    plainRepositoryFileEventMonitorFactory: @escaping PlainRepositoryFileEventMonitorFactory =
+      WorktreeInfoWatcherManager.defaultPlainRepositoryFileEventMonitorFactory,
     worktreeHeadEventMonitorFactory: @escaping WorktreeHeadEventMonitorFactory =
       WorktreeInfoWatcherManager.defaultWorktreeHeadEventMonitorFactory,
     worktreeRegistryMonitorFactory: @escaping WorktreeRegistryMonitorFactory =
@@ -143,6 +152,7 @@ final class WorktreeInfoWatcherManager {
     self.lineChangePhaseOffset = lineChangePhaseOffset
     self.pullRequestPhaseOffset = pullRequestPhaseOffset
     self.worktreeFileEventMonitorFactory = worktreeFileEventMonitorFactory
+    self.plainRepositoryFileEventMonitorFactory = plainRepositoryFileEventMonitorFactory
     self.worktreeHeadEventMonitorFactory = worktreeHeadEventMonitorFactory
     self.worktreeRegistryMonitorFactory = worktreeRegistryMonitorFactory
     self.remoteConfigMonitorFactory = remoteConfigMonitorFactory
@@ -384,18 +394,19 @@ final class WorktreeInfoWatcherManager {
     for root in currentRoots.subtracting(desiredRoots) {
       plainRepositoryMonitors[root]?.cancel()
       plainRepositoryMonitors.removeValue(forKey: root)
+      plainRepositoryRootsWithGitEvent.remove(root)
       plainRepositoryDebouncer.cancel(root)
     }
     for root in desiredRoots.subtracting(currentRoots) {
       guard
-        let monitor = FSEventsWorktreeFileEventMonitor(
-          rootURL: root,
-          onEvent: { [weak self] in
+        let monitor = plainRepositoryFileEventMonitorFactory(
+          root,
+          { [weak self] in
             self?.handlePlainRepositoryFileEvent(root)
           }
         )
       else {
-        return
+        continue
       }
       plainRepositoryMonitors[root] = monitor
     }
@@ -405,9 +416,12 @@ final class WorktreeInfoWatcherManager {
     plainRepositoryDebouncer.schedule(root) { [weak self] in
       guard let self else { return }
       let dotGitURL = root.appending(path: ".git")
-      if FileManager.default.fileExists(atPath: dotGitURL.path(percentEncoded: false)) {
-        emit(.plainRepositoryBecameGitRepository(root))
+      guard FileManager.default.fileExists(atPath: dotGitURL.path(percentEncoded: false)) else {
+        plainRepositoryRootsWithGitEvent.remove(root)
+        return
       }
+      guard plainRepositoryRootsWithGitEvent.insert(root).inserted else { return }
+      emit(.plainRepositoryBecameGitRepository(root))
     }
   }
 
@@ -444,6 +458,7 @@ final class WorktreeInfoWatcherManager {
     worktreeRegistryMonitors.removeAll()
     remoteConfigMonitors.removeAll()
     plainRepositoryMonitors.removeAll()
+    plainRepositoryRootsWithGitEvent.removeAll()
     pullRequestTasks.removeAll()
     lineChangeSafetyTasks.removeAll()
     deferredLineChangeIDs.removeAll()
@@ -754,6 +769,13 @@ final class WorktreeInfoWatcherManager {
     onEvent: @escaping @MainActor @Sendable () -> Void
   ) -> WorktreeFileEventMonitoring? {
     FSEventsWorktreeFileEventMonitor(rootURL: worktree.workingDirectory, onEvent: onEvent)
+  }
+
+  private static func defaultPlainRepositoryFileEventMonitorFactory(
+    rootURL: URL,
+    onEvent: @escaping @MainActor @Sendable () -> Void
+  ) -> WorktreeFileEventMonitoring? {
+    FSEventsWorktreeFileEventMonitor(rootURL: rootURL, onEvent: onEvent)
   }
 
   private static func defaultWorktreeHeadEventMonitorFactory(
