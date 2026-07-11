@@ -92,6 +92,46 @@ struct AgentSessionResolverTests {
     #expect(AgentSessionCandidate.uniqueActiveCandidate([first, second], processStartedAt: start) == nil)
   }
 
+  @Test func staleSessionsExpireAfterConsecutiveMisses() {
+    let session = AgentSession(id: "old", transcriptPath: nil, source: .recentFile)
+    var previous = PaneAgentState(agentProcessID: 42, session: session)
+    previous.sessionMissStreak = 0
+
+    // Same process, resolver ambiguous: retained for two misses, dropped on the third.
+    let miss1 = PaneAgentState.retainedSession(resolved: nil, previous: previous, identifiedPID: 42)
+    #expect(miss1.session?.id == "old")
+    #expect(miss1.missStreak == 1)
+    previous.sessionMissStreak = 2
+    let miss3 = PaneAgentState.retainedSession(resolved: nil, previous: previous, identifiedPID: 42)
+    #expect(miss3.session == nil)
+
+    // Presence hold (probe returned no process): keep without aging.
+    previous.sessionMissStreak = 2
+    let held = PaneAgentState.retainedSession(resolved: nil, previous: previous, identifiedPID: nil)
+    #expect(held.session?.id == "old")
+    #expect(held.missStreak == 2)
+
+    // Fresh resolution resets the streak; new pid drops the session.
+    let fresh = PaneAgentState.retainedSession(resolved: session, previous: previous, identifiedPID: 42)
+    #expect(fresh.missStreak == 0)
+    #expect(PaneAgentState.retainedSession(resolved: nil, previous: previous, identifiedPID: 43).session == nil)
+  }
+
+  @Test func openFilePathsExcludeReadOnlyDescriptors() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-readonly-\(UUID().uuidString).jsonl")
+    FileManager.default.createFile(atPath: url.path, contents: Data("x".utf8))
+    let descriptor = open(url.path, O_RDONLY)
+    #expect(descriptor >= 0)
+    defer {
+      close(descriptor)
+      try? FileManager.default.removeItem(at: url)
+    }
+
+    let paths = ProcessDetection.openFilePaths(pid: getpid())
+    #expect(!paths.contains { URL(fileURLWithPath: $0).lastPathComponent == url.lastPathComponent })
+  }
+
   @Test func readsCurrentProcessOpenFilePaths() throws {
     let url = FileManager.default.temporaryDirectory
       .appending(path: "prowl-agent-session-\(UUID().uuidString).jsonl")

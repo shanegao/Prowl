@@ -21,6 +21,19 @@ struct AgentSessionProfileTests {
     #expect(roots.map(\.path) == ["/Users/me/.claude/projects/-private-tmp-prowl-556-enc"])
   }
 
+  @Test func claudeRootMatchesJavaScriptCodeUnitSemantics() {
+    // Claude Code replaces per UTF-16 code unit: a surrogate-pair emoji
+    // becomes TWO dashes. Observed live: /private/tmp/prowl556-review-🐱-café
+    // → -private-tmp-prowl556-review----caf-
+    let roots = AgentSessionProfile.profile(for: .claude).candidateRoots(
+      home,
+      URL(fileURLWithPath: "/private/tmp/prowl556-review-🐱-café", isDirectory: true),
+      now,
+      now
+    )
+    #expect(roots.map(\.path) == ["/Users/me/.claude/projects/-private-tmp-prowl556-review----caf-"])
+  }
+
   @Test func piAndDroidRootsKeepDotsAndSpaces() {
     let cwd = URL(fileURLWithPath: "/Users/me/.prowl/repos/My App", isDirectory: true)
     let piRoots = AgentSessionProfile.profile(for: .pi).candidateRoots(home, cwd, now, now)
@@ -118,6 +131,35 @@ struct AgentSessionProfileTests {
       candidates: candidates
     )
     #expect(match?.session.id == "same-session")
+  }
+
+  // MARK: - Header enrichment stays per-profile
+
+  @Test func headerEnrichmentNeverOverridesDirectoryDerivedIDs() throws {
+    // Copilot-style layout: the directory name is the session id and the
+    // event stream is a JSONL whose first line may carry unrelated ids.
+    // Generic header sniffing once replaced the correct id with such a field.
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-copilot-header-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let id = "50b5bd49-d8e8-4ee9-9bae-4eaae5c0bdd8"
+    let sessionDir = root.appending(path: ".copilot/session-state/\(id)")
+    try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try #"{"type":"event","id":"99999999-aaaa-bbbb-cccc-dddddddddddd","sessionId":"not-this-one"}"#
+      .write(to: sessionDir.appending(path: "events.jsonl"), atomically: true, encoding: .utf8)
+
+    let profile = AgentSessionProfile.profile(for: .copilot)
+    let parsed = try #require(profile.parsePath(sessionDir.appending(path: "events.jsonl").path))
+    #expect(parsed.id == id)
+    #expect(profile.headerSessionIDKeys.isEmpty)
+  }
+
+  @Test func geminiHeaderKeysExpandTruncatedFilenameID() {
+    // Gemini filenames only carry the first 8 id characters; the header's
+    // sessionId is the full uuid, so gemini opts in to enrichment.
+    #expect(AgentSessionProfile.profile(for: .gemini).headerSessionIDKeys == ["sessionId"])
+    #expect(AgentSessionProfile.profile(for: .claude).headerSessionIDKeys.isEmpty)
+    #expect(AgentSessionProfile.profile(for: .kimi).headerSessionIDKeys.isEmpty)
   }
 
   // MARK: - Pid-keyed artifacts
@@ -218,6 +260,62 @@ struct AgentSessionProfileTests {
         == ["/Users/me/.qwen/projects/-private-tmp-prowl-556-enc/chats"]
     )
     #expect(qwen.fallbackRoots(home, cwd).map(\.path) == ["/Users/me/.qwen/projects"])
+  }
+
+  @Test func geminiParsePathRequiresSessionPrefix() {
+    let profile = AgentSessionProfile.profile(for: .gemini)
+    #expect(profile.parsePath("/Users/me/.gemini/tmp/prowl/chats/session-2026-07-11T05-41-2fab0218.jsonl") != nil)
+    #expect(profile.parsePath("/Users/me/.gemini/tmp/prowl/chats/notes-2026-07-11.jsonl") == nil)
+  }
+
+  @Test func headerEnrichmentUpgradesTruncatedGeminiID() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-header-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let transcript = root.appending(path: "session-2026-07-11T05-41-23ce3e98.jsonl")
+    try #"{"sessionId":"23ce3e98-af90-4d5c-8b83-ffcc258dff2b","projectHash":"x"}"#
+      .write(to: transcript, atomically: true, encoding: .utf8)
+
+    #expect(
+      AgentSessionResolver.sessionIDFromHeader(at: transcript, keys: ["sessionId"])
+        == "23ce3e98-af90-4d5c-8b83-ffcc258dff2b"
+    )
+    // Empty key list (every agent except gemini) never reads the file.
+    #expect(AgentSessionResolver.sessionIDFromHeader(at: transcript, keys: []) == nil)
+    // Oversized first lines fall back to the filename-derived id.
+    let huge = root.appending(path: "huge.jsonl")
+    try (#"{"sessionId":""# + String(repeating: "x", count: 9_000) + #""}"#)
+      .write(to: huge, atomically: true, encoding: .utf8)
+    #expect(AgentSessionResolver.sessionIDFromHeader(at: huge, keys: ["sessionId"]) == nil)
+  }
+
+  // MARK: - Cache pacing
+
+  @Test func unresolvedLookupsBackOffExponentially() {
+    #expect(AgentSessionResolver.cacheLifetime(hasSession: true, usedWideScan: false, unresolvedStreak: 9) == 5)
+    #expect(AgentSessionResolver.cacheLifetime(hasSession: false, usedWideScan: false, unresolvedStreak: 0) == 1)
+    #expect(AgentSessionResolver.cacheLifetime(hasSession: false, usedWideScan: false, unresolvedStreak: 1) == 2)
+    #expect(AgentSessionResolver.cacheLifetime(hasSession: false, usedWideScan: false, unresolvedStreak: 3) == 8)
+    #expect(AgentSessionResolver.cacheLifetime(hasSession: false, usedWideScan: false, unresolvedStreak: 8) == 15)
+    #expect(AgentSessionResolver.cacheLifetime(hasSession: false, usedWideScan: true, unresolvedStreak: 0) == 8)
+    #expect(AgentSessionResolver.cacheLifetime(hasSession: false, usedWideScan: true, unresolvedStreak: 5) == 15)
+  }
+
+  @Test func soleCandidateNeedsTwoConsistentSamples() {
+    let sole = AgentSession(id: "abc", transcriptPath: nil, source: .recentFile)
+    let first = AgentSessionResolver.confirmSole(sole, previousProvisionalID: nil)
+    #expect(first.session == nil)
+    #expect(first.provisionalID == "abc")
+    let second = AgentSessionResolver.confirmSole(sole, previousProvisionalID: "abc")
+    #expect(second.session?.id == "abc")
+    #expect(second.provisionalID == nil)
+    let changed = AgentSessionResolver.confirmSole(sole, previousProvisionalID: "other")
+    #expect(changed.session == nil)
+    #expect(changed.provisionalID == "abc")
+    // Exact/high evidence is never held back.
+    let exact = AgentSession(id: "xyz", transcriptPath: nil, source: .openFile, confidence: .exact)
+    #expect(AgentSessionResolver.confirmSole(exact, previousProvisionalID: nil).session?.id == "xyz")
   }
 
   // MARK: - Amp thread log parsing

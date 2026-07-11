@@ -4,6 +4,9 @@ struct PaneAgentState: Equatable, Sendable {
   var detectedAgent: DetectedAgent?
   var agentProcessID: pid_t?
   var session: AgentSession?
+  /// Consecutive resolver misses while the same process stayed detected;
+  /// bounds how long a previously resolved session may be retained.
+  var sessionMissStreak: Int = 0
   var iconLookupToken: String?
   var fallbackState: AgentRawState
   var state: AgentRawState
@@ -28,6 +31,23 @@ struct PaneAgentState: Equatable, Sendable {
     self.state = state
     self.seen = seen
     self.lastChangedAt = lastChangedAt
+  }
+
+  /// Sticky-session policy: a fresh resolution always wins; a probe gap
+  /// (`identifiedPID == nil`, presence hold) keeps the last session without
+  /// aging it; an ambiguous resolver result on the same process keeps it for
+  /// at most two misses so a rotated-away session id cannot survive
+  /// indefinitely. A different pid discards it immediately.
+  static func retainedSession(
+    resolved: AgentSession?,
+    previous: PaneAgentState,
+    identifiedPID: pid_t?
+  ) -> (session: AgentSession?, missStreak: Int) {
+    if let resolved { return (resolved, 0) }
+    guard let identifiedPID else { return (previous.session, previous.sessionMissStreak) }
+    guard identifiedPID == previous.agentProcessID else { return (nil, 0) }
+    let streak = previous.sessionMissStreak + 1
+    return (streak >= 3 ? nil : previous.session, streak)
   }
 
   var displayState: AgentDisplayState {

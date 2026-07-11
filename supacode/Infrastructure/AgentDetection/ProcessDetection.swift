@@ -186,6 +186,11 @@ nonisolated enum ProcessDetection {
         proc_pidfdinfo(pid, descriptor.proc_fd, PROC_PIDFDVNODEPATHINFO, pointer, Int32(size))
       }
       guard result > 0 else { return nil }
+      // Only writable descriptors identify a session an agent OWNS. Agents
+      // transiently open other sessions read-only (resume pickers, history
+      // browsing); every legitimate signal (Codex rollout, Amp thread log,
+      // Cursor store.db) is open for writing.
+      guard info.pfi.fi_openflags & UInt32(FWRITE) != 0 else { return nil }
       return withUnsafeBytes(of: info.pvip.vip_path) { rawBuffer -> String? in
         let bytes = rawBuffer.bindMemory(to: UInt8.self)
         let end = bytes.firstIndex(of: 0) ?? bytes.endIndex

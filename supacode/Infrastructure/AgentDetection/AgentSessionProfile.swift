@@ -10,6 +10,12 @@ nonisolated struct AgentSessionProfile: Sendable {
   /// Parses an absolute file path owned by the agent (open descriptor or
   /// storage scan hit) into a session.
   var parsePath: @Sendable (_ path: String) -> AgentSession? = { _ in nil }
+  /// Top-level JSON keys in a transcript's first line whose value REPLACES the
+  /// path-derived session id. Opt-in per agent: only meaningful when the
+  /// filename carries a truncated id (Gemini). Leave empty when the path
+  /// already holds the full id — generic sniffing can grab an unrelated field
+  /// from event-stream layouts like Copilot's events.jsonl.
+  var headerSessionIDKeys: [String] = []
   /// Storage roots scanned for session files modified during the process
   /// lifetime. Narrow these as much as the layout allows.
   var candidateRoots: @Sendable (_ home: URL, _ cwd: URL?, _ processStartedAt: Date, _ now: Date) -> [URL] = {
@@ -93,12 +99,15 @@ nonisolated extension AgentSessionProfile {
   fileprivate static let gemini = AgentSessionProfile(
     parsePath: { path in
       let url = URL(fileURLWithPath: path)
-      guard path.contains("/.gemini/tmp/"), path.contains("/chats/"), url.pathExtension == "jsonl" else { return nil }
+      guard path.contains("/.gemini/tmp/"), path.contains("/chats/"), url.pathExtension == "jsonl",
+        url.lastPathComponent.hasPrefix("session-")
+      else { return nil }
       guard let id = url.deletingPathExtension().lastPathComponent.split(separator: "-").last.map(String.init),
         !id.isEmpty
       else { return nil }
       return AgentSession(id: id, transcriptPath: url, source: .recentFile)
     },
+    headerSessionIDKeys: ["sessionId"],
     candidateRoots: { home, cwd, _, _ in
       guard let cwd else { return [home.appending(path: ".gemini/tmp")] }
       let tmp = home.appending(path: ".gemini/tmp")
@@ -289,10 +298,22 @@ nonisolated extension AgentSessionProfile {
     path.replacing("/", with: "-")
   }
 
-  /// Claude Code's project-directory rule: every character outside
-  /// `[A-Za-z0-9]` becomes `-` (verified: `/a/b_c.d` → `-a-b-c-d`).
+  /// Claude Code's project-directory rule: every UTF-16 code unit outside
+  /// `[A-Za-z0-9]` becomes `-`. Code-unit (not Character) semantics match the
+  /// JavaScript `replace(/[^a-zA-Z0-9]/g, "-")`: a surrogate-pair emoji yields
+  /// TWO dashes (verified live: `…-🐱-café` → `…----caf-`). File URLs decompose
+  /// accented characters (NFD) while Node keeps the shell's precomposed form,
+  /// so normalize to NFC first; NFD-named directories stay unresolved, which
+  /// is the safe direction.
   fileprivate static func alphanumericDashed(_ path: String) -> String {
-    String(path.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
+    String(
+      path.precomposedStringWithCanonicalMapping.utf16.map { unit -> Character in
+        let isAlphanumeric =
+          (unit >= 0x30 && unit <= 0x39) || (unit >= 0x41 && unit <= 0x5A) || (unit >= 0x61 && unit <= 0x7A)
+        guard isAlphanumeric, let scalar = UnicodeScalar(unit) else { return "-" }
+        return Character(scalar)
+      }
+    )
   }
 
   fileprivate static func md5Hex(_ value: String) -> String {
@@ -307,13 +328,17 @@ nonisolated extension AgentSessionProfile {
   /// start through today. Long-lived processes fall back to the full root
   /// instead of enumerating an unbounded directory list.
   fileprivate static func dayDirectories(root: URL, from processStartedAt: Date, to now: Date, cap: Int = 32) -> [URL] {
-    let calendar = Calendar.current
+    let calendar = Calendar(identifier: .gregorian)
     let start = calendar.startOfDay(for: processStartedAt.addingTimeInterval(-86_400))
     let end = calendar.startOfDay(for: now)
     guard let span = calendar.dateComponents([.day], from: start, to: end).day, span >= 0, span < cap else {
       return []
     }
     let formatter = DateFormatter()
+    // Codex writes Gregorian day directories; pin locale and calendar so a
+    // Buddhist or Japanese system calendar cannot derail the narrow scan.
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
     formatter.dateFormat = "yyyy/MM/dd"
     return (0...span).compactMap { offset in
       calendar.date(byAdding: .day, value: offset, to: start).map { root.appending(path: formatter.string(from: $0)) }
