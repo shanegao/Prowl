@@ -105,6 +105,18 @@ actor AgentSessionResolver {
     return min(15, base * TimeInterval(1 << min(unresolvedStreak, 4)))
   }
 
+  /// resolved → ambiguous starts a new unresolved episode at streak 0 (the
+  /// first retry keeps the fast pacing, e.g. right after `/clear`); only
+  /// consecutive unresolved results escalate the backoff.
+  nonisolated static func nextUnresolvedStreak(
+    resolvedNow: Bool,
+    previousWasUnresolved: Bool,
+    previousStreak: Int
+  ) -> Int {
+    guard !resolvedNow, previousWasUnresolved else { return 0 }
+    return previousStreak + 1
+  }
+
   /// A sole process-lifetime candidate is only trusted after two consecutive
   /// resolutions agree on it. A pane that starts in a directory where another
   /// agent is actively writing can otherwise adopt that agent's session during
@@ -176,10 +188,12 @@ actor AgentSessionResolver {
       resolvedAt: now,
       session: session,
       usedWideScan: usedWideScan,
-      // A pending sole confirmation retries fast instead of backing off; the
-      // first unresolved result starts at streak 0 so the initial retry keeps
-      // the documented 1 s (narrow) / 8 s (wide) pacing.
-      unresolvedStreak: session == nil && provisionalID == nil ? cached.map { $0.unresolvedStreak + 1 } ?? 0 : 0,
+      // A pending sole confirmation retries fast instead of backing off.
+      unresolvedStreak: Self.nextUnresolvedStreak(
+        resolvedNow: session != nil || provisionalID != nil,
+        previousWasUnresolved: cached.map { $0.session == nil && $0.provisionalSoleID == nil } ?? false,
+        previousStreak: cached?.unresolvedStreak ?? 0
+      ),
       provisionalSoleID: provisionalID
     )
     if cache.count > 128 {
@@ -276,11 +290,12 @@ actor AgentSessionResolver {
     return unique.count == 1 ? unique.values.first : nil
   }
 
-  private func recentCandidates(
+  func recentCandidates(
     profile: AgentSessionProfile,
     processStartedAt: Date,
     workingDirectory: URL?,
-    now: Date
+    now: Date,
+    visitLimit: Int = 20_000
   ) -> (candidates: [AgentSessionCandidate], usedWideScan: Bool) {
     let cwdVariants = workingDirectoryVariants(workingDirectory)
     let threshold = processStartedAt.addingTimeInterval(-2)
@@ -292,13 +307,30 @@ actor AgentSessionResolver {
         primaryRoots.append(root)
       }
     }
-    let primary = scanCandidates(in: primaryRoots, profile: profile, processStartedAt: processStartedAt) ?? []
+    guard
+      let primary = scanCandidates(
+        in: primaryRoots,
+        profile: profile,
+        processStartedAt: processStartedAt,
+        visitLimit: visitLimit
+      )
+    else {
+      // A truncated primary scan voids this whole round: the fallback tree is
+      // a superset and would only repeat the oversized enumeration. Report it
+      // as a wide scan so the retry backs off at the slow tier.
+      return ([], true)
+    }
     let combined = primary + stored.uniquedBySessionID()
     guard combined.isEmpty else { return (combined, false) }
     let fallbackRoots = profile.fallbackRoots(homeDirectory, workingDirectory)
     guard !fallbackRoots.isEmpty else { return ([], false) }
-    let fallback = scanCandidates(in: fallbackRoots, profile: profile, processStartedAt: processStartedAt) ?? []
-    return (fallback, true)
+    let fallback = scanCandidates(
+      in: fallbackRoots,
+      profile: profile,
+      processStartedAt: processStartedAt,
+      visitLimit: visitLimit
+    )
+    return (fallback ?? [], true)
   }
 
   /// The pane reports the shell's logical `$PWD` while agents usually record

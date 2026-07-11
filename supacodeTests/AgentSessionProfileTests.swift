@@ -404,6 +404,74 @@ struct AgentSessionProfileTests {
     #expect(candidates?.map(\.session.id) == ["23ce3e98-af90-4d5c-8b83-ffcc258dff2b"])
   }
 
+  @Test func truncatedPrimaryScanSkipsFallbackEntirely() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-trunc-fb-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let primaryDir = root.appending(path: "primary")
+    let fallbackDir = root.appending(path: "fallback")
+    try FileManager.default.createDirectory(at: primaryDir, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: fallbackDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    // Primary trips the visit limit; the fallback holds ONE cleanly parsable
+    // session below the limit. If a truncated primary scan wrongly proceeded
+    // to the fallback, this candidate would surface — the assertion below
+    // would catch it.
+    for index in 0..<4 {
+      try "{}".write(
+        to: primaryDir.appending(path: "0000000\(index)-1111-2222-3333-444444444444.jsonl"),
+        atomically: true,
+        encoding: .utf8
+      )
+    }
+    try "{}".write(
+      to: fallbackDir.appending(path: "99999999-1111-2222-3333-444444444444.jsonl"),
+      atomically: true,
+      encoding: .utf8
+    )
+    let profile = AgentSessionProfile(
+      parsePath: { path in
+        let url = URL(fileURLWithPath: path)
+        guard url.pathExtension == "jsonl" else { return nil }
+        return AgentSession(
+          id: url.deletingPathExtension().lastPathComponent,
+          transcriptPath: url,
+          source: .recentFile
+        )
+      },
+      candidateRoots: { _, _, _, _ in [primaryDir] },
+      fallbackRoots: { _, _ in [fallbackDir] }
+    )
+
+    let resolver = AgentSessionResolver()
+    let result = await resolver.recentCandidates(
+      profile: profile,
+      processStartedAt: .distantPast,
+      workingDirectory: nil,
+      now: .now,
+      visitLimit: 3
+    )
+    #expect(result.candidates.isEmpty)
+    #expect(result.usedWideScan)
+  }
+
+  @Test func unresolvedStreakResetsWhenAResolvedSessionTurnsAmbiguous() {
+    // resolved → ambiguous starts a NEW unresolved episode at streak 0 so the
+    // first retry keeps the documented 1 s / 8 s pacing (e.g. right after
+    // /clear); only consecutive unresolved results escalate.
+    #expect(
+      AgentSessionResolver.nextUnresolvedStreak(resolvedNow: true, previousWasUnresolved: false, previousStreak: 5) == 0
+    )
+    #expect(
+      AgentSessionResolver.nextUnresolvedStreak(resolvedNow: false, previousWasUnresolved: false, previousStreak: 0)
+        == 0)
+    #expect(
+      AgentSessionResolver.nextUnresolvedStreak(resolvedNow: false, previousWasUnresolved: true, previousStreak: 0) == 1
+    )
+    #expect(
+      AgentSessionResolver.nextUnresolvedStreak(resolvedNow: false, previousWasUnresolved: true, previousStreak: 3) == 4
+    )
+  }
+
   // MARK: - Cache pacing
 
   @Test func unresolvedLookupsBackOffExponentially() {
