@@ -121,9 +121,18 @@ extension WorktreeTerminalState {
       seen = previous.seen
     }
     let iconLookupToken = identified?.name ?? previous.iconLookupToken ?? agent.iconLookupToken
+    let workingDirectory = activeAgentWorkingDirectory(surfaceID: surfaceID)
+    let session = await resolveAgentSession(
+      identified: identified,
+      previous: previous,
+      workingDirectory: workingDirectory,
+      activeText: activeText
+    )
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
     let next = PaneAgentState(
       detectedAgent: agent,
+      agentProcessID: identified?.process.pid,
+      session: session,
       iconLookupToken: iconLookupToken,
       fallbackState: raw,
       state: stabilized,
@@ -153,6 +162,21 @@ extension WorktreeTerminalState {
     updateTabAgentBusyState(for: tabId)
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
     return true
+  }
+
+  private func resolveAgentSession(
+    identified: IdentifiedAgentProcess?,
+    previous: PaneAgentState,
+    workingDirectory: URL?,
+    activeText: String
+  ) async -> AgentSession? {
+    guard let identified else { return nil }
+    let resolved = await AgentSessionResolver.shared.resolve(
+      identified: identified,
+      workingDirectory: workingDirectory,
+      activeText: activeText
+    )
+    return resolved ?? (previous.agentProcessID == identified.process.pid ? previous.session : nil)
   }
 
   func markAgentSeen(surfaceID: UUID) {
@@ -228,6 +252,7 @@ extension WorktreeTerminalState {
       paneIndex: paneIndex,
       iconLookupToken: state.iconLookupToken ?? agent.iconLookupToken,
       agent: agent,
+      session: state.session,
       rawState: state.fallbackState,
       displayState: state.displayState,
       lastChangedAt: state.lastChangedAt

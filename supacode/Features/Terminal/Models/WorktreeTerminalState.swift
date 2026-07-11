@@ -47,7 +47,7 @@ struct AgentDetectionDiagnostic {
   let childPID: pid_t?
   let processGroupID: pid_t?
   let job: ForegroundJob?
-  let identified: (agent: DetectedAgent, name: String)?
+  let identified: IdentifiedAgentProcess?
   let retainedAgent: DetectedAgent?
   let raw: AgentRawState?
   let stabilized: AgentRawState?

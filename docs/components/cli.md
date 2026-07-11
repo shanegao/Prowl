@@ -101,6 +101,9 @@ Each agent contains:
   agent's working directory.
 - `worktree`, `tab`, `pane`: the actual terminal owner and pane metadata for
   automation.
+- `session`: optional native agent session metadata. When resolved, it contains
+  `id`, local transcript `path`, `confidence` (`exact`, `high`, or `medium`),
+  and the evidence `source`. Ambiguous sessions are omitted instead of guessed.
 
 `prowl agents` is read-only. To jump to or operate on an agent, resolve
 `.data.agents[].pane.id`, then use existing commands:

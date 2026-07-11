@@ -534,7 +534,13 @@ final class ProwlCLIIntegrationTests: XCTestCase {
             status: "done",
             projectName: "Prowl",
             branch: "main",
-            tabTitle: "Done tab"
+            tabTitle: "Done tab",
+            session: AgentsResponseSession(
+              id: "019f4e9e-1234-4567-89ab-0123456789ab",
+              path: "/Users/me/.codex/sessions/rollout.jsonl",
+              confidence: "exact",
+              source: "open_file"
+            )
           ),
           makeAgentResponse(
             id: "blocked-pane",
@@ -572,6 +578,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(lines[0].contains("blocked-pane"), "Missing pane id: \(result.stdout)")
     XCTAssertTrue(lines[1].contains("Working"), "Expected working second: \(result.stdout)")
     XCTAssertTrue(lines[2].contains("Done"), "Expected done third: \(result.stdout)")
+    XCTAssertTrue(lines[2].contains("session=019f4e9e-1234-4567-89ab-0123456789ab [exact]"))
   }
 
   func testAgentsEmptyPayloadShowsNoAgentsFound() throws {
@@ -1574,7 +1581,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     status: String,
     projectName: String,
     branch: String,
-    tabTitle: String
+    tabTitle: String,
+    session: AgentsResponseSession? = nil
   ) -> AgentsResponseAgent {
     AgentsResponseAgent(
       id: id,
@@ -1592,7 +1600,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         kind: "git"
       ),
       tab: ListTab(id: "\(id)-tab", title: tabTitle, selected: true),
-      pane: AgentsResponsePane(id: id, index: 1, title: name, cwd: "/Projects/\(projectName)", focused: false)
+      pane: AgentsResponsePane(id: id, index: 1, title: name, cwd: "/Projects/\(projectName)", focused: false),
+      session: session
     )
   }
 
@@ -1814,6 +1823,7 @@ private struct AgentsResponseAgent: Encodable {
     case worktree
     case tab
     case pane
+    case session
   }
 
   let rawState: String
@@ -1822,6 +1832,14 @@ private struct AgentsResponseAgent: Encodable {
   let worktree: ListWorktree
   let tab: ListTab
   let pane: AgentsResponsePane
+  let session: AgentsResponseSession?
+}
+
+private struct AgentsResponseSession: Encodable {
+  let id: String
+  let path: String?
+  let confidence: String
+  let source: String
 }
 
 private struct AgentsResponseProject: Encodable {

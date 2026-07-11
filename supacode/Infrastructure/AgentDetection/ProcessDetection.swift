@@ -154,6 +154,47 @@ nonisolated enum ProcessDetection {
     return result == Int32(size) ? info : nil
   }
 
+  static func processStartDate(pid: pid_t) -> Date? {
+    guard let info = processBSDInfo(pid: pid), info.pbi_start_tvsec > 0 else { return nil }
+    return Date(
+      timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec)
+        + TimeInterval(info.pbi_start_tvusec) / 1_000_000
+    )
+  }
+
+  static func openFilePaths(pid: pid_t) -> [String] {
+    guard pid > 0 else { return [] }
+    var capacity = 256
+    var descriptors: [proc_fdinfo] = []
+    var count = 0
+    while capacity <= 4_096 {
+      descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: capacity)
+      let filled = descriptors.withUnsafeMutableBytes { buffer in
+        proc_pidinfo(pid, PROC_PIDLISTFDS, 0, buffer.baseAddress, Int32(buffer.count))
+      }
+      guard filled > 0 else { return [] }
+      count = Int(filled) / MemoryLayout<proc_fdinfo>.stride
+      if count < capacity { break }
+      capacity *= 2
+    }
+
+    return descriptors.prefix(count).compactMap { descriptor -> String? in
+      guard descriptor.proc_fdtype == PROX_FDTYPE_VNODE else { return nil }
+      var info = vnode_fdinfowithpath()
+      let size = MemoryLayout<vnode_fdinfowithpath>.size
+      let result = withUnsafeMutablePointer(to: &info) { pointer in
+        proc_pidfdinfo(pid, descriptor.proc_fd, PROC_PIDFDVNODEPATHINFO, pointer, Int32(size))
+      }
+      guard result > 0 else { return nil }
+      return withUnsafeBytes(of: info.pvip.vip_path) { rawBuffer -> String? in
+        let bytes = rawBuffer.bindMemory(to: UInt8.self)
+        let end = bytes.firstIndex(of: 0) ?? bytes.endIndex
+        guard end > bytes.startIndex else { return nil }
+        return String(bytes: bytes[..<end], encoding: .utf8)
+      }
+    }
+  }
+
   static func comm(from info: proc_bsdinfo) -> String? {
     let bytes = withUnsafeBytes(of: info.pbi_comm) { rawBuffer -> [UInt8] in
       Array(rawBuffer)

@@ -20,6 +20,7 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
   /// `agent` for aliases that share one semantic agent, e.g. `omp` vs `pi`.
   let iconLookupToken: String
   let agent: DetectedAgent
+  var session: AgentSession?
   let rawState: AgentRawState
   let displayState: AgentDisplayState
   let lastChangedAt: Date

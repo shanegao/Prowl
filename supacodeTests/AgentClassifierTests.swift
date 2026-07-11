@@ -45,6 +45,7 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .pi)
     #expect(result.name == "omp")
+    #expect(result.process.pid == 100)
   }
 
   @Test func identifiesCursorAgentAliasCommandLines() throws {
@@ -158,5 +159,6 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .claude)
     #expect(result.name == "claude")
+    #expect(result.process.pid == 101)
   }
 }

@@ -2,6 +2,8 @@ import Foundation
 
 struct PaneAgentState: Equatable, Sendable {
   var detectedAgent: DetectedAgent?
+  var agentProcessID: pid_t?
+  var session: AgentSession?
   var iconLookupToken: String?
   var fallbackState: AgentRawState
   var state: AgentRawState
@@ -10,6 +12,8 @@ struct PaneAgentState: Equatable, Sendable {
 
   init(
     detectedAgent: DetectedAgent? = nil,
+    agentProcessID: pid_t? = nil,
+    session: AgentSession? = nil,
     iconLookupToken: String? = nil,
     fallbackState: AgentRawState = .unknown,
     state: AgentRawState = .unknown,
@@ -17,6 +21,8 @@ struct PaneAgentState: Equatable, Sendable {
     lastChangedAt: Date = Date()
   ) {
     self.detectedAgent = detectedAgent
+    self.agentProcessID = agentProcessID
+    self.session = session
     self.iconLookupToken = iconLookupToken
     self.fallbackState = fallbackState
     self.state = state
