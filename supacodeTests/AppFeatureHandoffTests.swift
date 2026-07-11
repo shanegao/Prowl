@@ -78,13 +78,26 @@ struct AppFeatureHandoffTests {
     #expect(ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
   }
 
-  @Test func nonWorkspaceHidesHandoffCommands() {
-    let rootURL = URL(fileURLWithPath: "/tmp/plain-repo")
+  @Test func regularGitWorktreeShowsHandoffCommands() {
+    let repositories = makeGitWorktreeState(
+      repositoryRoot: URL(fileURLWithPath: "/tmp/repo"),
+      worktreeRoot: URL(fileURLWithPath: "/tmp/repo-feature")
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: repositories)
+    let ids = items.map(\.id)
+
+    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("claude")))
+    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
+  }
+
+  @Test func plainFolderShowsHandoffCommands() {
+    let rootURL = URL(fileURLWithPath: "/tmp/plain-folder")
     let repo = Repository(
       id: rootURL.path,
       rootURL: rootURL,
       name: "Plain",
-      kind: .git,
+      kind: .plain,
       worktrees: IdentifiedArray(uniqueElements: [])
     )
     var repositories = RepositoriesFeature.State()
@@ -94,8 +107,8 @@ struct AppFeatureHandoffTests {
     let items = CommandPaletteFeature.commandPaletteItems(from: repositories)
     let ids = items.map(\.id)
 
-    #expect(!ids.contains(CommandPaletteItemID.handoffToAgent("claude")))
-    #expect(!ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
+    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("claude")))
+    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
   }
 
   // MARK: - Delegate launches the receiving agent

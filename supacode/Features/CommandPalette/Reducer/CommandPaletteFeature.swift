@@ -537,9 +537,9 @@ private func customCommandItems(_ commands: [UserCustomCommand]) -> [CommandPale
   }
 }
 
-/// Hand-off actions, shown only when the selected runnable target is a workspace.
+/// Hand-off actions for any selected runnable target.
 private func handoffCommandItems(_ repositories: RepositoriesFeature.State) -> [CommandPaletteItem] {
-  guard repositories.selectedRepository?.isWorkspace == true else { return [] }
+  guard repositories.selectedTerminalWorktree != nil else { return [] }
   return [
     handoffCommandItem(agent: "claude", title: "Hand off → Claude Code"),
     handoffCommandItem(agent: "codex", title: "Hand off → Codex"),

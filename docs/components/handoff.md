@@ -1,6 +1,6 @@
 # Handoff — Agent To Agent
 
-> How to hand a task off between coding agents inside a Prowl workspace: a durable
+> How to hand a task off between coding agents inside a Prowl runnable target: a durable
 > artifact agents read and write, an auto-captured session excerpt, the
 > `prowl handoff` command, and a command-palette action.
 
@@ -61,12 +61,12 @@ confidence.
 ## The protocol
 
 For both agents to follow the same contract natively, put these instructions in
-the workspace root's `AGENTS.md` (Codex reads it) **and** `CLAUDE.md` (Claude Code
+the target root's `AGENTS.md` (Codex reads it) **and** `CLAUDE.md` (Claude Code
 reads it):
 
 ```markdown
-## Handoff protocol (this is a Prowl workspace)
-- On start: read `.prowl/handoff/current.md`, `.prowl/handoff/context.md`, and `.prowl/workspace.json`. Continue from "Next Steps".
+## Handoff protocol (this is a Prowl runnable target)
+- On start: read `.prowl/handoff/current.md`, `.prowl/handoff/context.md`, and `.prowl/workspace.json` if present. Continue from "Next Steps".
 - Before you stop or hand off: update `.prowl/handoff/current.md` so another agent can resume cold.
 - To hand the task to another agent, run:  `prowl handoff to <agent>`.
 - Never commit/push or run destructive git unless asked. Do not put secrets in the handoff file.
@@ -105,11 +105,10 @@ for targets that have never run `prowl handoff save` or `prowl handoff to`.
 
 ## From the command palette
 
-In a workspace, the Command Palette (`⌘P`) offers **Hand off → Claude Code** and
-**Hand off → Codex**. Selecting one refreshes + archives the handoff artifact and
-launches the receiving agent in a new tab — the GUI equivalent of
-`prowl handoff to`. These actions appear only when the selected runnable target is
-a workspace.
+For any selected workspace, git repository, worktree, or plain folder, the
+Command Palette (`⌘P`) offers **Hand off → Claude Code** and **Hand off → Codex**.
+Selecting one refreshes + archives the handoff artifact and launches the
+receiving agent in a new tab — the GUI equivalent of `prowl handoff to`.
 
 ## Safety
 
@@ -130,8 +129,9 @@ a workspace.
 
 ## Gotchas
 
-- Handoff is workspace-centric; in a plain git worktree the same `.prowl/handoff/`
-  works but generated context covers just that one repo.
+- Workspaces aggregate generated context across their child repositories. A
+  regular repository or worktree covers just that repo; a plain folder omits git
+  branch and diff details.
 - The artifact's prose is only as good as what the outgoing agent wrote — the
   protocol in `AGENTS.md`/`CLAUDE.md` is what keeps it honest.
 - Launching uses the interactive agent (so you can step in); don't use
