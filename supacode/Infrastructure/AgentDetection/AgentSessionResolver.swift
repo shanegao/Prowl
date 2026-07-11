@@ -456,10 +456,12 @@ nonisolated enum AgentSessionFingerprintMatcher {
         // whole tail instead of just the cut first line.
         // swiftlint:disable:next optional_data_string_conversion
         let fragments = transcriptStrings(String(decoding: data, as: UTF8.self))
-        if !fragments.isEmpty { sessionScoreable = true }
-        let score = fragments.reduce(0) { best, fragment in
-          let normalized = normalize(fragment)
-          guard normalized.count >= 12 else { return best }
+        // Scoreable means the session produced at least one fragment long
+        // enough to actually enter the comparison — fragments below the floor
+        // ("OK") are no testimony at all.
+        let comparable = fragments.map(normalize).filter { $0.count >= 12 }
+        if !comparable.isEmpty { sessionScoreable = true }
+        let score = comparable.reduce(0) { best, normalized in
           if screen.contains(normalized) { return max(best, min(200, normalized.count + 80)) }
           let suffix = String(normalized.suffix(80))
           return suffix.count >= 24 && screen.contains(suffix) ? max(best, suffix.count) : best

@@ -236,6 +236,37 @@ struct AgentSessionProfileTests {
     #expect(match == nil)
   }
 
+  @Test func fingerprintRefusesWhenACompetitorHasOnlyShortFragments() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-short-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    // Session B parses cleanly but only yields fragments below the 12-char
+    // comparison floor ("OK"): it never actually testified, so it must block
+    // uniqueness exactly like an unreadable session.
+    let aURL = root.appending(path: "a.jsonl")
+    try #"{"message":{"content":"Shared prompt visible on both panes right now."}}"#
+      .write(to: aURL, atomically: true, encoding: .utf8)
+    let bURL = root.appending(path: "b.jsonl")
+    try #"{"message":{"content":"OK"}}"#.write(to: bURL, atomically: true, encoding: .utf8)
+    let candidates = [
+      AgentSessionCandidate(
+        session: AgentSession(id: "session-a", transcriptPath: aURL, source: .recentFile),
+        modifiedAt: Date(timeIntervalSince1970: 2_000)
+      ),
+      AgentSessionCandidate(
+        session: AgentSession(id: "session-b", transcriptPath: bURL, source: .recentFile),
+        modifiedAt: Date(timeIntervalSince1970: 2_001)
+      ),
+    ]
+
+    let match = AgentSessionFingerprintMatcher.bestMatch(
+      activeText: "Shared prompt visible on both panes right now.",
+      candidates: candidates
+    )
+    #expect(match == nil)
+  }
+
   @Test func fingerprintSurvivesTailCutInsideMultibyteCharacter() throws {
     let root = FileManager.default.temporaryDirectory
       .appending(path: "prowl-utf8-\(UUID().uuidString)", directoryHint: .isDirectory)
