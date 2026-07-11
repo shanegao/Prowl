@@ -128,6 +128,10 @@ extension WorktreeTerminalState {
       workingDirectory: workingDirectory,
       activeText: activeText
     )
+    // Re-check after the suspension: the pane may have been closed and its
+    // agent state cleaned up while the resolver was doing file inspection;
+    // writing below would resurrect a ghost Active Agents entry.
+    guard surfaces[surfaceID] != nil else { return false }
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
     let next = PaneAgentState(
       detectedAgent: agent,

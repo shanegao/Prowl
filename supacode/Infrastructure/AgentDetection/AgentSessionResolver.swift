@@ -4,6 +4,8 @@ nonisolated struct AgentSession: Equatable, Sendable {
   enum Source: String, Equatable, Sendable {
     case commandLine = "command_line"
     case openFile = "open_file"
+    case processLog = "process_log"
+    case storeRecord = "store_record"
     case transcriptMatch = "transcript_match"
     case recentFile = "recent_file"
   }
@@ -36,76 +38,26 @@ nonisolated struct AgentSessionCandidate: Equatable, Sendable {
   let session: AgentSession
   let modifiedAt: Date
 
+  /// The sole session active during the process lifetime, or nil when zero or
+  /// several distinct sessions qualify. Grouping by session id keeps layouts
+  /// with several files per session (Kimi, Cline, Copilot) resolvable.
   nonisolated static func uniqueActiveCandidate(
     _ candidates: [Self],
     processStartedAt: Date,
     clockSkew: TimeInterval = 2
   ) -> Self? {
     let active = candidates.filter { $0.modifiedAt >= processStartedAt.addingTimeInterval(-clockSkew) }
-    return active.count == 1 ? active[0] : nil
+    let sessions = Dictionary(grouping: active) { $0.session.id }
+    guard sessions.count == 1, let group = sessions.values.first else { return nil }
+    return group.max { $0.modifiedAt < $1.modifiedAt }
   }
 }
 
+/// Compatibility shim over the per-agent profiles; the actual rules live in
+/// `AgentSessionProfile`.
 nonisolated enum AgentSessionPathParser {
   static func parse(path: String, agent: DetectedAgent) -> AgentSession? {
-    let url = URL(fileURLWithPath: path)
-    let id = sessionID(path: path, url: url, agent: agent)
-    guard let id, !id.isEmpty else { return nil }
-    return AgentSession(id: id, transcriptPath: url, source: .recentFile)
-  }
-
-  private static func sessionID(path: String, url: URL, agent: DetectedAgent) -> String? {
-    switch agent {
-    case .codex: uuidJSONL(path: path, marker: "/.codex/sessions/", url: url)
-    case .claude: uuidJSONL(path: path, marker: "/.claude/projects/", url: url)
-    case .pi: uuidJSONL(path: path, marker: "/.pi/agent/sessions/", url: url)
-    case .gemini: geminiID(path: path, url: url)
-    case .cursor: parentID(path: path, marker: "/.cursor/chats/", filename: "store.db", url: url)
-    case .cline: markedComponent(path: path, marker: "/.cline/data/tasks/", component: "tasks", url: url)
-    case .copilot:
-      markedComponent(path: path, marker: "/.copilot/session-state/", component: "session-state", url: url)
-    case .kimi: kimiID(path: path, url: url)
-    case .droid: uuidJSONL(path: path, marker: "/.factory/sessions/", url: url)
-    case .opencode, .amp, .qwen: nil
-    }
-  }
-
-  private static func uuidJSONL(path: String, marker: String, url: URL) -> String? {
-    guard path.contains(marker), url.pathExtension == "jsonl" else { return nil }
-    return uuid(in: url.deletingPathExtension().lastPathComponent)
-  }
-
-  private static func geminiID(path: String, url: URL) -> String? {
-    guard path.contains("/.gemini/tmp/"), path.contains("/chats/"), url.pathExtension == "jsonl" else { return nil }
-    return url.deletingPathExtension().lastPathComponent.split(separator: "-").last.map(String.init)
-  }
-
-  private static func parentID(path: String, marker: String, filename: String, url: URL) -> String? {
-    guard path.contains(marker), url.lastPathComponent == filename else { return nil }
-    return url.pathComponents.dropLast().last
-  }
-
-  private static func markedComponent(path: String, marker: String, component: String, url: URL) -> String? {
-    guard path.contains(marker) else { return nil }
-    return self.component(after: component, in: url.pathComponents)
-  }
-
-  private static func kimiID(path: String, url: URL) -> String? {
-    guard path.contains("/.kimi/sessions/") else { return nil }
-    let components = url.pathComponents
-    guard let index = components.firstIndex(of: "sessions"), components.count > index + 2 else { return nil }
-    return components[index + 2]
-  }
-
-  private static func uuid(in value: String) -> String? {
-    let pattern = #"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"#
-    guard let range = value.range(of: pattern, options: .regularExpression) else { return nil }
-    return String(value[range]).lowercased()
-  }
-
-  private static func component(after marker: String, in components: [String]) -> String? {
-    guard let index = components.firstIndex(of: marker), components.indices.contains(index + 1) else { return nil }
-    return components[index + 1]
+    AgentSessionProfile.profile(for: agent).parsePath(path)
   }
 }
 
@@ -152,7 +104,8 @@ actor AgentSessionResolver {
       identified: identified,
       processStartedAt: startedAt,
       workingDirectory: workingDirectory,
-      activeText: activeText
+      activeText: activeText,
+      now: now
     )
     cache[key] = CachedResult(resolvedAt: now, session: session)
     if cache.count > 128 {
@@ -165,10 +118,13 @@ actor AgentSessionResolver {
     identified: IdentifiedAgentProcess,
     processStartedAt: Date,
     workingDirectory: URL?,
-    activeText: String
+    activeText: String,
+    now: Date
   ) -> AgentSession? {
+    let profile = AgentSessionProfile.profile(for: identified.agent)
+
     let openSessions = ProcessDetection.openFilePaths(pid: identified.process.pid)
-      .compactMap { AgentSessionPathParser.parse(path: $0, agent: identified.agent) }
+      .compactMap { profile.parsePath($0) }
     if let session = uniqueSession(openSessions) {
       return AgentSession(
         id: session.id,
@@ -177,6 +133,11 @@ actor AgentSessionResolver {
         confidence: .exact
       )
     }
+
+    if let session = profile.pidKeyedSession?(homeDirectory, identified.process.pid, processStartedAt) {
+      return session
+    }
+
     let openCandidates = openSessions.compactMap { session -> AgentSessionCandidate? in
       guard let path = session.transcriptPath,
         let attributes = try? fileManager.attributesOfItem(atPath: path.path),
@@ -197,9 +158,10 @@ actor AgentSessionResolver {
     }
 
     let candidates = recentCandidates(
-      agent: identified.agent,
+      profile: profile,
+      processStartedAt: processStartedAt,
       workingDirectory: workingDirectory,
-      processStartedAt: processStartedAt
+      now: now
     )
     if let matched = AgentSessionFingerprintMatcher.bestMatch(activeText: activeText, candidates: candidates) {
       return AgentSession(
@@ -218,13 +180,35 @@ actor AgentSessionResolver {
   }
 
   private func recentCandidates(
-    agent: DetectedAgent,
+    profile: AgentSessionProfile,
+    processStartedAt: Date,
     workingDirectory: URL?,
+    now: Date
+  ) -> [AgentSessionCandidate] {
+    let stored =
+      profile.storeCandidates?(homeDirectory, workingDirectory, processStartedAt.addingTimeInterval(-2)) ?? []
+    let primary = candidates(
+      in: profile.candidateRoots(homeDirectory, workingDirectory, processStartedAt, now),
+      profile: profile,
+      processStartedAt: processStartedAt
+    )
+    let combined = primary + stored
+    guard combined.isEmpty else { return combined }
+    return candidates(
+      in: profile.fallbackRoots(homeDirectory, workingDirectory),
+      profile: profile,
+      processStartedAt: processStartedAt
+    )
+  }
+
+  private func candidates(
+    in roots: [URL],
+    profile: AgentSessionProfile,
     processStartedAt: Date
   ) -> [AgentSessionCandidate] {
-    candidateRoots(agent: agent, workingDirectory: workingDirectory).flatMap { root in
+    roots.flatMap { root in
       recentFiles(in: root, modifiedAfter: processStartedAt.addingTimeInterval(-2)).compactMap { item in
-        guard let session = AgentSessionPathParser.parse(path: item.url.path, agent: agent) else { return nil }
+        guard let session = profile.parsePath(item.url.path) else { return nil }
         let enriched =
           sessionIDFromHeader(at: item.url).map {
             AgentSession(id: $0, transcriptPath: item.url, source: .recentFile)
@@ -247,38 +231,6 @@ actor AgentSessionResolver {
       if let value = object[key] as? String, !value.isEmpty { return value }
     }
     return nil
-  }
-
-  private func candidateRoots(agent: DetectedAgent, workingDirectory: URL?) -> [URL] {
-    switch agent {
-    case .codex:
-      return [homeDirectory.appending(path: ".codex/sessions")]
-    case .claude:
-      guard let workingDirectory else { return [] }
-      return [homeDirectory.appending(path: ".claude/projects/\(encodedClaudePath(workingDirectory.path))")]
-    case .pi:
-      guard let workingDirectory else { return [] }
-      return [homeDirectory.appending(path: ".pi/agent/sessions/-\(encodedClaudePath(workingDirectory.path))--")]
-    case .gemini:
-      return [homeDirectory.appending(path: ".gemini/tmp")]
-    case .cursor:
-      return [homeDirectory.appending(path: ".cursor/chats")]
-    case .cline:
-      return [homeDirectory.appending(path: ".cline/data/tasks")]
-    case .copilot:
-      return [homeDirectory.appending(path: ".copilot/session-state")]
-    case .kimi:
-      return [homeDirectory.appending(path: ".kimi/sessions")]
-    case .droid:
-      guard let workingDirectory else { return [] }
-      return [homeDirectory.appending(path: ".factory/sessions/\(encodedClaudePath(workingDirectory.path))")]
-    case .opencode, .amp, .qwen:
-      return []
-    }
-  }
-
-  private func encodedClaudePath(_ path: String) -> String {
-    path.replacing("/", with: "-")
   }
 
   private func recentFiles(in root: URL, modifiedAfter threshold: Date) -> [(url: URL, modifiedAt: Date)] {
@@ -323,11 +275,19 @@ nonisolated enum AgentSessionFingerprintMatcher {
         return suffix.count >= 24 && screen.contains(suffix) ? max(best, suffix.count) : best
       }
       return score > 0 ? (candidate, score) : nil
-    }.sorted { $0.1 > $1.1 }
+    }
 
-    guard let best = scored.first, best.1 >= 40 else { return nil }
-    if scored.count > 1, best.1 - scored[1].1 < 20 { return nil }
-    return best.0
+    // The margin rule guards against picking between *sessions* that look
+    // alike; files belonging to one session reinforce it instead of competing.
+    let sessions = Dictionary(grouping: scored) { $0.0.session.id }
+      .map { id, group in
+        (id: id, best: group.max { $0.1 < $1.1 }!)
+      }
+      .sorted { $0.best.1 > $1.best.1 }
+
+    guard let winner = sessions.first, winner.best.1 >= 40 else { return nil }
+    if sessions.count > 1, winner.best.1 - sessions[1].best.1 < 20 { return nil }
+    return winner.best.0
   }
 
   static func normalize(_ value: String) -> String {
