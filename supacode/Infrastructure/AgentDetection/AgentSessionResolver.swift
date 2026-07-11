@@ -446,22 +446,31 @@ nonisolated enum AgentSessionFingerprintMatcher {
     // an unexamined session could hold the same text.
     let bySession = Dictionary(grouping: candidates) { $0.session.id }
     guard bySession.count <= 12 else { return nil }
-    let recent = bySession.values.flatMap { group in
-      group.sorted { $0.modifiedAt > $1.modifiedAt }.prefix(2)
-    }
-    let scored = recent.compactMap { candidate -> (AgentSessionCandidate, Int)? in
-      guard let path = candidate.session.transcriptPath,
-        let data = tailData(at: path),
-        let text = String(data: data, encoding: .utf8)
-      else { return nil }
-      let score = transcriptStrings(text).reduce(0) { best, fragment in
-        let normalized = normalize(fragment)
-        guard normalized.count >= 12 else { return best }
-        if screen.contains(normalized) { return max(best, min(200, normalized.count + 80)) }
-        let suffix = String(normalized.suffix(80))
-        return suffix.count >= 24 && screen.contains(suffix) ? max(best, suffix.count) : best
+    var scored: [(AgentSessionCandidate, Int)] = []
+    for group in bySession.values {
+      var sessionScoreable = false
+      for candidate in group.sorted(by: { $0.modifiedAt > $1.modifiedAt }).prefix(2) {
+        guard let path = candidate.session.transcriptPath, let data = tailData(at: path) else { continue }
+        // Lossy decoding is deliberate: the tail window can start mid-character
+        // in a multi-byte transcript, and a failable conversion would void the
+        // whole tail instead of just the cut first line.
+        // swiftlint:disable:next optional_data_string_conversion
+        let fragments = transcriptStrings(String(decoding: data, as: UTF8.self))
+        if !fragments.isEmpty { sessionScoreable = true }
+        let score = fragments.reduce(0) { best, fragment in
+          let normalized = normalize(fragment)
+          guard normalized.count >= 12 else { return best }
+          if screen.contains(normalized) { return max(best, min(200, normalized.count + 80)) }
+          let suffix = String(normalized.suffix(80))
+          return suffix.count >= 24 && screen.contains(suffix) ? max(best, suffix.count) : best
+        }
+        if score > 0 { scored.append((candidate, score)) }
       }
-      return score > 0 ? (candidate, score) : nil
+      // A session that yields no comparable text at all (unreadable tail,
+      // oversized single-line JSON, no supported fields) might still be the
+      // real one; uniqueness cannot be declared over its silence. A scoreable
+      // session that merely scores zero HAS testified — it stays eliminable.
+      guard sessionScoreable else { return nil }
     }
 
     // The margin rule guards against picking between *sessions* that look

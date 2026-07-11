@@ -203,6 +203,64 @@ struct AgentSessionProfileTests {
     #expect(match == nil)
   }
 
+  @Test func fingerprintRefusesWhenACompetitorIsUnscoreable() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-unscoreable-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    // Session A scores against the screen; session B's transcript yields no
+    // comparable text at all (Cline-style oversized single-line JSON whose
+    // tail is a truncated fragment). B might be the real session, so no
+    // high-confidence uniqueness may be declared.
+    let aURL = root.appending(path: "a.jsonl")
+    try #"{"message":{"content":"Shared prompt visible on both panes right now."}}"#
+      .write(to: aURL, atomically: true, encoding: .utf8)
+    let bURL = root.appending(path: "b.json")
+    try #""tail_fragment_of_a_huge_single_line_json":true}]}"#
+      .write(to: bURL, atomically: true, encoding: .utf8)
+    let candidates = [
+      AgentSessionCandidate(
+        session: AgentSession(id: "session-a", transcriptPath: aURL, source: .recentFile),
+        modifiedAt: Date(timeIntervalSince1970: 2_000)
+      ),
+      AgentSessionCandidate(
+        session: AgentSession(id: "session-b", transcriptPath: bURL, source: .recentFile),
+        modifiedAt: Date(timeIntervalSince1970: 2_001)
+      ),
+    ]
+
+    let match = AgentSessionFingerprintMatcher.bestMatch(
+      activeText: "Shared prompt visible on both panes right now.",
+      candidates: candidates
+    )
+    #expect(match == nil)
+  }
+
+  @Test func fingerprintSurvivesTailCutInsideMultibyteCharacter() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-utf8-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    // A transcript larger than the 128 KiB tail window whose cut point lands
+    // inside a multi-byte character: lossy decoding must keep the intact
+    // trailing lines scoreable instead of voiding the whole tail.
+    let filler = #"{"message":{"content":"\#(String(repeating: "汉", count: 44_000))"}}"#
+    let match = #"{"message":{"content":"A perfectly distinctive closing message for this pane."}}"#
+    let url = root.appending(path: "big.jsonl")
+    try (filler + "\n" + match).write(to: url, atomically: true, encoding: .utf8)
+
+    let result = AgentSessionFingerprintMatcher.bestMatch(
+      activeText: "A perfectly distinctive closing message for this pane.",
+      candidates: [
+        AgentSessionCandidate(
+          session: AgentSession(id: "big", transcriptPath: url, source: .recentFile),
+          modifiedAt: .now
+        )
+      ]
+    )
+    #expect(result?.session.id == "big")
+  }
+
   // MARK: - Header enrichment stays per-profile
 
   @Test func headerEnrichmentNeverOverridesDirectoryDerivedIDs() throws {
