@@ -15,10 +15,12 @@ Resolution is anchored to the exact process selected by Active Agents. Evidence 
 2. **Pid-keyed artifacts** (`exact`, `process_log`): files that name the agent pid directly — Copilot's
    `logs/process-<epoch-ms>-<pid>.log` (containing "Registering foreground session: <uuid>") and Qwen's
    `<session>.runtime.json` sidecar (`{"pid": ..., "session_id": ...}`).
-3. **Transcript/screen correlation** (`high`, `transcript_match`): bounded tails of candidate transcripts (the 12
-   most recently modified) are compared with the pane's live text. Only a unique match with sufficient score and
-   margin wins; the margin rule applies between *distinct sessions* — several files of one session (Kimi, Cline,
-   Copilot) reinforce it instead of competing.
+3. **Transcript/screen correlation** (`high`, `transcript_match`): bounded tails of candidate transcripts are
+   compared with the pane's live text. The read budget is per session (freshest 2 files each, at most 12 distinct
+   sessions — beyond that uniqueness cannot be proven and no match is declared), so one chatty session can never
+   evict a competing one from the comparison. Only a unique match with sufficient score and margin wins; the margin
+   rule applies between *distinct sessions* — several files of one session (Kimi, Cline, Copilot) reinforce it
+   instead of competing.
 4. **Sole process-lifetime candidate** (`medium`, `recent_file` / `store_record`): storage roots (or OpenCode's sqlite
    `session` table) are filtered to entries modified during the process lifetime; a single distinct session id wins.
 
@@ -123,14 +125,18 @@ Implications:
 - Darwin inspection uses `proc_pidinfo` / `proc_pidfdinfo`; Prowl never shells out to `lsof`.
 - Results are cached per process lifetime. Unresolved lookups back off exponentially (1 s doubling to a 15 s cap;
   wide-root fallback scans start at 8 s), so a permanently ambiguous pane costs almost nothing. Directory enumeration
-  is additionally capped at 20 000 entries per scan (truncation logs a warning and degrades to "unresolved").
+  is capped at 20 000 entries per scan; a truncated enumeration voids the whole scan (unresolved) because a partial
+  view could otherwise declare a false unique candidate.
 - Open-descriptor evidence only counts descriptors opened for WRITING: agents transiently open other sessions
   read-only (resume pickers, history browsing) and a read FD must not claim a session.
 - A sole process-lifetime candidate (`medium`) is only adopted after two consecutive resolutions agree on it, and
   never when another live process already claimed the same session id — this closes the startup race where a new pane
   in a shared directory briefly sees only its sibling's session file.
-- A previously resolved session is retained through probe gaps, but at most two consecutive ambiguous resolutions on
-  the same process; after that it is dropped so a rotated-away id (`/clear`) cannot survive indefinitely.
+- A previously resolved session is retained through probe gaps and cache replays, but at most two consecutive FRESH
+  ambiguous resolutions on the same process; after that it is dropped so a rotated-away id (`/clear`) cannot survive
+  indefinitely. Resolver backoff replays are not new evidence and never age the retained session.
+- Gemini candidates additionally require a successful header read: the filename only carries an 8-hex prefix that
+  cannot be resumed, so a corrupt or partially written header drops the candidate instead of surfacing the prefix.
 - Header enrichment (replacing a path-derived id with a JSONL first-line field) is opt-in per profile and only Gemini
   uses it — its filenames carry a truncated id. Generic header sniffing is forbidden: event-stream layouts like
   Copilot's `events.jsonl` may expose unrelated ids at the top level.

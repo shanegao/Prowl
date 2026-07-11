@@ -63,6 +63,13 @@ nonisolated extension [AgentSessionCandidate] {
   }
 }
 
+/// Outcome of one resolver call: `isFresh` distinguishes a newly computed
+/// resolution from a cache replay during backoff.
+nonisolated struct AgentSessionResolution: Sendable {
+  let session: AgentSession?
+  let isFresh: Bool
+}
+
 /// Compatibility shim over the per-agent profiles; the actual rules live in
 /// `AgentSessionProfile`.
 nonisolated enum AgentSessionPathParser {
@@ -129,9 +136,11 @@ actor AgentSessionResolver {
     workingDirectory: URL?,
     activeText: String,
     now: Date = Date()
-  ) -> AgentSession? {
+  ) -> AgentSessionResolution {
     let process = identified.process
-    guard let startedAt = ProcessDetection.processStartDate(pid: process.pid) else { return nil }
+    guard let startedAt = ProcessDetection.processStartDate(pid: process.pid) else {
+      return AgentSessionResolution(session: nil, isFresh: true)
+    }
     let key = CacheKey(pid: process.pid, startedAt: startedAt)
     let cached = cache[key]
     if let cached {
@@ -140,7 +149,11 @@ actor AgentSessionResolver {
         usedWideScan: cached.usedWideScan,
         unresolvedStreak: cached.unresolvedStreak
       )
-      if now.timeIntervalSince(cached.resolvedAt) < lifetime { return cached.session }
+      if now.timeIntervalSince(cached.resolvedAt) < lifetime {
+        // Replayed cache hits are not new evidence; consumers must not age
+        // their sticky sessions on them.
+        return AgentSessionResolution(session: cached.session, isFresh: false)
+      }
     }
 
     let (resolved, usedWideScan) = resolveUncached(
@@ -163,8 +176,10 @@ actor AgentSessionResolver {
       resolvedAt: now,
       session: session,
       usedWideScan: usedWideScan,
-      // A pending sole confirmation retries fast instead of backing off.
-      unresolvedStreak: session == nil && provisionalID == nil ? (cached?.unresolvedStreak ?? 0) + 1 : 0,
+      // A pending sole confirmation retries fast instead of backing off; the
+      // first unresolved result starts at streak 0 so the initial retry keeps
+      // the documented 1 s (narrow) / 8 s (wide) pacing.
+      unresolvedStreak: session == nil && provisionalID == nil ? cached.map { $0.unresolvedStreak + 1 } ?? 0 : 0,
       provisionalSoleID: provisionalID
     )
     if cache.count > 128 {
@@ -172,7 +187,7 @@ actor AgentSessionResolver {
         ProcessDetection.processStartDate(pid: entry.key.pid) == entry.key.startedAt
       }
     }
-    return session
+    return AgentSessionResolution(session: session, isFresh: true)
   }
 
   /// A session id already resolved for a different live process cannot also
@@ -195,10 +210,12 @@ actor AgentSessionResolver {
 
     let openSessions = ProcessDetection.openFilePaths(pid: identified.process.pid)
       .compactMap { profile.parsePath($0) }
-      .map { session -> AgentSession in
+      .compactMap { session -> AgentSession? in
         guard let path = session.transcriptPath,
           let fullID = Self.sessionIDFromHeader(at: path, keys: profile.headerSessionIDKeys)
-        else { return session }
+        else {
+          return profile.requiresHeaderSessionID ? nil : session
+        }
         return AgentSession(id: fullID, transcriptPath: path, source: session.source)
       }
     if let session = uniqueSession(openSessions) {
@@ -275,12 +292,13 @@ actor AgentSessionResolver {
         primaryRoots.append(root)
       }
     }
-    let primary = candidates(in: primaryRoots, profile: profile, processStartedAt: processStartedAt)
+    let primary = scanCandidates(in: primaryRoots, profile: profile, processStartedAt: processStartedAt) ?? []
     let combined = primary + stored.uniquedBySessionID()
     guard combined.isEmpty else { return (combined, false) }
     let fallbackRoots = profile.fallbackRoots(homeDirectory, workingDirectory)
     guard !fallbackRoots.isEmpty else { return ([], false) }
-    return (candidates(in: fallbackRoots, profile: profile, processStartedAt: processStartedAt), true)
+    let fallback = scanCandidates(in: fallbackRoots, profile: profile, processStartedAt: processStartedAt) ?? []
+    return (fallback, true)
   }
 
   /// The pane reports the shell's logical `$PWD` while agents usually record
@@ -291,21 +309,47 @@ actor AgentSessionResolver {
     return resolved.path == cwd.path ? [cwd] : [cwd, resolved]
   }
 
-  private func candidates(
+  /// Scans `roots` for session files modified during the process lifetime.
+  /// Returns nil when any enumeration was truncated: an incomplete view could
+  /// declare a false unique candidate, and unresolved is the safe outcome.
+  func scanCandidates(
     in roots: [URL],
     profile: AgentSessionProfile,
-    processStartedAt: Date
-  ) -> [AgentSessionCandidate] {
-    roots.flatMap { root in
-      recentFiles(in: root, modifiedAfter: processStartedAt.addingTimeInterval(-2)).compactMap { item in
-        guard let session = profile.parsePath(item.url.path) else { return nil }
-        let enriched =
-          Self.sessionIDFromHeader(at: item.url, keys: profile.headerSessionIDKeys).map {
-            AgentSession(id: $0, transcriptPath: item.url, source: .recentFile)
-          } ?? session
-        return AgentSessionCandidate(session: enriched, modifiedAt: item.modifiedAt)
+    processStartedAt: Date,
+    visitLimit: Int = 20_000
+  ) -> [AgentSessionCandidate]? {
+    var collected: [AgentSessionCandidate] = []
+    for root in roots {
+      guard
+        let files = recentFiles(
+          in: root,
+          modifiedAfter: processStartedAt.addingTimeInterval(-2),
+          visitLimit: visitLimit
+        )
+      else { return nil }
+      for item in files {
+        guard let candidate = enrichedCandidate(for: item, profile: profile) else { continue }
+        collected.append(candidate)
       }
     }
+    return collected
+  }
+
+  private func enrichedCandidate(
+    for item: (url: URL, modifiedAt: Date),
+    profile: AgentSessionProfile
+  ) -> AgentSessionCandidate? {
+    guard let session = profile.parsePath(item.url.path) else { return nil }
+    if let fullID = Self.sessionIDFromHeader(at: item.url, keys: profile.headerSessionIDKeys) {
+      return AgentSessionCandidate(
+        session: AgentSession(id: fullID, transcriptPath: item.url, source: .recentFile),
+        modifiedAt: item.modifiedAt
+      )
+    }
+    // A profile that depends on the header (Gemini's filenames only carry a
+    // truncated id) must not surface the unusable path-derived id.
+    guard !profile.requiresHeaderSessionID else { return nil }
+    return AgentSessionCandidate(session: session, modifiedAt: item.modifiedAt)
   }
 
   nonisolated static func sessionIDFromHeader(at url: URL, keys: [String]) -> String? {
@@ -323,11 +367,13 @@ actor AgentSessionResolver {
     return nil
   }
 
+  /// Returns nil when the enumeration exceeded `visitLimit`: a partial view
+  /// must void the whole scan rather than feed uniqueness checks.
   private func recentFiles(
     in root: URL,
     modifiedAfter threshold: Date,
-    visitLimit: Int = 20_000
-  ) -> [(url: URL, modifiedAt: Date)] {
+    visitLimit: Int
+  ) -> [(url: URL, modifiedAt: Date)]? {
     guard
       let enumerator = fileManager.enumerator(
         at: root,
@@ -341,10 +387,8 @@ actor AgentSessionResolver {
     for case let url as URL in enumerator {
       visited += 1
       if visited > visitLimit {
-        // A pathological tree; missing candidates degrades to "unresolved",
-        // never to a wrong id.
         agentSessionLogger.warning("Agent session scan truncated at \(visitLimit) entries under \(root.path)")
-        break
+        return nil
       }
       guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey]),
         values.isRegularFile == true,
@@ -364,8 +408,15 @@ nonisolated enum AgentSessionFingerprintMatcher {
   ) -> AgentSessionCandidate? {
     let screen = normalize(activeText)
     guard screen.count >= 12 else { return nil }
-    // Cap tail reads: the freshest files carry the on-screen conversation.
-    let recent = candidates.sorted { $0.modifiedAt > $1.modifiedAt }.prefix(12)
+    // Bound tail reads WITHOUT evicting whole sessions: cap files per session
+    // (extra files of one session only reinforce it), and refuse to declare
+    // uniqueness when there are more sessions than the read budget covers —
+    // an unexamined session could hold the same text.
+    let bySession = Dictionary(grouping: candidates) { $0.session.id }
+    guard bySession.count <= 12 else { return nil }
+    let recent = bySession.values.flatMap { group in
+      group.sorted { $0.modifiedAt > $1.modifiedAt }.prefix(2)
+    }
     let scored = recent.compactMap { candidate -> (AgentSessionCandidate, Int)? in
       guard let path = candidate.session.transcriptPath,
         let data = tailData(at: path),

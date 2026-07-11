@@ -122,15 +122,11 @@ extension WorktreeTerminalState {
     }
     let iconLookupToken = identified?.name ?? previous.iconLookupToken ?? agent.iconLookupToken
     let workingDirectory = activeAgentWorkingDirectory(surfaceID: surfaceID)
-    let resolved = await resolveAgentSession(
+    let (session, sessionMissStreak) = await resolveRetainedSession(
       identified: identified,
+      previous: previous,
       workingDirectory: workingDirectory,
       activeText: activeText
-    )
-    let (session, sessionMissStreak) = PaneAgentState.retainedSession(
-      resolved: resolved,
-      previous: previous,
-      identifiedPID: identified?.process.pid
     )
     // Re-check after the suspension: the pane may have been closed and its
     // agent state cleaned up while the resolver was doing file inspection;
@@ -175,16 +171,25 @@ extension WorktreeTerminalState {
     return true
   }
 
-  private func resolveAgentSession(
+  private func resolveRetainedSession(
     identified: IdentifiedAgentProcess?,
+    previous: PaneAgentState,
     workingDirectory: URL?,
     activeText: String
-  ) async -> AgentSession? {
-    guard let identified else { return nil }
-    return await AgentSessionResolver.shared.resolve(
-      identified: identified,
-      workingDirectory: workingDirectory,
-      activeText: activeText
+  ) async -> (session: AgentSession?, missStreak: Int) {
+    var resolution = AgentSessionResolution(session: nil, isFresh: false)
+    if let identified {
+      resolution = await AgentSessionResolver.shared.resolve(
+        identified: identified,
+        workingDirectory: workingDirectory,
+        activeText: activeText
+      )
+    }
+    return PaneAgentState.retainedSession(
+      resolved: resolution.session,
+      isFresh: resolution.isFresh,
+      previous: previous,
+      identifiedPID: identified?.process.pid
     )
   }
 

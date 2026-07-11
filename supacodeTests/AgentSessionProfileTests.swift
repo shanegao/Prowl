@@ -133,6 +133,76 @@ struct AgentSessionProfileTests {
     #expect(match?.session.id == "same-session")
   }
 
+  @Test func fingerprintCapCannotEvictACompetingSession() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-cap-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let content = #"{"message":{"content":"Reply exactly READY and wait for further instructions."}}"#
+
+    // Session A floods the recency window with 20 files; session B has one
+    // older file with the same on-screen text. B must still veto uniqueness.
+    var candidates: [AgentSessionCandidate] = []
+    for index in 0..<20 {
+      let url = root.appending(path: "a-\(index).jsonl")
+      try content.write(to: url, atomically: true, encoding: .utf8)
+      candidates.append(
+        AgentSessionCandidate(
+          session: AgentSession(id: "session-a", transcriptPath: url, source: .recentFile),
+          modifiedAt: Date(timeIntervalSince1970: 2_000 + TimeInterval(index))
+        )
+      )
+    }
+    let bURL = root.appending(path: "b.jsonl")
+    try content.write(to: bURL, atomically: true, encoding: .utf8)
+    candidates.append(
+      AgentSessionCandidate(
+        session: AgentSession(id: "session-b", transcriptPath: bURL, source: .recentFile),
+        modifiedAt: Date(timeIntervalSince1970: 1_000)
+      )
+    )
+
+    let match = AgentSessionFingerprintMatcher.bestMatch(
+      activeText: "Reply exactly READY and wait for further instructions.",
+      candidates: candidates
+    )
+    #expect(match == nil)
+  }
+
+  @Test func fingerprintRefusesUniquenessBeyondSessionBudget() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-many-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let unique = root.appending(path: "match.jsonl")
+    try #"{"message":{"content":"An unmistakably distinctive fingerprint phrase."}}"#
+      .write(to: unique, atomically: true, encoding: .utf8)
+    var candidates = [
+      AgentSessionCandidate(
+        session: AgentSession(id: "target", transcriptPath: unique, source: .recentFile),
+        modifiedAt: Date(timeIntervalSince1970: 5_000)
+      )
+    ]
+    for index in 0..<13 {
+      let url = root.appending(path: "other-\(index).jsonl")
+      try #"{"message":{"content":"irrelevant"}}"#.write(to: url, atomically: true, encoding: .utf8)
+      candidates.append(
+        AgentSessionCandidate(
+          session: AgentSession(id: "other-\(index)", transcriptPath: url, source: .recentFile),
+          modifiedAt: Date(timeIntervalSince1970: 4_000 - TimeInterval(index))
+        )
+      )
+    }
+
+    // 14 distinct sessions exceed the read budget; uniqueness cannot be
+    // proven, so no match may be declared.
+    let match = AgentSessionFingerprintMatcher.bestMatch(
+      activeText: "An unmistakably distinctive fingerprint phrase.",
+      candidates: candidates
+    )
+    #expect(match == nil)
+  }
+
   // MARK: - Header enrichment stays per-profile
 
   @Test func headerEnrichmentNeverOverridesDirectoryDerivedIDs() throws {
@@ -288,6 +358,50 @@ struct AgentSessionProfileTests {
     try (#"{"sessionId":""# + String(repeating: "x", count: 9_000) + #""}"#)
       .write(to: huge, atomically: true, encoding: .utf8)
     #expect(AgentSessionResolver.sessionIDFromHeader(at: huge, keys: ["sessionId"]) == nil)
+  }
+
+  @Test func truncatedScansYieldNoCandidates() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-truncate-\(UUID().uuidString)/.claude/projects/-tmp-x", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for index in 0..<5 {
+      try "{}".write(
+        to: root.appending(path: "0000000\(index)-1111-2222-3333-444444444444.jsonl"),
+        atomically: true,
+        encoding: .utf8
+      )
+    }
+    let resolver = AgentSessionResolver()
+    let profile = AgentSessionProfile.profile(for: .claude)
+    let full = await resolver.scanCandidates(in: [root], profile: profile, processStartedAt: .distantPast)
+    #expect(full?.count == 5)
+    // A truncated enumeration cannot prove uniqueness; the whole scan is void.
+    let truncated = await resolver.scanCandidates(
+      in: [root],
+      profile: profile,
+      processStartedAt: .distantPast,
+      visitLimit: 3
+    )
+    #expect(truncated == nil)
+  }
+
+  @Test func geminiCandidatesRequireSuccessfulHeaderEnrichment() async throws {
+    let chats = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-gemini-req-\(UUID().uuidString)/.gemini/tmp/proj/chats", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: chats, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: chats) }
+    try #"{"sessionId":"23ce3e98-af90-4d5c-8b83-ffcc258dff2b"}"#
+      .write(to: chats.appending(path: "session-2026-07-11T05-41-23ce3e98.jsonl"), atomically: true, encoding: .utf8)
+    try "not json at all"
+      .write(to: chats.appending(path: "session-2026-07-11T05-42-6827d721.jsonl"), atomically: true, encoding: .utf8)
+
+    let resolver = AgentSessionResolver()
+    let profile = AgentSessionProfile.profile(for: .gemini)
+    let candidates = await resolver.scanCandidates(in: [chats], profile: profile, processStartedAt: .distantPast)
+    // The corrupt header must drop its file rather than surface a truncated
+    // 8-hex id that cannot be resumed.
+    #expect(candidates?.map(\.session.id) == ["23ce3e98-af90-4d5c-8b83-ffcc258dff2b"])
   }
 
   // MARK: - Cache pacing

@@ -16,6 +16,10 @@ nonisolated struct AgentSessionProfile: Sendable {
   /// already holds the full id — generic sniffing can grab an unrelated field
   /// from event-stream layouts like Copilot's events.jsonl.
   var headerSessionIDKeys: [String] = []
+  /// When true, a candidate whose header lookup fails is DROPPED instead of
+  /// falling back to the path-derived id (Gemini: the filename only holds an
+  /// 8-hex prefix that cannot be resumed).
+  var requiresHeaderSessionID: Bool = false
   /// Storage roots scanned for session files modified during the process
   /// lifetime. Narrow these as much as the layout allows.
   var candidateRoots: @Sendable (_ home: URL, _ cwd: URL?, _ processStartedAt: Date, _ now: Date) -> [URL] = {
@@ -108,6 +112,7 @@ nonisolated extension AgentSessionProfile {
       return AgentSession(id: id, transcriptPath: url, source: .recentFile)
     },
     headerSessionIDKeys: ["sessionId"],
+    requiresHeaderSessionID: true,
     candidateRoots: { home, cwd, _, _ in
       guard let cwd else { return [home.appending(path: ".gemini/tmp")] }
       let tmp = home.appending(path: ".gemini/tmp")
