@@ -27,7 +27,9 @@ an unread-notification bell, and run/agent status.
 
 A plain folder can't expand; clicking it just opens a terminal there. Prowl
 auto-detects which kind a path is when you add it (it runs `git` to find the repo
-root; "not a git repository" → plain folder).
+root; "not a git repository" → plain folder). If you later run `git init` in an
+open plain folder, Prowl automatically upgrades it to a git repository and
+refreshes the sidebar.
 
 ## Adding a repository
 
