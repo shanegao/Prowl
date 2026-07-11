@@ -219,17 +219,26 @@ nonisolated extension AgentSessionProfile {
     }
   )
 
-  /// Qwen Code: `~/.qwen/projects/<sanitized cwd>/chats/<uuid>.jsonl` plus an
-  /// official pid→session sidecar `<uuid>.runtime.json`. `QWEN_CODE_SESSION_ID`
-  /// on shell children. Storage layout is best-effort: not verified against a
-  /// local install.
+  /// Qwen Code: `~/.qwen/projects/<sanitized cwd>/chats/<uuid>.jsonl` plus the
+  /// official pid→session sidecar `<uuid>.runtime.json` next to it. The cwd
+  /// sanitizer is Claude's rule (`[^a-zA-Z0-9]` → `-`, `sanitizeCwd` in
+  /// `packages/core/src/utils/paths.ts`). Source-verified against QwenLM/
+  /// qwen-code@deb45ae; not exercised against a local install.
   fileprivate static let qwen = AgentSessionProfile(
     parsePath: { uuidJSONL(path: $0, marker: "/.qwen/projects/") },
-    candidateRoots: { home, _, _, _ in
+    candidateRoots: { home, cwd, _, _ in
+      guard let cwd else { return [home.appending(path: ".qwen/projects")] }
+      return [home.appending(path: ".qwen/projects/\(alphanumericDashed(cwd.path))/chats")]
+    },
+    fallbackRoots: { home, _ in
       [home.appending(path: ".qwen/projects")]
     },
-    pidKeyedSession: { home, pid, _ in
-      QwenRuntimeStatus.session(projectsRoot: home.appending(path: ".qwen/projects"), pid: pid)
+    pidKeyedSession: { home, pid, processStartedAt in
+      QwenRuntimeStatus.session(
+        projectsRoot: home.appending(path: ".qwen/projects"),
+        pid: pid,
+        processStartedAt: processStartedAt
+      )
     }
   )
 }

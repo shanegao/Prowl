@@ -47,13 +47,20 @@ nonisolated enum CopilotProcessLog {
   }
 }
 
-/// Qwen Code writes `<chats dir>/<session id>.runtime.json` sidecars
-/// (`{"pid": ..., "session_id": ...}`) for every live session, intended for
-/// external observers.
+/// Qwen Code writes `<chats dir>/<session id>.runtime.json` sidecars for every
+/// live interactive session, explicitly for external observers (source:
+/// `packages/core/src/utils/runtimeStatus.ts`). Session rotation (`/clear`,
+/// `/resume`) atomically swaps the sidecar, but quit/crash leaves it behind —
+/// consumers must verify the claim against the live process. A claim whose
+/// `started_at` predates the process start belongs to a previous owner of a
+/// reused pid.
 nonisolated enum QwenRuntimeStatus {
+  private static let schemaVersion = 1
+
   static func session(
     projectsRoot: URL,
     pid: pid_t,
+    processStartedAt: Date,
     fileManager: FileManager = .default
   ) -> AgentSession? {
     let projects = (try? fileManager.contentsOfDirectory(at: projectsRoot, includingPropertiesForKeys: nil)) ?? []
@@ -63,7 +70,10 @@ nonisolated enum QwenRuntimeStatus {
       for sidecar in sidecars where sidecar.lastPathComponent.hasSuffix(".runtime.json") {
         guard let data = try? Data(contentsOf: sidecar),
           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          object["schema_version"] as? Int == schemaVersion,
           let sidecarPID = object["pid"] as? Int, sidecarPID == Int(pid),
+          let startedAt = object["started_at"] as? Double,
+          startedAt >= processStartedAt.timeIntervalSince1970 - 2,
           let id = object["session_id"] as? String, !id.isEmpty
         else { continue }
         let transcript = chats.appending(path: "\(id).jsonl")

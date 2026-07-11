@@ -40,6 +40,7 @@ Supporting rules:
 | --- | --- | --- |
 | `alphanumericDashed` | every char outside `[A-Za-z0-9]` → `-` (`/a/b_c.d` → `-a-b-c-d`) | Claude (`~/.claude/projects/`) |
 | `slashDashed` | only `/` → `-`; dots and spaces kept | Pi (wrapped `-…--`), Droid |
+| `alphanumericDashed` (again) | same rule, independently implemented as `sanitizeCwd` | Qwen (`~/.qwen/projects/`) |
 | `md5(cwd)` | lowercase hex md5 of the absolute path | Kimi, Cursor |
 | `sha256(cwd)` | lowercase hex sha256 | Gemini (older layout); newer maps cwd→slug in `~/.gemini/projects.json` |
 | plain cwd | stored verbatim in metadata | OpenCode (`session.directory`), Copilot (`workspace.yaml`), Qwen sidecar |
@@ -64,11 +65,17 @@ Verified 2026-07-11 against locally installed CLIs (best effort where noted):
 | Droid | 0.147.0 | `~/.factory/sessions/<cwd>/<uuid>.jsonl` | Lifetime + transcript match |
 | OpenCode | 1.17.18 | `opencode.db` `session(id, directory, time_updated)` | **Store query (`medium`)** |
 | Amp | 2026-05 build | `~/.cache/amp/logs/threads/T-<id>.log` (open FD, logged in) | **Open thread-log FD (`exact`)** |
-| Qwen Code | not installed | `~/.qwen/projects/<cwd>/chats/*.jsonl` + `*.runtime.json` | **Pid sidecar (`exact`)**; best effort |
+| Qwen Code | source@deb45ae | `~/.qwen/projects/<cwd>/chats/*.jsonl` + `*.runtime.json` | **Pid sidecar (`exact`)**; source-verified |
 
 Codex keeps its rollout JSONL open for the whole interactive session. Claude, Pi, Droid, and Kimi close their session
 files between writes; Amp only materializes local thread artifacts when logged in; OpenCode's TUI holds only the shared
 sqlite database (no per-session file, and by default no local server port — the API worker is in-process).
+
+Qwen's `runtime.json` sidecar (source: `packages/core/src/utils/runtimeStatus.ts`) is written explicitly for external
+observers like Prowl: created on session start, atomically swapped on `/clear`/`/resume` (same pid, new session id),
+and intentionally **left behind** on quit/crash. Consumers must therefore validate the claim against the live process;
+Prowl requires `schema_version == 1`, a pid match, and `started_at >= process start - 2 s`, which rejects stale claims
+inherited by a reused pid.
 
 ## Rejected channel: child-process environment variables
 

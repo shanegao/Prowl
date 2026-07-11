@@ -165,12 +165,13 @@ struct AgentSessionProfileTests {
     let chats = projects.appending(path: "-Users-me-App/chats")
     try FileManager.default.createDirectory(at: chats, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: projects) }
+    let processStartedAt = Date(timeIntervalSince1970: 1_783_800_000)
     let id = "019f4f1b-3650-7661-a56d-351f02f01139"
-    try #"{"schema_version":1,"pid":555,"session_id":"\#(id)","work_dir":"/Users/me/App"}"#
+    try sidecarJSON(id: id, pid: 555, startedAt: processStartedAt.timeIntervalSince1970 + 5)
       .write(to: chats.appending(path: "\(id).runtime.json"), atomically: true, encoding: .utf8)
     try "{}".write(to: chats.appending(path: "\(id).jsonl"), atomically: true, encoding: .utf8)
 
-    let session = QwenRuntimeStatus.session(projectsRoot: projects, pid: 555)
+    let session = QwenRuntimeStatus.session(projectsRoot: projects, pid: 555, processStartedAt: processStartedAt)
     #expect(session?.id == id)
     #expect(session?.source == .processLog)
     #expect(session?.confidence == .exact)
@@ -179,7 +180,44 @@ struct AgentSessionProfileTests {
       session?.transcriptPath?.resolvingSymlinksInPath()
         == chats.appending(path: "\(id).jsonl").resolvingSymlinksInPath()
     )
-    #expect(QwenRuntimeStatus.session(projectsRoot: projects, pid: 556) == nil)
+    #expect(QwenRuntimeStatus.session(projectsRoot: projects, pid: 556, processStartedAt: processStartedAt) == nil)
+  }
+
+  @Test func qwenRuntimeSidecarRejectsStaleClaimsFromReusedPids() throws {
+    let projects = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-qwen-stale-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let chats = projects.appending(path: "-Users-me-App/chats")
+    try FileManager.default.createDirectory(at: chats, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: projects) }
+    let processStartedAt = Date(timeIntervalSince1970: 1_783_800_000)
+
+    // Sidecars survive quit/crash; a claim older than the live process's start
+    // time belongs to a previous owner of the reused pid.
+    let stale = "11111111-2222-3333-4444-555555555555"
+    try sidecarJSON(id: stale, pid: 555, startedAt: processStartedAt.timeIntervalSince1970 - 3_600)
+      .write(to: chats.appending(path: "\(stale).runtime.json"), atomically: true, encoding: .utf8)
+    #expect(QwenRuntimeStatus.session(projectsRoot: projects, pid: 555, processStartedAt: processStartedAt) == nil)
+
+    // Unknown schema versions are not ours to interpret.
+    let futuristic = "66666666-7777-8888-9999-000000000000"
+    try sidecarJSON(id: futuristic, pid: 555, startedAt: processStartedAt.timeIntervalSince1970 + 5, schema: 2)
+      .write(to: chats.appending(path: "\(futuristic).runtime.json"), atomically: true, encoding: .utf8)
+    #expect(QwenRuntimeStatus.session(projectsRoot: projects, pid: 555, processStartedAt: processStartedAt) == nil)
+  }
+
+  private func sidecarJSON(id: String, pid: Int, startedAt: TimeInterval, schema: Int = 1) -> String {
+    #"{"schema_version":\#(schema),"pid":\#(pid),"session_id":"\#(id)","work_dir":"/Users/me/App","#
+      + #""hostname":"test","started_at":\#(startedAt),"qwen_version":"0.23.0"}"#
+  }
+
+  @Test func qwenRootsNarrowToSanitizedProjectDirectory() {
+    let cwd = URL(fileURLWithPath: "/private/tmp/prowl_556.enc", isDirectory: true)
+    let qwen = AgentSessionProfile.profile(for: .qwen)
+    #expect(
+      qwen.candidateRoots(home, cwd, now, now).map(\.path)
+        == ["/Users/me/.qwen/projects/-private-tmp-prowl-556-enc/chats"]
+    )
+    #expect(qwen.fallbackRoots(home, cwd).map(\.path) == ["/Users/me/.qwen/projects"])
   }
 
   // MARK: - Amp thread log parsing
