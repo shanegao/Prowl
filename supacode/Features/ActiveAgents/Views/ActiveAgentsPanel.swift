@@ -166,7 +166,7 @@ struct ActiveAgentsPanel: View {
     branchName: String,
     showTabTitles: Bool
   ) -> String {
-    showTabTitles ? tabTitle(for: entry) : branchName
+    showTabTitles ? paneTitle(for: entry) : branchName
   }
 
   static func helpText(
@@ -174,11 +174,11 @@ struct ActiveAgentsPanel: View {
     branchName: String,
     showTabTitles: Bool
   ) -> String {
-    showTabTitles ? branchName : tabTitle(for: entry)
+    showTabTitles ? branchName : paneTitle(for: entry)
   }
 
-  static func tabTitle(for entry: ActiveAgentEntry) -> String {
-    let trimmed = entry.tabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+  static func paneTitle(for entry: ActiveAgentEntry) -> String {
+    let trimmed = entry.paneTitle.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? "Untitled tab" : trimmed
   }
 

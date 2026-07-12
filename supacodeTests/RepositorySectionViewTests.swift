@@ -302,7 +302,7 @@ struct RepositorySectionViewTests {
       worktreeName: worktreeName,
       workingDirectory: workingDirectory,
       tabID: TerminalTabID(rawValue: UUID()),
-      tabTitle: "agent",
+      paneTitle: "agent",
       surfaceID: UUID(),
       paneIndex: 1,
       iconLookupToken: DetectedAgent.codex.iconLookupToken,

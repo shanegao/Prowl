@@ -227,18 +227,25 @@ extension WorktreeTerminalState {
   }
 
   /// Re-emit Active Agents entries for every pane in `tabId` so the panel picks
-  /// up a fresh tab-title snapshot. Title changes (OSC-2, focus sync, manual
+  /// up a fresh title snapshot. Title changes (OSC-2, focus sync, manual
   /// rename) don't move agent detection state, so without this nudge the
-  /// subtitle only refreshes on the next agent state transition.
+  /// subtitle only refreshes on the next agent state transition. Used when the
+  /// tab's display title changes, since it is every pane's title fallback.
   func refreshAgentEntriesForTitleChange(in tabId: TerminalTabID) {
     let surfaceIDs = trees[tabId]?.leaves().map(\.id) ?? []
     for surfaceID in surfaceIDs {
-      guard let state = surfaceAgentStates[surfaceID],
-        state.detectedAgent != nil,
-        state.state != .unknown
-      else { continue }
-      emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: state)
+      refreshAgentEntryForTitleChange(surfaceID: surfaceID, in: tabId)
     }
+  }
+
+  /// Single-pane variant for a surface whose own title changed without moving
+  /// the tab title (e.g. an unfocused split's OSC-2 update).
+  func refreshAgentEntryForTitleChange(surfaceID: UUID, in tabId: TerminalTabID) {
+    guard let state = surfaceAgentStates[surfaceID],
+      state.detectedAgent != nil,
+      state.state != .unknown
+    else { return }
+    emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: state)
   }
 
   func emitAgentEntry(surfaceID: UUID, tabId: TerminalTabID, state: PaneAgentState) {
@@ -261,7 +268,7 @@ extension WorktreeTerminalState {
       worktreeName: worktree.name,
       workingDirectory: workingDirectory,
       tabID: tabId,
-      tabTitle: tabTitle,
+      paneTitle: paneTitle(surfaceID: surfaceID, fallbackTabTitle: tabTitle),
       surfaceID: surfaceID,
       paneIndex: paneIndex,
       iconLookupToken: state.iconLookupToken ?? agent.iconLookupToken,

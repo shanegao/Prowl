@@ -175,7 +175,7 @@ struct AppFeatureSettingsChangedTests {
       worktreeName: "wt",
       workingDirectory: nil,
       tabID: TerminalTabID(rawValue: fixedUUID(1)),
-      tabTitle: "codex",
+      paneTitle: "codex",
       surfaceID: fixedUUID(0),
       paneIndex: 1,
       iconLookupToken: DetectedAgent.codex.iconLookupToken,
