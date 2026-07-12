@@ -8,42 +8,27 @@ import Testing
 @Suite(.serialized)
 struct UpdatesFeatureTests {
   private struct Configuration: Equatable {
-    var channel: UpdateChannel
     var checks: Bool
     var checkInBackground: Bool
   }
 
   @Test(.dependencies) func applySettingsConfiguresAutomaticChecks() async {
-    let configuredChannel = LockIsolated<UpdateChannel?>(nil)
     let configuration = LockIsolated<Configuration?>(nil)
     let store = TestStore(initialState: UpdatesFeature.State()) {
       UpdatesFeature()
     } withDependencies: {
-      $0.updaterClient.setUpdateChannel = { channel in
-        configuredChannel.withValue { $0 = channel }
-      }
       $0.updaterClient.configure = { checks, checkInBackground in
         configuration.withValue {
-          $0 = Configuration(
-            channel: configuredChannel.value ?? .stable,
-            checks: checks,
-            checkInBackground: checkInBackground
-          )
+          $0 = Configuration(checks: checks, checkInBackground: checkInBackground)
         }
       }
     }
 
-    await store.send(
-      .applySettings(
-        updateChannel: .stable,
-        automaticallyChecks: true
-      )
-    ) {
+    await store.send(.applySettings(automaticallyChecks: true)) {
       $0.didConfigureUpdates = true
     }
 
-    #expect(
-      configuration.value == Configuration(channel: .stable, checks: true, checkInBackground: true))
+    #expect(configuration.value == Configuration(checks: true, checkInBackground: true))
   }
 
   @Test(.dependencies) func downloadedUpdateEventMarksUpdateReadyToInstall() async {

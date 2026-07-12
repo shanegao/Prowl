@@ -13,10 +13,7 @@ struct UpdatesFeature {
 
   enum Action {
     case task
-    case applySettings(
-      updateChannel: UpdateChannel,
-      automaticallyChecks: Bool
-    )
+    case applySettings(automaticallyChecks: Bool)
     case activateUpdateButton
     case checkForUpdates
     case updaterEvent(UpdaterClient.Event)
@@ -38,11 +35,10 @@ struct UpdatesFeature {
           }
         }
 
-      case .applySettings(let channel, let checks):
+      case .applySettings(let checks):
         let checkInBackground = !state.didConfigureUpdates
         state.didConfigureUpdates = true
         return .run { _ in
-          await updaterClient.setUpdateChannel(channel)
           await updaterClient.configure(checks, checkInBackground)
         }
 

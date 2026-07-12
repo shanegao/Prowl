@@ -132,7 +132,7 @@ struct SupacodeApp: App {
     #if !DEBUG
       let infoDictionary = Bundle.main.infoDictionary ?? [:]
       let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
-      let environment = initialSettings.updateChannel == .tip ? "tip" : "production"
+      let environment = "production"
 
       if initialSettings.crashReportsEnabled, let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
         SentrySDK.start { options in

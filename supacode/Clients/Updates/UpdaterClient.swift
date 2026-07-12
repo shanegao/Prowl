@@ -6,7 +6,6 @@ private let updaterLogger = SupaLogger("Updater")
 
 struct UpdaterClient {
   var configure: @MainActor @Sendable (_ checks: Bool, _ checkInBackground: Bool) -> Void
-  var setUpdateChannel: @MainActor @Sendable (UpdateChannel) -> Void
   var checkForUpdates: @MainActor @Sendable () -> Void
   var installDownloadedUpdate: @MainActor @Sendable () -> Void
   var events: @MainActor @Sendable () -> AsyncStream<Event>
@@ -21,14 +20,8 @@ extension UpdaterClient {
 
 @MainActor
 final class SparkleUpdateDelegate: NSObject, SPUUpdaterDelegate {
-  var updateChannel: UpdateChannel = .stable
   private var continuation: AsyncStream<UpdaterClient.Event>.Continuation?
   private var immediateInstallHandler: (() -> Void)?
-
-  nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-    // Tip channel is no longer published separately; treat it the same as stable.
-    []
-  }
 
   func setContinuation(_ continuation: AsyncStream<UpdaterClient.Event>.Continuation) {
     self.continuation?.finish()
@@ -232,15 +225,9 @@ extension UpdaterClient: DependencyKey {
     return UpdaterClient(
       configure: { checks, checkInBackground in
         driver.setAutomaticUpdatePreferences(checks: checks)
+        updater.updateCheckInterval = 3600
         updater.automaticallyChecksForUpdates = checks
         if checkInBackground, checks {
-          updater.checkForUpdatesInBackground()
-        }
-      },
-      setUpdateChannel: { channel in
-        delegate.updateChannel = channel
-        updater.updateCheckInterval = 3600
-        if updater.automaticallyChecksForUpdates {
           updater.checkForUpdatesInBackground()
         }
       },
@@ -261,7 +248,6 @@ extension UpdaterClient: DependencyKey {
 
   static let testValue = UpdaterClient(
     configure: { _, _ in },
-    setUpdateChannel: { _ in },
     checkForUpdates: {},
     installDownloadedUpdate: {},
     events: { AsyncStream { _ in } }
