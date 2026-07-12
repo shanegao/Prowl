@@ -1,4 +1,4 @@
-This fork is primarily for onevcat-specific customizations; before doing any release work, read `doc-onevcat/fork-sync-and-release.md` (and `doc-onevcat/change-list.md`) for fork publishing guidance.
+This fork is primarily for onevcat-specific customizations; before doing any release work, read `docs-ai/001-fork-bootstrap-and-release-pipeline/release-runbook.md` (and the upstream ledger `docs-ai/017-upstream-sync-process/upstream-ledger.md`) for fork publishing guidance. Fork history and design decisions are recorded under `docs-ai/` (see `docs-ai/README.md`).
 
 ## Build Commands
 
@@ -127,6 +127,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - After a task, ensure the app builds: `make build-app`
 - When working on CLI code (`ProwlCLI/`, `ProwlCLITests/`, `Package.swift`), run `make build-cli`, `make test-cli-smoke`, and `make test-cli-integration` before committing.
 - When you change user-facing behavior (keyboard shortcuts, settings, the `prowl` CLI, or a feature's UX), update the matching file under `docs/` in the same change. For a full audit, run the `sync-docs` skill.
+- When starting a medium/large feature, a complex or decision-shaping fix, or a non-trivial investigation, use the `write-ai-doc` skill: create a `docs-ai/NNN-<slug>/000-plan.md` before coding and complete `001-action.md` after implementation. Follow-up work on the same topic amends the existing entry (see `docs-ai/README.md`).
 - When implementing a new feature or fixing a bug that is unrelated to the current branch's active work, first create a dedicated branch from the latest `origin/main`; then work, commit, push, and open a PR from that branch.
 - Automatically commit your changes and your changes only. Do not use `git add .`
 - Before you go on your task, check the current git branch name, if it's something generic like an animal name, name it accordingly. Do not do this for main branch
