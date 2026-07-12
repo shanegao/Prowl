@@ -35,7 +35,6 @@ Living documents hosted here:
 - `013-prowl-cli/contracts/` — normative CLI contracts
 - `017-upstream-sync-process/upstream-ledger.md` — upstream review ledger (baseline + decisions)
 - `020-observability/runbook.md` — observability/diagnostics runbook
-- `backfill-open-questions.md` — follow-ups discovered during the 2026-07-12 backfill
 
 Some entries also host verbatim historical attachments migrated from doc-onevcat (e.g.
 `023-shelf-mode/jank-investigation.md`, `017-.../batch-2026-07-06-post-v0.10.5.md`,

@@ -15,6 +15,19 @@ Future upstream checks should only inspect commits **after** this baseline.
 
 ---
 
+## 2026-07-12 — Ledger corrections (docs-ai backfill audit)
+
+Verifying this ledger against GitHub during the docs-ai backfill (PR #558) surfaced four
+bookkeeping errors, now corrected in place (marked *correction 2026-07-12* where inline):
+
+- 2026-05-08 "Ported to Prowl PRs": #265 and #267 were in fact **closed unmerged**.
+- 2026-06-09 table: `6fab2d28` is PR #416's merge commit (not #417's — that is `761ec204`),
+  and `db2f39d0` belongs to PR #417, not #414. The #332 port is partial by design.
+- 2026-04-20 deferred adoption of upstream #225 was never executed (status note added).
+- Old Log: the snapshot cache is no longer "Pending upstream" — upstream #162 closed unmerged.
+
+---
+
 ## 2026-07-09 — Review through post-v0.10.5
 
 ### Upstream changes reviewed
@@ -84,8 +97,8 @@ architecture):
 | `b1b65bf7` #378 — Tolerate login-shell noise in `gh` JSON output | PR #418 (`24027a91`) |
 | `b1ecdf3d` #376 — Cap and coalesce terminal event streams | PR #416 (`2800fd0b`) |
 | `974455b1` #347 — Coalesce OSC-9 progress to cut tab-bar lag | PR #415 (`7e0c9c76`) |
-| `c0c1c2ac` #332 — Per-surface `@Observable` notification dot | PR #417 (`6fab2d28`) |
-| `955c1943` #329 / `be322039` #336 — Detail/menu-bar + split-tree perf (FocusedAction wrapper, drop AnyView erasure) | PR #414 (`c9f5100e`, `db2f39d0`) |
+| `c0c1c2ac` #332 — Per-surface `@Observable` notification dot | PR #417 (`761ec204`) — partial: AnyView-erasure slice only; the per-surface dot mirror was deliberately skipped (fork's dot is already observed) |
+| `955c1943` #329 / `be322039` #336 — Detail/menu-bar + split-tree perf (FocusedAction wrapper, drop AnyView erasure) | PR #414 (`c9f5100e`) / PR #417 (`db2f39d0`) |
 | `65c87e30` #371 — Focus the terminal after worktree navigation | PR #419 (`e02c76f0`) |
 | `fc4e4b0b` #353 — Selected command-palette row legibility | PR #420 (`3b499662`) |
 | `66b300d1` #313 — Persist main window position and size | (`02e13192`, PR #420) |
@@ -217,8 +230,9 @@ Reviewed 25 commits on `supabitapp/supacode` from `c4e9be3b` (v0.8.1, 2026-04-19
 
 - **Ported to Prowl PRs**: Ghostty key routing (#255), fork-aware PR repo resolution (#256), worktree history
   (#260), dynamic window title plus main-window quit behavior (#261), loading overlay polish (#262), sidebar animation
-  CPU fix (#263), Android Studio editor support (#264), sidebar right-arrow focus (#265), test workflow concurrency
-  (#266), and `CFBundleIconName` metadata (#267).
+  CPU fix (#263), Android Studio editor support (#264), sidebar right-arrow focus (#265 — *correction 2026-07-12:
+  closed unmerged after an LGTM review, never landed*), test workflow concurrency
+  (#266), and `CFBundleIconName` metadata (#267 — *correction 2026-07-12: closed unmerged; Icon Composer not adopted*).
 - **Reviewed and skipped**: Notifications UX (#266 upstream), inactive split dimming (#260 upstream), tab renaming
   (#269 upstream), and bare-repo detection (#263 upstream) were already covered, intentionally different, or not
   currently applicable in the fork.
@@ -247,7 +261,7 @@ Reviewed 47 commits on `supabitapp/supacode` from `0150ceaf` (v0.8.0) through `c
 
 - **Tuist migration**: **Skip.** Fork sidesteps the `release-tip` archive bug by construction — `ProwlCLI` is a SwiftPM `executableTarget`, not an Xcode target, and is pre-copied into `Resources/prowl-cli/` as a folder reference. Archives already contain only `Products/Applications/supacode.app`; `/usr/local/bin/prowl` symlinks into `/Applications/Prowl.app/Contents/Resources/prowl-cli/prowl`. Migrating would force rewriting the `/release` skill, notarization flow, appcast generation, and every rebrand patch for zero functional gain.
 - **CLI (#227, #253, #246)**: **Skip.** Fork's `prowl` CLI targets agent scripting (`send`/`key`/`read` with stdin piping, output capture, timeout, keyboard token synthesis); upstream's CLI targets orchestration (`worktree archive/pin/delete`, `tab/surface new/split/close`, `repo`/`settings`/`socket`). The two are orthogonal, not duplicative. Future work may selectively port upstream's orchestration commands into `ProwlCLI`'s envelope-based transport, but nothing forces action today.
-- **Ghostty `#225`**: **Defer to next sync of the affected files.** Upstream version is slightly cleaner — state on `GhosttyRuntime` instead of per-view (fixes multi-split-same-window ambiguity), reset on config reload, early-return in fullscreen, Bool return, debug logs. No user-visible bug in fork. When next editing `GhosttySurfaceView.swift` / `GhosttySurfaceBridge.swift` / `GhosttyRuntime.swift`, replace fork's implementation with upstream's and preserve the fork-only `chromeBackgroundColor(...)` call in `applyWindowBackgroundAppearance`.
+- **Ghostty `#225`**: **Defer to next sync of the affected files.** Upstream version is slightly cleaner — state on `GhosttyRuntime` instead of per-view (fixes multi-split-same-window ambiguity), reset on config reload, early-return in fullscreen, Bool return, debug logs. No user-visible bug in fork. When next editing `GhosttySurfaceView.swift` / `GhosttySurfaceBridge.swift` / `GhosttyRuntime.swift`, replace fork's implementation with upstream's and preserve the fork-only `chromeBackgroundColor(...)` call in `applyWindowBackgroundAppearance`. *(Status 2026-07-12: never executed — those files were edited multiple times since, and the toggle state is still per-view (`isBackgroundOpaqueOverride` in `GhosttySurfaceView.swift`).)*
 - **Everything else**: Nothing user-facing for the fork. Re-evaluate on next review.
 
 ---
@@ -321,7 +335,7 @@ The table below was the original per-commit tracking format, preserved for refer
 | Filter duplicate and unsupported Ghostty actions from command palette. | `512c5b3`, `c8c562f` | Fork only |
 | Add command finished notification for long-running terminal commands with configurable duration threshold; Canvas highlights the entire title bar for unseen notifications, tracked per-tab. | `182e165`…`d7bb4b6` | Fork only |
 | Mark notifications as read on key input to focused terminal surface; suppress command finished notification after recent user interaction. | `26968c1`, `2db9ae5` | Fork only |
-| Add repository snapshot startup cache to skip full git scan on re-launch when worktrees haven't changed. | `7136591` | Pending upstream (#162) |
+| Add repository snapshot startup cache to skip full git scan on re-launch when worktrees haven't changed. | `7136591` | Fork only (upstream #162 closed unmerged) |
 | Fix unicode paths in diff and untracked file output. | `1b32a26` | Fork only |
 | Fix settings migration to copy instead of move, preserving `~/.supacode` for upstream compatibility. | `07121b6` | Fork only |
 | Use Claude to generate user-facing release notes; skip generation when pre-written notes exist. | `64d0928`, `849b5cf` | Fork only |
