@@ -73,18 +73,10 @@ extension RepositoriesFeature {
           do {
             let repoRoot = try await gitClient.repoRoot(URL(fileURLWithPath: normalizedPath))
             let normalizedRepoRoot = repoRoot.standardizedFileURL.path(percentEncoded: false)
-            switch entry.kind {
-            case .plain:
-              if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
-              }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
-            case .git:
-              if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
-              }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+            if Self.pathsReferToSameFileSystemLocation(normalizedPath, normalizedRepoRoot) {
+              return (index, PersistedRepositoryEntry(path: normalizedRepoRoot, kind: .git))
             }
+            return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
           } catch {
             if entry.kind == .git,
               Self.isNotGitRepositoryError(error),
@@ -116,6 +108,12 @@ extension RepositoriesFeature {
       return false
     }
     return message.localizedCaseInsensitiveContains("not a git repository")
+  }
+
+  nonisolated static func pathsReferToSameFileSystemLocation(_ lhs: String, _ rhs: String) -> Bool {
+    let lhsURL = URL(fileURLWithPath: lhs).resolvingSymlinksInPath().standardizedFileURL
+    let rhsURL = URL(fileURLWithPath: rhs).resolvingSymlinksInPath().standardizedFileURL
+    return lhsURL == rhsURL
   }
 
   nonisolated static func openRepositoryFailureMessage(path: String, error: any Error) -> String {
