@@ -185,13 +185,13 @@ private func runGit(_ arguments: [String], in directory: URL) throws {
   let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
   let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
   guard process.terminationStatus == 0 else {
+    let command = arguments.joined(separator: " ")
+    let path = directory.path(percentEncoded: false)
+    let message = "git \(command) failed in \(path)\nstdout: \(stdoutText)\nstderr: \(stderrText)"
     throw NSError(
       domain: "ExternalDiffToolTests.runGit",
       code: Int(process.terminationStatus),
-      userInfo: [
-        NSLocalizedDescriptionKey:
-          "git \(arguments.joined(separator: " ")) failed in \(directory.path(percentEncoded: false))\nstdout: \(stdoutText)\nstderr: \(stderrText)"
-      ]
+      userInfo: [NSLocalizedDescriptionKey: message]
     )
   }
 }
