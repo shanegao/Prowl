@@ -86,3 +86,6 @@ deletion-safety rework, clone-from-URL intake — all later waves (see Amendment
   [004-advanced-placement-overrides.md](004-advanced-placement-overrides.md)
 - Updated 2026-06-28: Add to Prowl popover redesign with clone support (#520) — see
   [005-add-to-prowl-clone.md](005-add-to-prowl-clone.md)
+- Updated 2026-07-12: worktree deletion now verifies Git registration removal and
+  propagates cleanup failures (fork issue #454) — see
+  [006-verified-worktree-deletion.md](006-verified-worktree-deletion.md)
