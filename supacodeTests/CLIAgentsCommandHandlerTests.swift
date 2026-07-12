@@ -170,7 +170,7 @@ struct CLIAgentsCommandHandlerTests {
       worktreeName: input.worktree.name,
       workingDirectory: input.workingDirectory,
       tabID: TerminalTabID(rawValue: input.tabID),
-      tabTitle: "issue 330",
+      paneTitle: "issue 330",
       surfaceID: input.paneID,
       paneIndex: input.paneIndex,
       iconLookupToken: input.iconLookupToken,

@@ -368,10 +368,16 @@ extension WorktreeTerminalState {
   func configureBridgeCallbacks(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     view.bridge.onTitleChange = { [weak self, weak view] title in
       guard let self, let view else { return }
-      if self.focusedSurfaceIdByTab[tabId] == view.id {
-        if self.tabManager.updateTitle(tabId, title: title) {
-          self.refreshAgentEntriesForTitleChange(in: tabId)
-        }
+      if self.focusedSurfaceIdByTab[tabId] == view.id,
+        self.tabManager.updateTitle(tabId, title: title)
+      {
+        // The tab's display title moved: refresh the whole tab because it is
+        // the title fallback for panes without their own title.
+        self.refreshAgentEntriesForTitleChange(in: tabId)
+      } else {
+        // Unfocused pane, or the tab title didn't visibly change (custom title
+        // mask / no-op): only this pane's own title moved.
+        self.refreshAgentEntryForTitleChange(surfaceID: view.id, in: tabId)
       }
       self.noteTitleForCommandDetection(title, surfaceId: view.id, tabId: tabId)
     }

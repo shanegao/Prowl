@@ -21,7 +21,7 @@ Command Palette → "Toggle Active Agents Panel".
 
 ```
 [icon]  AgentName · RepositoryName        [status pill]
-        tab title or branch (secondary)
+        pane title or branch (secondary)
 ```
 
 - **Icon** — the detected command/agent icon (for example `omp` keeps the OMP
@@ -29,7 +29,9 @@ Command Palette → "Toggle Active Agents Panel".
   agent icon, then a sparkle).
 - **Title** — detected command/agent name + repository (repo color-coded);
   command aliases such as `omp` are shown directly.
-- **Subtitle** — the tab title (if `showActiveAgentTabTitles`) or branch name.
+- **Subtitle** — the agent's pane title (if `showActiveAgentTabTitles`) or branch
+  name. The pane title is the surface's own terminal title, falling back to the
+  tab title, so agents in different splits of one tab keep distinct subtitles.
 - **Status pill** — one of:
 
 | Status | Meaning | Look |
@@ -58,7 +60,8 @@ When nothing is running: "New agents will appear here".
 ## Settings
 
 - `autoShowActiveAgentsPanel` — pop the panel open when an agent appears.
-- `showActiveAgentTabTitles` — show each agent's tab title instead of its branch.
+- `showActiveAgentTabTitles` — show each agent's pane title (surface title,
+  falling back to the tab title) instead of its branch.
 - `showActiveAgentStatusInShelf` — show detected agent status markers on Shelf
   tab icons.
 - Panel height and hidden/shown state are persisted automatically.

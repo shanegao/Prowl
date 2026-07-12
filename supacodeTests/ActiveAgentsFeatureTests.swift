@@ -188,8 +188,8 @@ struct ActiveAgentsFeatureTests {
     }
   }
 
-  @Test func panelSubtitleAndHelpSwapTabTitleAndBranchWhenEnabled() {
-    let entry = entry(id: UUID(0), tabTitle: "Review issue 385", state: .idle, changedAt: Date())
+  @Test func panelSubtitleAndHelpSwapPaneTitleAndBranchWhenEnabled() {
+    let entry = entry(id: UUID(0), paneTitle: "Review issue 385", state: .idle, changedAt: Date())
 
     #expect(
       ActiveAgentsPanel.subtitle(for: entry, branchName: "main", showTabTitles: false)
@@ -209,10 +209,10 @@ struct ActiveAgentsFeatureTests {
     )
   }
 
-  @Test func panelTabTitleFallsBackForEmptyTitles() {
-    let entry = entry(id: UUID(0), tabTitle: "   ", state: .idle, changedAt: Date())
+  @Test func panelPaneTitleFallsBackForEmptyTitles() {
+    let entry = entry(id: UUID(0), paneTitle: "   ", state: .idle, changedAt: Date())
 
-    #expect(ActiveAgentsPanel.tabTitle(for: entry) == "Untitled tab")
+    #expect(ActiveAgentsPanel.paneTitle(for: entry) == "Untitled tab")
   }
 
   private func sampleEntries() -> IdentifiedArrayOf<ActiveAgentEntry> {
@@ -226,7 +226,7 @@ struct ActiveAgentsFeatureTests {
 
   private func entry(
     id: UUID,
-    tabTitle: String = "1",
+    paneTitle: String = "1",
     state: AgentDisplayState,
     changedAt: Date,
     agent: DetectedAgent = .codex,
@@ -238,7 +238,7 @@ struct ActiveAgentsFeatureTests {
       worktreeName: "wt",
       workingDirectory: nil,
       tabID: TerminalTabID(rawValue: UUID()),
-      tabTitle: tabTitle,
+      paneTitle: paneTitle,
       surfaceID: id,
       paneIndex: 1,
       iconLookupToken: iconLookupToken ?? agent.iconLookupToken,

@@ -98,10 +98,10 @@ struct AppearanceSettingsView: View {
             .foregroundStyle(.secondary)
             .font(.callout)
           Toggle(
-            "Show tab titles in agent rows",
+            "Show terminal titles in agent rows",
             isOn: $store.showActiveAgentTabTitles
           )
-          .help("Display each agent's tab title in the row and show the branch name on hover.")
+          .help("Display each agent's own terminal title in the row and show the branch name on hover.")
           Toggle(
             "Show agent status in Shelf tabs",
             isOn: $store.showActiveAgentStatusInShelf
