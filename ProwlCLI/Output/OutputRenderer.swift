@@ -227,7 +227,8 @@ enum OutputRenderer {
     return sortedAgents.map { agent in
       let statusLabel = agentStatusLabel(agent.status)
       let projectLabel = "\(agent.project.name):\(agent.project.branch)"
-      return "\(statusLabel)  \(agent.name)  \(projectLabel)  \(agent.tab.title)  \(agent.pane.id)"
+      let sessionLabel = agent.session.map { "  session=\($0.id) [\($0.confidence)]" } ?? ""
+      return "\(statusLabel)  \(agent.name)  \(projectLabel)  \(agent.tab.title)  \(agent.pane.id)\(sessionLabel)"
     }.joined(separator: "\n")
   }
 

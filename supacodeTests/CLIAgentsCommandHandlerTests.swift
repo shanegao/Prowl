@@ -45,6 +45,10 @@ struct CLIAgentsCommandHandlerTests {
     #expect(agent.pane.title == "omp")
     #expect(agent.pane.cwd == "/tmp/project-repo/Sources")
     #expect(agent.pane.focused)
+    #expect(agent.session?.id == "019f4f1b-3650-7661-a56d-351f02f01139")
+    #expect(agent.session?.path == "/tmp/pi-session.jsonl")
+    #expect(agent.session?.confidence == "high")
+    #expect(agent.session?.source == "transcript_match")
 
     let idleAgent = payload.agents[1]
     #expect(idleAgent.status == .idle)
@@ -117,6 +121,12 @@ struct CLIAgentsCommandHandlerTests {
           paneIndex: 2,
           iconLookupToken: "omp",
           agent: .pi,
+          session: AgentSession(
+            id: "019f4f1b-3650-7661-a56d-351f02f01139",
+            transcriptPath: URL(fileURLWithPath: "/tmp/pi-session.jsonl"),
+            source: .transcriptMatch,
+            confidence: .high
+          ),
           rawState: .blocked,
           displayState: .blocked,
           lastChangedAt: Date(timeIntervalSince1970: 1_789_999_200)
@@ -165,6 +175,7 @@ struct CLIAgentsCommandHandlerTests {
       paneIndex: input.paneIndex,
       iconLookupToken: input.iconLookupToken,
       agent: input.agent,
+      session: input.session,
       rawState: input.rawState,
       displayState: input.displayState,
       lastChangedAt: input.lastChangedAt
@@ -220,6 +231,7 @@ struct CLIAgentsCommandHandlerTests {
     let paneIndex: Int
     let iconLookupToken: String
     let agent: DetectedAgent
+    var session: AgentSession?
     let rawState: AgentRawState
     let displayState: AgentDisplayState
     let lastChangedAt: Date

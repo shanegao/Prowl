@@ -105,7 +105,15 @@ final class AgentsCommandHandler: CommandHandler {
           title: terminalContext.pane.title,
           cwd: terminalContext.pane.cwd,
           focused: terminalContext.focused
-        )
+        ),
+        session: entry.session.map {
+          AgentsCommandSession(
+            id: $0.id,
+            path: $0.transcriptPath?.path,
+            confidence: $0.confidence.rawValue,
+            source: $0.source.rawValue
+          )
+        }
       )
     }
 
