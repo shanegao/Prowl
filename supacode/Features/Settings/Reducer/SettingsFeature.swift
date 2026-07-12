@@ -9,7 +9,6 @@ struct SettingsFeature {
     var appearanceMode: AppearanceMode
     var defaultEditorID: String
     var confirmBeforeQuit: Bool
-    var updateChannel: UpdateChannel
     var updatesAutomaticallyCheckForUpdates: Bool
     var updatesAutomaticallyDownloadUpdates: Bool
     var inAppNotificationsEnabled: Bool
@@ -68,7 +67,6 @@ struct SettingsFeature {
       appearanceMode = settings.appearanceMode
       defaultEditorID = normalizedDefaultEditorID
       confirmBeforeQuit = settings.confirmBeforeQuit
-      updateChannel = settings.updateChannel
       updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
       updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
@@ -117,7 +115,6 @@ struct SettingsFeature {
         appearanceMode: appearanceMode,
         defaultEditorID: defaultEditorID,
         confirmBeforeQuit: confirmBeforeQuit,
-        updateChannel: updateChannel,
         updatesAutomaticallyCheckForUpdates: updatesAutomaticallyCheckForUpdates,
         updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
         inAppNotificationsEnabled: inAppNotificationsEnabled,
@@ -239,7 +236,6 @@ struct SettingsFeature {
         state.appearanceMode = normalizedSettings.appearanceMode
         state.defaultEditorID = normalizedSettings.defaultEditorID
         state.confirmBeforeQuit = normalizedSettings.confirmBeforeQuit
-        state.updateChannel = normalizedSettings.updateChannel
         state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
         state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled

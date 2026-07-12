@@ -26,7 +26,6 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `appearanceMode` | enum (`system`/`light`/`dark`) | `dark` | App appearance. |
 | `defaultEditorID` | String | `auto` | Default app to open worktrees (overridable per repo); `auto` prefers an app matching the detected project type. |
 | `confirmBeforeQuit` | Bool | `true` | Confirm before quitting Prowl. |
-| `updateChannel` | enum (`stable`/`tip`) | `stable` | Sparkle release channel. |
 | `updatesAutomaticallyCheckForUpdates` | Bool | `true` | Background update checks. |
 | `updatesAutomaticallyDownloadUpdates` | Bool | `false` | Auto-download updates. |
 | `inAppNotificationsEnabled` | Bool | `true` | In-app alerts / bell indicators. |

@@ -1,8 +1,8 @@
 # Updates
 
-> Prowl keeps itself current via Sparkle. Channels, auto-check, and manual checks.
+> Prowl keeps itself current via Sparkle. Auto-check and manual checks.
 
-**Keywords:** updates, sparkle, auto-update, check for updates, channel, stable, tip, version, ⌘⇧U
+**Keywords:** updates, sparkle, auto-update, check for updates, version, ⌘⇧U
 
 **Related:** [settings](settings.md)
 
@@ -26,15 +26,8 @@ Prowl uses the **Sparkle** framework for auto-updates. Releases are notarized.
   next check. A "Check for Updates" action will therefore never install and
   relaunch on its own.
 
-## Channels
-
-`updateChannel` offers **Stable** (default) and **Tip** in Settings → Updates.
-Tip is **no longer published separately** and currently resolves to the same feed
-as Stable, so the two behave identically today.
-
 ## Settings
 
-- `updateChannel` — `stable` or `tip` (Tip currently resolves to Stable).
 - `updatesAutomaticallyCheckForUpdates` — background checks (default on).
 - `updatesAutomaticallyDownloadUpdates` — present in settings but **not currently
   wired** to Sparkle or exposed in the UI; the background-download preference is
