@@ -39,7 +39,7 @@ PROWL_POSTHOG_API_KEY ?=
 PROWL_POSTHOG_HOST ?=
 
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-cli-smoke test-cli-integration bump-version log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -421,18 +421,3 @@ bump-version: # Bump app version (usage: make bump-version [VERSION=YYYY.M.DD] [
 	git commit -m "bump v$$version"; \
 	git tag -s "v$$version" -m "v$$version"; \
 	echo "version bumped to $$version (build $$build), tagged v$$version"
-
-bump-and-release: bump-version # Bump version and push tags to trigger release
-	git push --follow-tags
-	@tag="$$(git describe --tags --abbrev=0)"; \
-	repo="$$(gh repo view --json nameWithOwner -q .nameWithOwner)"; \
-	prev="$$(gh release view --json tagName -q .tagName 2>/dev/null || echo '')"; \
-	tmp=$$(mktemp); \
-	if [ -n "$$prev" ]; then \
-		gh api "repos/$$repo/releases/generate-notes" -f tag_name="$$tag" -f previous_tag_name="$$prev" --jq '.body' > "$$tmp"; \
-	else \
-		gh api "repos/$$repo/releases/generate-notes" -f tag_name="$$tag" --jq '.body' > "$$tmp"; \
-	fi; \
-	$${EDITOR:-vim} "$$tmp"; \
-	gh release create "$$tag" --notes-file "$$tmp"; \
-	rm -f "$$tmp"

@@ -17,8 +17,7 @@ make log-stream                  # Stream app logs (subsystem: com.onevcat.prowl
 make build-cli                   # Build CLI (prowl) via SwiftPM
 make test-cli-smoke              # Run CLI smoke tests (unit-level)
 make test-cli-integration        # Run CLI integration tests (socket round-trip)
-make bump-version                # Bump version (date-based YYYY.M.DD) and create git tag
-make bump-and-release            # Bump version and push to trigger release
+make bump-version                # Bump version (date-based YYYY.M.DD) and create git tag; used by release.sh
 ```
 
 Run a single test class or method:
