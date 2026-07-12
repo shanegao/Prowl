@@ -4,7 +4,11 @@ import Testing
 
 @testable import supacode
 
+// Serialized: these tests drive TestClock-backed debounce and timeout tasks.
+// Running them in parallel can race clock advancement ahead of task suspension
+// under full-suite load, causing the queued refresh work to never flush.
 @MainActor
+@Suite(.serialized)
 struct PullRequestRefreshCoordinatorTests {
   @Test func enqueueCoalescesMultipleReposIntoSingleBatchAfterDebounce() async throws {
     let clock = TestClock()
