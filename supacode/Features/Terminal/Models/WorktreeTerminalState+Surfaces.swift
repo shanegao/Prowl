@@ -126,6 +126,7 @@ extension WorktreeTerminalState {
         newSurface.setOcclusion(true)
       }
       focusSurface(newSurface, in: tabId)
+      _ = registerTargetHandle(for: newSurface.id)
       return newSurface.id
     } catch {
       newSurface.closeSurface()
@@ -212,6 +213,7 @@ extension WorktreeTerminalState {
           newSurface.setOcclusion(true)
         }
         focusSurface(newSurface, in: tabId)
+        _ = registerTargetHandle(for: newSurface.id)
         return true
       } catch {
         newSurface.closeSurface()
@@ -312,7 +314,11 @@ extension WorktreeTerminalState {
   }
 
   func closeAllSurfaces() {
+    for tab in tabManager.tabs {
+      unregisterTargetHandle(for: tab.id)
+    }
     for surface in surfaces.values {
+      unregisterTargetHandle(for: surface.id)
       surface.closeSurface()
     }
     surfaces.removeAll()
@@ -612,6 +618,7 @@ extension WorktreeTerminalState {
   /// without dropping them here the worktree's unseen indicator (bell + Dock
   /// badge) would stay lit until the user manually dismisses everything.
   func forgetSurface(_ surfaceID: UUID) {
+    unregisterTargetHandle(for: surfaceID)
     surfaces.removeValue(forKey: surfaceID)
     surfaceRunningStartedAtById.removeValue(forKey: surfaceID)
     autoCloseSurfaceIds.remove(surfaceID)
@@ -831,6 +838,7 @@ extension WorktreeTerminalState {
       focusedSurfaceIdByTab.removeValue(forKey: tabId)
       removeBoundDirectoryTab(tabId)
       tabManager.closeTab(tabId)
+      unregisterTargetHandle(for: tabId)
       if tabId == runScriptTabId {
         setRunScriptTabId(nil)
       }

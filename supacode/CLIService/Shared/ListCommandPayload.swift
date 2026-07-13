@@ -61,11 +61,13 @@ public struct ListCommandWorktree: Codable, Equatable {
 
 public struct ListCommandTab: Codable, Equatable {
   public let id: String
+  public let handle: Int?
   public let title: String
   public let selected: Bool
 
-  public init(id: String, title: String, selected: Bool) {
+  public init(id: String, handle: Int? = nil, title: String, selected: Bool) {
     self.id = id
+    self.handle = handle
     self.title = title
     self.selected = selected
   }
@@ -73,12 +75,14 @@ public struct ListCommandTab: Codable, Equatable {
 
 public struct ListCommandPane: Codable, Equatable {
   public let id: String
+  public let handle: Int?
   public let title: String
   public let cwd: String?
   public let focused: Bool
 
-  public init(id: String, title: String, cwd: String?, focused: Bool) {
+  public init(id: String, handle: Int? = nil, title: String, cwd: String?, focused: Bool) {
     self.id = id
+    self.handle = handle
     self.title = title
     self.cwd = cwd
     self.focused = focused

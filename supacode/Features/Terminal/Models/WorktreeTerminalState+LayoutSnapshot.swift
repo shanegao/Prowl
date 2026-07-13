@@ -141,6 +141,13 @@ extension WorktreeTerminalState {
     tabManager.selectedTabId = selectedTabID
     setRunScriptTabId(nil)
 
+    for tab in restoredTabs {
+      _ = registerTargetHandle(for: tab.id)
+      for surface in restoredTrees[tab.id]?.leaves() ?? [] {
+        _ = registerTargetHandle(for: surface.id)
+      }
+    }
+
     // Explicitly unfocus all restored surfaces so only the focused one blinks.
     for surface in surfaces.values {
       surface.focusDidChange(false)

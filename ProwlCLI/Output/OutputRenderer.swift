@@ -178,9 +178,10 @@ enum OutputRenderer {
         guard let tabItems = tabGroups[tabID], let firstTab = tabItems.first else { continue }
 
         let tabNum = "Tab \(tabIndex + 1):"
+        let tabHandle = firstTab.tab.handle.map { "t\($0)" } ?? firstTab.tab.id
         let selectedMark = firstTab.tab.selected ? "*".yellow : " "
         let tabTitle = firstTab.tab.selected ? firstTab.tab.title.yellow : firstTab.tab.title
-        lines.append("  [\(selectedMark)] \(tabNum.dim) \(tabTitle)")
+        lines.append("  [\(selectedMark)] \(tabNum.dim) \(tabTitle)  \(tabHandle.dim)")
 
         for (paneIndex, item) in tabItems.enumerated() {
           let focusMark = item.pane.focused ? ">".green.bold : " "
@@ -194,7 +195,8 @@ enum OutputRenderer {
             paneLine += "  \(cwd.dim)"
           }
 
-          paneLine += "  \(item.pane.id.dim)"
+          let paneHandle = item.pane.handle.map { "p\($0)" } ?? item.pane.id
+          paneLine += "  \(paneHandle.dim)"
           lines.append(paneLine)
         }
       }
@@ -227,8 +229,9 @@ enum OutputRenderer {
     return sortedAgents.map { agent in
       let statusLabel = agentStatusLabel(agent.status)
       let projectLabel = "\(agent.project.name):\(agent.project.branch)"
+      let paneHandle = agent.pane.handle.map { "p\($0)" } ?? agent.pane.id
       let sessionLabel = agent.session.map { "  session=\($0.id) [\($0.confidence)]" } ?? ""
-      return "\(statusLabel)  \(agent.name)  \(projectLabel)  \(agent.tab.title)  \(agent.pane.id)\(sessionLabel)"
+      return "\(statusLabel)  \(agent.name)  \(projectLabel)  \(agent.tab.title)  \(paneHandle)\(sessionLabel)"
     }.joined(separator: "\n")
   }
 

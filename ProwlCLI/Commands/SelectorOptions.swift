@@ -11,10 +11,10 @@ struct SelectorOptions: ParsableArguments {
   @Option(name: .long, help: "Target worktree by id, name, or path.")
   var worktree: String?
 
-  @Option(name: .long, help: "Target tab by id.")
+  @Option(name: .long, help: "Target tab by UUID or short handle (for example, t4).")
   var tab: String?
 
-  @Option(name: .long, help: "Target pane by id.")
+  @Option(name: .long, help: "Target pane by UUID or short handle (for example, p3).")
   var pane: String?
 
   /// Validate mutual exclusivity and return typed selector.

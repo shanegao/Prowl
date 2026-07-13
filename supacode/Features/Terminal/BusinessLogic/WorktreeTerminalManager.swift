@@ -11,6 +11,7 @@ private let layoutRestoreFailureMessage = "Saved terminal layout was invalid and
 final class WorktreeTerminalManager {
   private let runtime: GhosttyRuntime?
   private let layoutPersistence: TerminalLayoutPersistenceClient
+  private let targetHandleRegistry = TerminalTargetHandleRegistry()
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
   private var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
@@ -235,7 +236,8 @@ final class WorktreeTerminalManager {
       runtime: runtime!,
       worktree: worktree,
       runSetupScript: runSetupScript,
-      defaultFontSize: preferredFontSize
+      defaultFontSize: preferredFontSize,
+      targetHandleRegistry: targetHandleRegistry
     )
     state.setNotificationsEnabled(notificationsEnabled)
     state.setCommandFinishedNotification(

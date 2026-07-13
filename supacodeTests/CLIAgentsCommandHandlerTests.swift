@@ -41,6 +41,7 @@ struct CLIAgentsCommandHandlerTests {
     #expect(agent.tab.title == "issue 330")
     #expect(agent.tab.selected)
     #expect(agent.pane.id == fixture.tabPaneID.uuidString)
+    #expect(agent.pane.handle == nil)
     #expect(agent.pane.index == 2)
     #expect(agent.pane.title == "omp")
     #expect(agent.pane.cwd == "/tmp/project-repo/Sources")
@@ -55,6 +56,26 @@ struct CLIAgentsCommandHandlerTests {
     #expect(idleAgent.project.name == "Tab Repo")
     #expect(idleAgent.project.branch == "main")
     #expect(idleAgent.pane.focused == false)
+    let rawPayload = try #require(response.data?.bytes)
+    let rawPayloadString = try #require(String(bytes: rawPayload, encoding: .utf8))
+    #expect(!rawPayloadString.contains("\"handle\""))
+  }
+
+  @Test func includesPaneHandlesOnlyInTextPayload() async throws {
+    let fixture = makePayloadFixture()
+    let handler = AgentsCommandHandler {
+      fixture.snapshot
+    }
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(output: .text, command: .agents(AgentsInput()))
+    )
+    let payload = try #require(try response.data?.decode(as: AgentsCommandPayload.self))
+
+    #expect(payload.agents[0].id == fixture.tabPaneID.uuidString)
+    #expect(payload.agents[0].pane.id == fixture.tabPaneID.uuidString)
+    #expect(payload.agents[0].pane.handle == 12)
+    #expect(payload.agents[1].pane.handle == 11)
   }
 
   @Test func returnsAgentsFailedWhenSnapshotProviderThrows() async {
@@ -200,12 +221,13 @@ struct CLIAgentsCommandHandlerTests {
           tabs: [
             .init(
               id: tabID,
+              handle: 10,
               title: "issue 330",
               selected: true,
               focusedPaneID: tabPaneID,
               panes: [
-                .init(id: otherPaneID, title: "zsh", cwd: "/tmp/tab-repo"),
-                .init(id: tabPaneID, title: "omp", cwd: "/tmp/project-repo/Sources"),
+                .init(id: otherPaneID, handle: 11, title: "zsh", cwd: "/tmp/tab-repo"),
+                .init(id: tabPaneID, handle: 12, title: "omp", cwd: "/tmp/project-repo/Sources"),
               ]
             )
           ]
