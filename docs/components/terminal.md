@@ -73,9 +73,10 @@ lifetime. Prowl also "learns" your shell's idle prompt so it doesn't mistake it
 for a meaningful title.
 
 > **Titles are free-form and can lie or lag.** Any program can set any title.
-> When automating, never target a pane by its title — use the stable `pane.id`
-> from [`prowl list`](cli.md). The bundled [`prowl-cli` skill](cli.md) repeats
-> this for good reason.
+> When automating, never target a pane by its title — use the JSON `pane.id` or,
+> for a same-session handoff, the text `pN` handle from
+> [`prowl list`](cli.md). The bundled [`prowl-cli` skill](cli.md) repeats this
+> for good reason.
 
 ## Tab icons
 

@@ -469,11 +469,13 @@ final class ProwlCLIIntegrationTests: XCTestCase {
             ),
             tab: ListTab(
               id: "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0",
+              handle: 7,
               title: "Prowl 1",
               selected: true
             ),
             pane: ListPane(
               id: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764",
+              handle: 8,
               title: "zsh",
               cwd: "/Users/onevcat/Projects/Prowl",
               focused: true
@@ -493,11 +495,10 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(result.exitCode, 0)
     XCTAssertTrue(result.stdout.contains("Prowl:Prowl (running)"), "Missing worktree header: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("Tab 1:"), "Missing tab label: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("t7"), "Missing tab handle: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("Pane 1:"), "Missing pane label: \(result.stdout)")
-    XCTAssertTrue(
-      result.stdout.contains("6E1A2A10-D99F-4E3F-920C-D93AA3C05764"),
-      "Missing pane ID: \(result.stdout)"
-    )
+    XCTAssertTrue(result.stdout.contains("p8"), "Missing pane handle: \(result.stdout)")
+    XCTAssertFalse(result.stdout.contains("6E1A2A10-D99F-4E3F-920C-D93AA3C05764"))
   }
 
   func testListEmptyPayloadShowsNoPanesFound() throws {
@@ -544,6 +545,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
           ),
           makeAgentResponse(
             id: "blocked-pane",
+            handle: 3,
             name: "omp",
             status: "blocked",
             projectName: "Prowl",
@@ -575,7 +577,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(lines[0].contains("omp"), "Missing agent name: \(result.stdout)")
     XCTAssertTrue(lines[0].contains("Prowl:feature/cli-agents"), "Missing project label: \(result.stdout)")
     XCTAssertTrue(lines[0].contains("issue 330"), "Missing tab title: \(result.stdout)")
-    XCTAssertTrue(lines[0].contains("blocked-pane"), "Missing pane id: \(result.stdout)")
+    XCTAssertTrue(lines[0].contains("p3"), "Missing pane handle: \(result.stdout)")
+    XCTAssertFalse(lines[0].contains("blocked-pane"), "Unexpected UUID fallback: \(result.stdout)")
     XCTAssertTrue(lines[1].contains("Working"), "Expected working second: \(result.stdout)")
     XCTAssertTrue(lines[2].contains("Done"), "Expected done third: \(result.stdout)")
     XCTAssertTrue(lines[2].contains("session=019f4e9e-1234-4567-89ab-0123456789ab [exact]"))
@@ -1577,6 +1580,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
 
   private func makeAgentResponse(
     id: String,
+    handle: Int? = nil,
     name: String,
     status: String,
     projectName: String,
@@ -1600,7 +1604,14 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         kind: "git"
       ),
       tab: ListTab(id: "\(id)-tab", title: tabTitle, selected: true),
-      pane: AgentsResponsePane(id: id, index: 1, title: name, cwd: "/Projects/\(projectName)", focused: false),
+      pane: AgentsResponsePane(
+        id: id,
+        handle: handle,
+        index: 1,
+        title: name,
+        cwd: "/Projects/\(projectName)",
+        focused: false
+      ),
       session: session
     )
   }
@@ -1786,15 +1797,32 @@ private struct ListWorktree: Encodable {
 
 private struct ListTab: Encodable {
   let id: String
+  let handle: Int?
   let title: String
   let selected: Bool
+
+  init(id: String, handle: Int? = nil, title: String, selected: Bool) {
+    self.id = id
+    self.handle = handle
+    self.title = title
+    self.selected = selected
+  }
 }
 
 private struct ListPane: Encodable {
   let id: String
+  let handle: Int?
   let title: String
   let cwd: String?
   let focused: Bool
+
+  init(id: String, handle: Int? = nil, title: String, cwd: String?, focused: Bool) {
+    self.id = id
+    self.handle = handle
+    self.title = title
+    self.cwd = cwd
+    self.focused = focused
+  }
 }
 
 private struct ListTask: Encodable {
@@ -1850,10 +1878,20 @@ private struct AgentsResponseProject: Encodable {
 
 private struct AgentsResponsePane: Encodable {
   let id: String
+  let handle: Int?
   let index: Int
   let title: String
   let cwd: String?
   let focused: Bool
+
+  init(id: String, handle: Int? = nil, index: Int, title: String, cwd: String?, focused: Bool) {
+    self.id = id
+    self.handle = handle
+    self.index = index
+    self.title = title
+    self.cwd = cwd
+    self.focused = focused
+  }
 }
 
 private struct FocusResponseData: Encodable {

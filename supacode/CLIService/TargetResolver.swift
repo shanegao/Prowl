@@ -98,17 +98,14 @@ final class TargetResolver {
     return .success(makeTarget(worktree: worktree, tab: tab, pane: pane, focusedWorktreeID: snapshot.focusedWorktreeID))
   }
 
-  // MARK: - .tab: find by UUID
+  // MARK: - .tab: find by UUID or short handle
 
   private func resolveTab(
     _ value: String,
     _ snapshot: TargetResolutionSnapshot
   ) -> Result<ResolvedTarget, TargetResolverError> {
-    guard let uuid = UUID(uuidString: value) else {
-      return .failure(.notFound("Invalid tab UUID: '\(value)'."))
-    }
     for worktree in snapshot.worktrees {
-      for tab in worktree.tabs where tab.id == uuid {
+      for tab in worktree.tabs where matches(tab: tab, selector: value) {
         guard let pane = tab.focusedPane ?? tab.panes.first else {
           return .failure(.notFound("No panes in tab '\(value)'."))
         }
@@ -124,18 +121,15 @@ final class TargetResolver {
     return .failure(.notFound("Tab '\(value)' not found."))
   }
 
-  // MARK: - .pane: find by UUID across all worktrees/tabs
+  // MARK: - .pane: find by UUID or short handle across all worktrees/tabs
 
   private func resolvePane(
     _ value: String,
     _ snapshot: TargetResolutionSnapshot
   ) -> Result<ResolvedTarget, TargetResolverError> {
-    guard let uuid = UUID(uuidString: value) else {
-      return .failure(.notFound("Invalid pane UUID: '\(value)'."))
-    }
     for worktree in snapshot.worktrees {
       for tab in worktree.tabs {
-        for pane in tab.panes where pane.id == uuid {
+        for pane in tab.panes where matches(pane: pane, selector: value) {
           return .success(
             makeTarget(
               worktree: worktree,
@@ -172,6 +166,39 @@ final class TargetResolver {
   }
 
   // MARK: - Helpers
+
+  private func matches(tab: TargetResolutionSnapshot.Tab, selector: String) -> Bool {
+    guard let handle = shortHandle(in: selector, prefix: "t") else {
+      return UUID(uuidString: selector) == tab.id
+    }
+    return tab.handle == handle
+  }
+
+  private func matches(pane: TargetResolutionSnapshot.Pane, selector: String) -> Bool {
+    guard let handle = shortHandle(in: selector, prefix: "p") else {
+      return UUID(uuidString: selector) == pane.id
+    }
+    return pane.handle == handle
+  }
+
+  private func shortHandle(in selector: String, prefix: Character) -> Int? {
+    let normalized = selector.lowercased()
+    let digits: Substring
+    if normalized.first == prefix {
+      digits = normalized.dropFirst()
+    } else {
+      digits = normalized[...]
+    }
+    guard
+      !digits.isEmpty,
+      digits.allSatisfy({ $0.isASCII && $0.isNumber }),
+      let handle = Int(digits),
+      handle > 0
+    else {
+      return nil
+    }
+    return handle
+  }
 
   private func makeTarget(
     worktree: TargetResolutionSnapshot.Worktree,
@@ -212,10 +239,27 @@ struct TargetResolutionSnapshot: Sendable {
 
   struct Tab: Sendable {
     let id: UUID
+    let handle: Int?
     let title: String
     let selected: Bool
     let panes: [Pane]
     let focusedPaneID: UUID?
+
+    init(
+      id: UUID,
+      handle: Int? = nil,
+      title: String,
+      selected: Bool,
+      panes: [Pane],
+      focusedPaneID: UUID?
+    ) {
+      self.id = id
+      self.handle = handle
+      self.title = title
+      self.selected = selected
+      self.panes = panes
+      self.focusedPaneID = focusedPaneID
+    }
 
     var focusedPane: Pane? {
       guard let focusedPaneID else { return nil }
@@ -225,10 +269,27 @@ struct TargetResolutionSnapshot: Sendable {
 
   struct Pane: @unchecked Sendable {
     let id: UUID
+    let handle: Int?
     let title: String
     let cwd: String?
     let isFocusedInTab: Bool
     let surfaceView: GhosttySurfaceView
+
+    init(
+      id: UUID,
+      handle: Int? = nil,
+      title: String,
+      cwd: String?,
+      isFocusedInTab: Bool,
+      surfaceView: GhosttySurfaceView
+    ) {
+      self.id = id
+      self.handle = handle
+      self.title = title
+      self.cwd = cwd
+      self.isFocusedInTab = isFocusedInTab
+      self.surfaceView = surfaceView
+    }
   }
 
   let worktrees: [Worktree]
@@ -260,6 +321,7 @@ enum TargetResolutionSnapshotBuilder {
         guard let snapshot else { return nil }
         return TargetResolutionSnapshot.Tab(
           id: tab.id.rawValue,
+          handle: state.registerTargetHandle(for: tab.id),
           title: tab.displayTitle,
           selected: tab.id == selectedTabID,
           panes: snapshot.panes,

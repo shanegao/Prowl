@@ -8,6 +8,7 @@ struct CLIWorktreeTerminalSnapshot: Sendable {
 
 struct CLITerminalTabSnapshot: Sendable {
   let id: UUID
+  let handle: Int?
   let title: String
   let selected: Bool
   let focusedPaneID: UUID?
@@ -16,6 +17,7 @@ struct CLITerminalTabSnapshot: Sendable {
 
 struct CLITerminalPaneSnapshot: Sendable {
   let id: UUID
+  let handle: Int?
   let title: String
   let cwd: String?
 }
@@ -33,11 +35,17 @@ extension WorktreeTerminalState {
         ).workingDirectory?.path(percentEncoded: false)
 
         let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.displayTitle)
-        return CLITerminalPaneSnapshot(id: paneID, title: title, cwd: cwd)
+        return CLITerminalPaneSnapshot(
+          id: paneID,
+          handle: registerTargetHandle(for: paneID),
+          title: title,
+          cwd: cwd
+        )
       }
 
       return CLITerminalTabSnapshot(
         id: tab.id.rawValue,
+        handle: registerTargetHandle(for: tab.id),
         title: tab.displayTitle,
         selected: tab.id == selectedTabID,
         focusedPaneID: focusedSurfaceIdByTab[tab.id],
@@ -107,6 +115,7 @@ extension WorktreeTerminalState {
       let title = paneTitle(surfaceID: paneID, fallbackTabTitle: "")
       return TargetResolutionSnapshot.Pane(
         id: paneID,
+        handle: registerTargetHandle(for: paneID),
         title: title,
         cwd: cwd,
         isFocusedInTab: paneID == focusedPaneID,
