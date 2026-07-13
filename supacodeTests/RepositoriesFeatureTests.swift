@@ -4204,6 +4204,49 @@ struct RepositoriesFeatureTests {
     #expect(forceDeleteAttempts.value == [false, true])
   }
 
+  @Test func deleteWorktreeFailureKeepsWorktreeAndShowsGitError() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let worktree = makeWorktree(id: "\(repoRoot)/feature", name: "feature", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, worktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.removeWorktree = { _, _ in
+        throw GitClientError.commandFailed(
+          command: "git worktree remove --force \(worktree.id)",
+          message: "fatal: cannot remove a locked working tree"
+        )
+      }
+    }
+
+    await store.send(
+      .worktreeLifecycle(
+        .deleteWorktreeConfirmed(worktree.id, repository.id, deleteBranch: false)
+      )
+    ) {
+      $0.deletingWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.worktreeLifecycle.deleteWorktreeFailed) {
+      $0.deletingWorktreeIDs = []
+      $0.alert = AlertState {
+        TextState("Unable to delete worktree")
+      } actions: {
+        ButtonState(role: .cancel) {
+          TextState("OK")
+        }
+      } message: {
+        TextState(
+          "Git command failed: git worktree remove --force \(worktree.id)\n"
+            + "fatal: cannot remove a locked working tree"
+        )
+      }
+    }
+    await store.finish()
+
+    #expect(store.state.repositories[id: repository.id]?.worktrees[id: worktree.id] != nil)
+  }
+
   @Test(.dependencies) func worktreeDeletedPresentsQueuedForceDeleteBranchPromptsInOrder() async {
     let repoRoot = "/tmp/repo"
     let firstRequest = ForceDeleteBranchRequest(

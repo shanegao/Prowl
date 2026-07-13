@@ -130,9 +130,10 @@ Deleting removes the worktree directory (and optionally its branch).
 - A confirmation dialog offers an **"Also delete local branch"** toggle (its
   tooltip notes `git branch -d`). Default behavior comes from
   `deleteBranchOnDeleteWorktree`.
-- Prowl removes the worktree (relocating + `git worktree prune` if needed). If
-  branch deletion is rejected because the branch isn't merged, it offers a
-  **force delete** (`git branch -D`).
+- Prowl removes the worktree (relocating + `git worktree prune` if needed), then
+  verifies that Git no longer registers it. Cleanup failures keep the worktree
+  visible and show Git's error. If branch deletion is rejected because the branch
+  isn't merged, Prowl offers a **force delete** (`git branch -D`).
 - Protected branches (`main`, `master`, and the detected default) are guarded.
 
 The **main worktree cannot be deleted.**

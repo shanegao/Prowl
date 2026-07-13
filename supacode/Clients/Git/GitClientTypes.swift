@@ -28,6 +28,8 @@ enum GitOperation: String {
 
 enum GitClientError: LocalizedError {
   case commandFailed(command: String, message: String)
+  case worktreeNotRegistered(path: String)
+  case worktreeRecoveryFailed(path: String, removalError: String, recoveryError: String)
 
   var errorDescription: String? {
     switch self {
@@ -36,6 +38,10 @@ enum GitClientError: LocalizedError {
         return "Git command failed: \(command)"
       }
       return "Git command failed: \(command)\n\(message)"
+    case .worktreeNotRegistered(let path):
+      return "Git no longer recognizes this worktree: \(path)"
+    case .worktreeRecoveryFailed(let path, let removalError, let recoveryError):
+      return "\(removalError)\nUnable to restore the worktree directory at \(path): \(recoveryError)"
     }
   }
 }
