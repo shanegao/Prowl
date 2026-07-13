@@ -1,25 +1,29 @@
-# docs-ai — Spec-Driven Work Records
+# docs-ai — Curated Product and Design Records
 
-This directory is the durable, chronological record of how Prowl (the onevcat fork)
-evolved: one numbered folder per feature or decision-shaping fix/investigation, each
-containing the plan that preceded the work and the log of what was actually done.
-It exists so that humans and agents can answer "why is it built this way?" without
-archaeology through git history.
+This directory is Prowl's curated, durable record of how the onevcat fork evolved. Each
+numbered folder documents a substantial feature or a non-trivial, decision-shaping fix: the
+plan that preceded the work and the resulting implementation. It exists so that humans and
+agents can answer "why is it built this way?" without archaeology through git history.
+
+It is not a working-note archive. Reviews, audits, routine investigations, status reports,
+test runs, and small/docs-only changes stay in their normal task or Git context unless
+onevcat explicitly asks for a `docs-ai/` record.
 
 ## Structure
 
 ```
 docs-ai/NNN-<slug>/
-  000-plan.md      # plan / investigation before implementation (RFC-like)
+  000-plan.md      # plan before implementation (RFC-like)
   001-action.md    # what was actually done, verified against the code
   002-<topic>.md   # amendments: follow-up waves, corrections (indexed in 000-plan.md)
   <living>.md      # non-numbered = living doc (runbook/ledger/reference), updated in place
 ```
 
 Rules for writing new entries live in the `write-ai-doc` skill
-(`.claude/skills/write-ai-doc/SKILL.md`). In short: plan first, act second, amend in
-place for in-frame follow-ups, open a new numbered entry for large pivots. Numbered
-files are immutable history; non-numbered files are living documents.
+(`.claude/skills/write-ai-doc/SKILL.md`). In short: select only qualifying product work,
+then plan first, act second, amend in place for in-frame follow-ups, and open a new numbered
+entry for large pivots. Numbered files are immutable history; non-numbered files are living
+documents.
 
 Entries `001`–`045` were backfilled on 2026-07-12 from PRs, commits, and the former
 `doc-onevcat/` directory, which was dissolved into this one (historical plans were
@@ -40,8 +44,9 @@ Some entries also host verbatim historical attachments migrated from doc-onevcat
 `023-shelf-mode/jank-investigation.md`, `017-.../batch-2026-07-06-post-v0.10.5.md`,
 `045-.../research-cli-session-identity.md`); they are frozen records, not living docs.
 
-What is *not* here: small polish PRs (git history covers them) and current user-facing
-behavior (`docs/` is the agent-facing manual for that).
+What is *not* here: reviews, audits, routine investigations, test reports, working notes,
+small polish PRs (git history covers them), and current user-facing behavior (`docs/` is the
+agent-facing manual for that).
 
 ## Index
 
@@ -93,4 +98,3 @@ behavior (`docs/` is the agent-facing manual for that).
 | 044 | [foundation-model-branch-names](044-foundation-model-branch-names/000-plan.md) | 2026-06-27 | On-device FM branch-name suggestions |
 | 045 | [native-agent-session-detection](045-native-agent-session-detection/000-plan.md) | 2026-07-12 | Native agent session identity (successor to 030's heuristics) |
 | 046 | [cli-short-handles](046-cli-short-handles/000-plan.md) | 2026-07-13 | Session-scoped tab and pane handles for CLI targeting |
-| 047 | [post-tag-commit-audit](047-post-tag-commit-audit/000-plan.md) | 2026-07-13 | Post-review of commits since `v2026.7.10` |

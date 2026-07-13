@@ -188,7 +188,7 @@ Disabled via `captureApplicationLifecycleEvents = false` + `captureScreenViews =
 - **Add a new super property**: one-line addition to `AnalyticsContext.superProperties`. Applies to every event automatically.
 - **Raise / lower a memory threshold**: edit `thresholdsMB` default in `MemoryWatchdog.init`. Update `MemoryWatchdogTests` assertions to match.
 - **Filter a new Sentry noise pattern**: append to `SentryEventFilter.systemHangSignatures`. One line.
-- **Switch Sentry environment logic**: `bootstrapTelemetry` maps `updateChannel` → `environment`. Currently `.tip → "tip"`, else `"production"`.
+- **Sentry environment**: `bootstrapTelemetry` always configures `"production"`; the retired update channel no longer affects telemetry.
 - **Reset analytics locally**: toggle off in Settings → toggle on. `AnalyticsClient.reset` clears both the PostHog identity and the install UUID.
 
 ## Open gaps (possible future work)
