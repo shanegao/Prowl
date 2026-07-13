@@ -74,3 +74,6 @@ integration — all of these arrived in later waves (see Amendments and the acti
   #85) — see [002-ui-revamp-and-keybinding-unification.md](002-ui-revamp-and-keybinding-unification.md)
 - Updated 2026-04-17: New Split execution target + per-command Close on success (#205) —
   see [003-split-target-and-close-on-success.md](003-split-target-and-close-on-success.md)
+- Updated 2026-07-13: Global commands extend the repository-scoped model with local-title
+  precedence, source-qualified identities, and shared settings storage — see
+  [004-global-custom-commands.md](004-global-custom-commands.md)

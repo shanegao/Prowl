@@ -60,6 +60,7 @@ struct SettingsFeature {
     var dockBadgeAuthorization: SystemNotificationClient.DockBadgeAuthorization = .available
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
+    var globalCustomCommands: GlobalCustomCommandsFeature.State?
     @Presents var alert: AlertState<Alert>?
 
     init(settings: GlobalSettings = .default) {
@@ -178,6 +179,7 @@ struct SettingsFeature {
     case dockBadgeAuthorizationResponse(SystemNotificationClient.DockBadgeAuthorization)
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
+    case globalCustomCommands(GlobalCustomCommandsFeature.Action)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -437,12 +439,18 @@ struct SettingsFeature {
       case .repositorySettings:
         return .none
 
+      case .globalCustomCommands:
+        return .none
+
       case .delegate:
         return .none
       }
     }
     .ifLet(\.repositorySettings, action: \.repositorySettings) {
       RepositorySettingsFeature()
+    }
+    .ifLet(\.globalCustomCommands, action: \.globalCustomCommands) {
+      GlobalCustomCommandsFeature()
     }
   }
 

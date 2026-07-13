@@ -14,7 +14,7 @@ struct WorktreeDetailView: View {
     let showExtras: Bool
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
-    let customCommands: [UserCustomCommand]
+    let customCommands: [EffectiveCustomCommand]
     let isUpdateAvailable: Bool
     let isUpdateReadyToInstall: Bool
     let availableUpdateVersion: String?
@@ -30,7 +30,7 @@ struct WorktreeDetailView: View {
     let unseenNotificationWorktreeCount: Int
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
-    let customCommands: [UserCustomCommand]
+    let customCommands: [EffectiveCustomCommand]
     let isUpdateAvailable: Bool
     let isUpdateReadyToInstall: Bool
     let availableUpdateVersion: String?
@@ -44,7 +44,7 @@ struct WorktreeDetailView: View {
     let unseenNotificationWorktreeCount: Int
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
-    let customCommands: [UserCustomCommand]
+    let customCommands: [EffectiveCustomCommand]
   }
 
   @Bindable var store: StoreOf<AppFeature>
@@ -314,31 +314,28 @@ struct WorktreeDetailView: View {
               stopAction: { store.send(.stopRunScript) }
             )
           }
-          ForEach(inlineCommands, id: \.element.id) { index, command in
+          ForEach(inlineCommands, id: \.element.id) { _, command in
             UserCustomCommandToolbarButton(
-              title: command.resolvedTitle,
-              systemImage: command.resolvedSystemImage,
+              title: command.command.resolvedTitle,
+              systemImage: command.command.resolvedSystemImage,
+              sourceSystemImage: command.source.toolbarSystemImage,
               shortcut: store.resolvedKeybindings.display(
-                for: LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
+                for: command.keybindingID
               ),
-              isEnabled: command.hasRunnableCommand,
+              isEnabled: command.command.hasRunnableCommand,
               action: {
-                store.send(.runCustomCommand(index))
+                store.send(.runCustomCommand(command.id))
               }
             )
           }
           if !overflowCommands.isEmpty {
             CustomCommandOverflowButton(
-              entries: overflowCommands.map {
-                (index: $0.offset, command: $0.element)
-              },
+              entries: overflowCommands.map { $0.element },
               shortcutDisplay: { command in
-                store.resolvedKeybindings.display(
-                  for: LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
-                )
+                store.resolvedKeybindings.display(for: command.keybindingID)
               },
-              onRunCustomCommand: { index in
-                store.send(.runCustomCommand(index))
+              onRunCustomCommand: { id in
+                store.send(.runCustomCommand(id))
               }
             )
           }
@@ -812,7 +809,7 @@ struct WorktreeDetailView: View {
     let showExtras: Bool
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
-    let customCommands: [UserCustomCommand]
+    let customCommands: [EffectiveCustomCommand]
     let isUpdateAvailable: Bool
     let isUpdateReadyToInstall: Bool
     let availableUpdateVersion: String?
@@ -833,7 +830,7 @@ struct WorktreeDetailView: View {
     let onDismissAllNotifications: () -> Void
     let onRunScript: () -> Void
     let onStopRunScript: () -> Void
-    let onRunCustomCommand: (Int) -> Void
+    let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
     let onActivateUpdateButton: () -> Void
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
@@ -996,8 +993,8 @@ struct WorktreeDetailView: View {
 
       if !inlineEntries.isEmpty {
         ToolbarItemGroup {
-          ForEach(inlineEntries, id: \.command.id) { entry in
-            customCommandButton(entry.command, index: entry.index)
+          ForEach(inlineEntries) { entry in
+            customCommandButton(entry)
           }
         }
       }
@@ -1013,24 +1010,25 @@ struct WorktreeDetailView: View {
       }
     }
 
-    private var customCommandEntries: [(index: Int, command: UserCustomCommand)] {
-      Array(toolbarState.customCommands.enumerated()).map { (index: $0.offset, command: $0.element) }
+    private var customCommandEntries: [EffectiveCustomCommand] {
+      toolbarState.customCommands
     }
 
-    private func customCommandButton(_ command: UserCustomCommand, index: Int) -> some View {
+    private func customCommandButton(_ command: EffectiveCustomCommand) -> some View {
       UserCustomCommandToolbarButton(
-        title: command.resolvedTitle,
-        systemImage: command.resolvedSystemImage,
+        title: command.command.resolvedTitle,
+        systemImage: command.command.resolvedSystemImage,
+        sourceSystemImage: command.source.toolbarSystemImage,
         shortcut: customCommandShortcutDisplay(for: command),
-        isEnabled: command.hasRunnableCommand,
+        isEnabled: command.command.hasRunnableCommand,
         action: {
-          onRunCustomCommand(index)
+          onRunCustomCommand(command.id)
         }
       )
     }
 
-    private func customCommandShortcutDisplay(for command: UserCustomCommand) -> String? {
-      shortcutDisplay(for: LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id))
+    private func customCommandShortcutDisplay(for command: EffectiveCustomCommand) -> String? {
+      shortcutDisplay(for: command.keybindingID)
     }
 
     private func shortcutDisplay(for commandID: String) -> String? {

@@ -122,6 +122,7 @@ struct RunScriptToolbarButton: View {
 struct UserCustomCommandToolbarButton: View {
   let title: String
   let systemImage: String
+  let sourceSystemImage: String?
   let shortcut: String?
   let isEnabled: Bool
   let action: () -> Void
@@ -134,6 +135,12 @@ struct UserCustomCommandToolbarButton: View {
       HStack(spacing: 6) {
         Image(systemName: systemImage)
           .accessibilityHidden(true)
+        if let sourceSystemImage {
+          Image(systemName: sourceSystemImage)
+            .imageScale(.small)
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
         Text(title)
         if commandKeyObserver.isPressed, let shortcut {
           Text(shortcut)
@@ -159,9 +166,9 @@ struct UserCustomCommandToolbarButton: View {
 }
 
 struct CustomCommandOverflowButton: View {
-  let entries: [(index: Int, command: UserCustomCommand)]
-  let shortcutDisplay: (UserCustomCommand) -> String?
-  let onRunCustomCommand: (Int) -> Void
+  let entries: [EffectiveCustomCommand]
+  let shortcutDisplay: (EffectiveCustomCommand) -> String?
+  let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
 
   @State private var isPresented = false
   private let maxVisibleRows = 10
@@ -178,10 +185,10 @@ struct CustomCommandOverflowButton: View {
     .popover(isPresented: $isPresented, arrowEdge: .bottom) {
       ScrollView {
         VStack(alignment: .leading, spacing: 2) {
-          ForEach(entries, id: \.command.id) { entry in
+          ForEach(entries) { entry in
             Button {
               isPresented = false
-              onRunCustomCommand(entry.index)
+              onRunCustomCommand(entry.id)
             } label: {
               HStack(spacing: 8) {
                 Image(systemName: entry.command.resolvedSystemImage)
@@ -191,7 +198,7 @@ struct CustomCommandOverflowButton: View {
                 Text(entry.command.resolvedTitle)
                   .lineLimit(1)
                 Spacer(minLength: 0)
-                if let shortcut = shortcutDisplay(entry.command) {
+                if let shortcut = shortcutDisplay(entry) {
                   Text(shortcut)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -237,16 +244,18 @@ private struct WorktreeToolbarPreview: View {
       runScriptEnabled: true,
       runScriptIsRunning: false,
       customCommands: [
-        UserCustomCommand(
-          title: "Test",
-          systemImage: "checkmark.circle.fill",
-          command: "swift test",
-          execution: .shellScript,
-          shortcut: UserCustomShortcut(
-            key: "u",
-            modifiers: UserCustomShortcutModifiers()
-          )
-        )
+        EffectiveCustomCommand(
+          source: .repository,
+          command: UserCustomCommand(
+            title: "Test",
+            systemImage: "checkmark.circle.fill",
+            command: "swift test",
+            execution: .shellScript,
+            shortcut: UserCustomShortcut(
+              key: "u",
+              modifiers: UserCustomShortcutModifiers()
+            )
+          ))
       ],
       isUpdateAvailable: true,
       isUpdateReadyToInstall: false,

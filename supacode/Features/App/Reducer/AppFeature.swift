@@ -18,7 +18,7 @@ struct AppFeature {
     /// "Automatic" entry's checkmark in the toolbar's Open menu.
     var openActionIsAutomatic: Bool = true
     var selectedRunScript: String = ""
-    var selectedCustomCommands: [UserCustomCommand] = []
+    var selectedCustomCommands: [EffectiveCustomCommand] = []
     var resolvedKeybindings: ResolvedKeybindingMap = .appDefaults
     var runScriptDraft: String = ""
     var isRunScriptPromptPresented = false
@@ -67,7 +67,7 @@ struct AppFeature {
     case showLeftSidebar
     case setLeftSidebarVisibility(NavigationSplitViewVisibility)
     case runScript
-    case runCustomCommand(Int)
+    case runCustomCommand(EffectiveCustomCommand.Identifier)
     case canvasFocusedWorktreeChanged(Worktree.ID?)
     case runScriptDraftChanged(String)
     case runScriptPromptPresented(Bool)
@@ -367,6 +367,9 @@ struct AppFeature {
       case .settings(.setSelection(let selection)):
         let resolvedSelection = selection ?? .general
         switch resolvedSelection {
+        case .customCommands:
+          state.settings.repositorySettings = nil
+          state.settings.globalCustomCommands = .init()
         case .repository(let repositoryID):
           guard let repository = state.repositories.repositories[id: repositoryID] else {
             state.settings.repositorySettings = nil
@@ -388,10 +391,23 @@ struct AppFeature {
           repoSettingsState.globalCopyUntrackedOnWorktreeCreate = state.settings.copyUntrackedOnWorktreeCreate
           repoSettingsState.globalPullRequestMergeStrategy = state.settings.pullRequestMergeStrategy
           state.settings.repositorySettings = repoSettingsState
+          state.settings.globalCustomCommands = nil
         case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
+          state.settings.globalCustomCommands = nil
         }
         return .none
+
+      case .settings(.globalCustomCommands(.delegate(.settingsChanged(let globalSettings)))):
+        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
+          return .none
+        }
+        @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var userRepositorySettings
+        return applyWorktreeUserSettings(
+          userRepositorySettings,
+          globalSettings: globalSettings,
+          into: &state
+        )
 
       case .settings(.delegate(.settingsChanged(let settings))):
         let shouldCheckSystemNotificationPermission =
@@ -675,10 +691,10 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        guard state.selectedCustomCommands.indices.contains(index) else {
+        guard let effectiveCommand = state.selectedCustomCommands.first(where: { $0.id == index }) else {
           return .none
         }
-        let customCommand = state.selectedCustomCommands[index]
+        let customCommand = effectiveCommand.command
         guard customCommand.hasRunnableCommand else {
           return .none
         }
@@ -750,6 +766,7 @@ struct AppFeature {
         let rootURL = worktree.repositoryRootURL
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+        @Shared(.userGlobalSettings) var userGlobalSettings
         // Apply both settings in this single reduce pass instead of dispatching
         // follow-up `.send`s. The Canvas focus ID (an `@Observable` on the
         // terminal manager) updates synchronously on card tap, so the toolbar's
@@ -761,7 +778,11 @@ struct AppFeature {
           workingDirectory: worktree.workingDirectory,
           into: &state
         )
-        return applyWorktreeUserSettings(userRepositorySettings, into: &state)
+        return applyWorktreeUserSettings(
+          userRepositorySettings,
+          globalSettings: userGlobalSettings,
+          into: &state
+        )
 
       case .runScriptDraftChanged(let script):
         state.runScriptDraft = script
@@ -898,7 +919,8 @@ struct AppFeature {
         guard actionTargetWorktree(repositories: state.repositories)?.id == worktreeID else {
           return .none
         }
-        return applyWorktreeUserSettings(settings, into: &state)
+        @Shared(.userGlobalSettings) var userGlobalSettings
+        return applyWorktreeUserSettings(settings, globalSettings: userGlobalSettings, into: &state)
 
       case .systemNotificationsPermissionFailed(let errorMessage):
         return .concatenate(

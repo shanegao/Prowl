@@ -13,6 +13,7 @@ For the UI grouping of these into tabs, see [`components/settings.md`](../compon
 | Scope | Path |
 |-------|------|
 | Global settings | `~/.prowl/settings.json` |
+| Global custom commands | `~/.prowl/global.onevcat.json` |
 | Per-repository settings | `~/.prowl/repo/<repo-name>/prowl.json` |
 | Per-repository custom commands | `~/.prowl/repo/<repo-name>/prowl.onevcat.json` |
 
@@ -92,6 +93,10 @@ Stored at `~/.prowl/repo/<repo-name>/prowl.json` (schema v2). For the tri-state
 `prowl.onevcat.json`. See [`components/custom-actions.md`](../components/custom-actions.md)
 for their structure (title, icon, command, execution mode, close-on-success,
 shortcut).
+
+**Global Custom Commands** use the same command structure in
+`~/.prowl/global.onevcat.json`. A trimmed, case-insensitive title match in a
+repository's local list hides the corresponding global command.
 
 ## Notes for agents
 

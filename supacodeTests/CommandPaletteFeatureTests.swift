@@ -235,20 +235,26 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(
       from: RepositoriesFeature.State(),
-      customCommands: [buildCmd, emptyCmd]
+      customCommands: [
+        EffectiveCustomCommand(source: .repository, command: buildCmd),
+        EffectiveCustomCommand(source: .repository, command: emptyCmd),
+      ]
     )
     let ids = Set(items.map(\.id))
-    #expect(ids.contains("custom-command.cmd-build"))
+    #expect(ids.contains("custom-command.repository.cmd-build"))
     // Commands with empty body are filtered out.
-    #expect(!ids.contains("custom-command.cmd-empty"))
+    #expect(!ids.contains("custom-command.repository.cmd-empty"))
 
-    let buildItem = items.first { $0.id == "custom-command.cmd-build" }
+    let buildItem = items.first { $0.id == "custom-command.repository.cmd-build" }
     #expect(buildItem?.title == "Build")
-    #expect(buildItem?.subtitle == "Custom command in this repo · Opens in a new tab")
+    #expect(buildItem?.subtitle == "Local custom command · Opens in a new tab")
     #expect(buildItem?.defaultSuggestion == false)
     #expect(
       buildItem?.kind
-        == .runCustomCommand(index: 0, commandID: "cmd-build", systemImage: "hammer")
+        == .runCustomCommand(
+          .init(source: .repository, commandID: "cmd-build"),
+          systemImage: "hammer"
+        )
     )
   }
 
@@ -313,20 +319,22 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(
       from: RepositoriesFeature.State(),
-      customCommands: [shellCmd, inlineCmd, splitCmd]
+      customCommands: [shellCmd, inlineCmd, splitCmd].map {
+        EffectiveCustomCommand(source: .repository, command: $0)
+      }
     )
 
     #expect(
-      items.first { $0.id == "custom-command.cmd-shell" }?.subtitle
-        == "Custom command in this repo · Opens in a new tab"
+      items.first { $0.id == "custom-command.repository.cmd-shell" }?.subtitle
+        == "Local custom command · Opens in a new tab"
     )
     #expect(
-      items.first { $0.id == "custom-command.cmd-inline" }?.subtitle
-        == "Custom command in this repo · Runs in the focused terminal"
+      items.first { $0.id == "custom-command.repository.cmd-inline" }?.subtitle
+        == "Local custom command · Runs in the focused terminal"
     )
     #expect(
-      items.first { $0.id == "custom-command.cmd-split" }?.subtitle
-        == "Custom command in this repo · Opens in a new split (down)"
+      items.first { $0.id == "custom-command.repository.cmd-split" }?.subtitle
+        == "Local custom command · Opens in a new split (down)"
     )
   }
 

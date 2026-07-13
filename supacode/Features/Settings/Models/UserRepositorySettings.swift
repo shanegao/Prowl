@@ -24,7 +24,7 @@ nonisolated struct UserRepositorySettings: Codable, Equatable, Sendable {
   }
 
   static func normalizedCommands(_ commands: [UserCustomCommand]) -> [UserCustomCommand] {
-    commands.map { $0.normalized() }
+    UserCustomCommand.normalizedCommands(commands)
   }
 }
 
@@ -99,6 +99,10 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     )
   }
 
+  static func normalizedCommands(_ commands: [UserCustomCommand]) -> [UserCustomCommand] {
+    commands.map { $0.normalized() }
+  }
+
   var resolvedTitle: String {
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
@@ -117,6 +121,63 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
 
   var hasRunnableCommand: Bool {
     !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+}
+
+nonisolated enum CustomCommandSource: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+  case repository
+  case global
+
+  var displayTitle: String {
+    switch self {
+    case .repository: "Local"
+    case .global: "Global"
+    }
+  }
+
+  var toolbarSystemImage: String? {
+    switch self {
+    case .repository: nil
+    case .global: "globe"
+    }
+  }
+}
+
+nonisolated struct EffectiveCustomCommand: Equatable, Sendable, Identifiable {
+  nonisolated struct Identifier: Hashable, Sendable {
+    let source: CustomCommandSource
+    let commandID: UserCustomCommand.ID
+  }
+
+  let source: CustomCommandSource
+  let command: UserCustomCommand
+
+  var id: Identifier { Identifier(source: source, commandID: command.id) }
+
+  var keybindingID: String {
+    LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id, source: source)
+  }
+
+  var paletteID: String {
+    "custom-command.\(source.rawValue).\(command.id)"
+  }
+
+  static func resolve(
+    repositoryCommands: [UserCustomCommand],
+    globalCommands: [UserCustomCommand]
+  ) -> [EffectiveCustomCommand] {
+    let local = UserCustomCommand.normalizedCommands(repositoryCommands)
+    let localTitles = Set(local.map { $0.titleComparisonKey })
+    return local.map { .init(source: .repository, command: $0) }
+      + UserCustomCommand.normalizedCommands(globalCommands)
+      .filter { !localTitles.contains($0.titleComparisonKey) }
+      .map { .init(source: .global, command: $0) }
+  }
+}
+
+nonisolated extension UserCustomCommand {
+  fileprivate var titleComparisonKey: String {
+    title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
   }
 }
 
