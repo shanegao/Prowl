@@ -69,9 +69,8 @@ shortcuts**; conflicts (with reserved app actions or other custom commands) are
 detected when you record the key, and you choose Replace / Cancel.
 
 **Where they appear:** as buttons in the UI, in the Worktrees menu, and in the
-[Command Palette](command-palette.md). The overflow menu groups Local and Global
-entries, while global toolbar entries carry a globe marker. Global commands are stored
-in `~/.prowl/global.onevcat.json`; local commands remain in
+[Command Palette](command-palette.md). Global toolbar entries carry a globe marker.
+Global commands are stored in `~/.prowl/global.onevcat.json`; local commands remain in
 `~/.prowl/repo/<repo-name>/prowl.onevcat.json`.
 
 ## Example uses
