@@ -30,12 +30,24 @@ func identifyAgent(processName: String) -> DetectedAgent? {
   case "grok":
     return .grok
   default:
-    // Versioned install binary, e.g. `grok-0.2.101-macos-aarch64`.
-    if lower.hasPrefix("grok-") {
+    // Versioned install binary only, e.g. `grok-0.2.101-macos-aarch64`.
+    // Must not match model-id tokens like `grok-4` / `grok-4.5` that show up
+    // as argv fragments of other agents (score-40 wrapped-runtime candidates).
+    if isGrokVersionedBinaryName(lower) {
       return .grok
     }
     return nil
   }
+}
+
+/// Install packages are named `grok-<semver>-<platform>-<arch>` (verified
+/// against `~/.grok/downloads/grok-0.2.101-macos-aarch64`). Model ids
+/// (`grok-4`, `grok-4.5`) never include a platform segment.
+private func isGrokVersionedBinaryName(_ lower: String) -> Bool {
+  guard lower.hasPrefix("grok-") else { return false }
+  return lower.contains("-macos-")
+    || lower.contains("-linux-")
+    || lower.contains("-windows-")
 }
 
 struct IdentifiedAgentProcess: Equatable, Sendable {
@@ -102,10 +114,25 @@ private func isCursorAgentAlias(_ process: ForegroundProcess) -> Bool {
 }
 
 private func isGrokAgentAlias(_ process: ForegroundProcess) -> Bool {
-  let haystack = agentAliasHaystack(process)
-  return haystack.contains("/.grok/")
-    || haystack.contains("grok-")
-    || haystack.split(whereSeparator: \.isWhitespace).contains("grok")
+  // Production `argv0` is basename-only (`ProcessDetection` strips the path);
+  // the full executable path is the first whitespace token of `cmdline`.
+  // Only inspect those two executable locations — never later argv tokens
+  // (e.g. `agent --model grok-4` must stay unknown).
+  let executablePaths = [
+    process.argv0,
+    process.cmdline?.split(whereSeparator: \.isWhitespace).first.map(String.init),
+  ]
+  .compactMap { $0?.lowercased() }
+
+  for path in executablePaths {
+    if path.contains("/.grok/") {
+      return true
+    }
+    if let basename = ProcessDetection.basename(path), isGrokVersionedBinaryName(basename) {
+      return true
+    }
+  }
+  return false
 }
 
 private func agentAliasHaystack(_ process: ForegroundProcess) -> String {

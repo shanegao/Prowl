@@ -490,6 +490,27 @@ struct AgentSessionProfileTests {
     #expect(GrokActiveSessions.session(home: root, pid: 4242, processStartedAt: processStartedAt) == nil)
   }
 
+  @Test func grokActiveSessionsRejectsMissingOrUnparseableOpenedAt() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-grok-opened-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(
+      at: root.appending(path: ".grok"),
+      withIntermediateDirectories: true
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    let processStartedAt = Date(timeIntervalSince1970: 1_783_800_000)
+
+    try """
+      [{"session_id":"11111111-2222-3333-4444-555555555555","pid":4242,"cwd":"/Users/me/App"}]
+      """.write(to: root.appending(path: ".grok/active_sessions.json"), atomically: true, encoding: .utf8)
+    #expect(GrokActiveSessions.session(home: root, pid: 4242, processStartedAt: processStartedAt) == nil)
+
+    try """
+      [{"session_id":"11111111-2222-3333-4444-555555555555","pid":4242,"cwd":"/Users/me/App","opened_at":"not-a-date"}]
+      """.write(to: root.appending(path: ".grok/active_sessions.json"), atomically: true, encoding: .utf8)
+    #expect(GrokActiveSessions.session(home: root, pid: 4242, processStartedAt: processStartedAt) == nil)
+  }
+
   @Test func grokRootsUsePercentEncodedWorkingDirectory() {
     let cwd = URL(fileURLWithPath: "/Users/me/My App", isDirectory: true)
     let grok = AgentSessionProfile.profile(for: .grok)
@@ -503,11 +524,6 @@ struct AgentSessionProfileTests {
   @Test func grokParsePathResolvesSessionDirectoryFromNestedFiles() {
     let profile = AgentSessionProfile.profile(for: .grok)
     let id = "019f5e7e-4269-7e33-9eaf-d535ff8ebafb"
-    let events =
-      "/Users/me/.grok/sessions/%2FUsers%2Fme%2FApp/\(id)/events.jsonl"
-    let nested =
-      "/Users/me/.grok/sessions/%2FUsers%2Fme%2FApp/\(id)/terminal/call-1.log"
-    // Files may not exist on disk; parsePath still extracts the session id.
     // Create a temp tree so transcript resolution can succeed for events.
     let root = FileManager.default.temporaryDirectory
       .appending(path: "prowl-grok-parse-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -529,8 +545,20 @@ struct AgentSessionProfileTests {
     #expect(parsedNested?.id == id)
 
     #expect(profile.parsePath("/Users/me/.grok/sessions/%2FUsers%2Fme%2FApp/not-a-uuid/events.jsonl") == nil)
-    #expect(profile.parsePath(events) != nil || parsedEvents != nil)
-    _ = nested
+  }
+
+  @Test func grokParsePathAnchorsOnDotGrokSessionsNotEarlierSessionsComponent() {
+    let profile = AgentSessionProfile.profile(for: .grok)
+    let id = "019f5e7e-4269-7e33-9eaf-d535ff8ebafb"
+    // An earlier `sessions` path component must not steal the index.
+    let path =
+      "/Volumes/sessions/home/.grok/sessions/%2FUsers%2Fme%2FApp/\(id)/events.jsonl"
+    #expect(profile.parsePath(path)?.id == id)
+
+    // An earlier unrelated `.grok` component must also be skipped.
+    let earlierDotGrok =
+      "/Volumes/.grok/home/.grok/sessions/%2FUsers%2Fme%2FApp/\(id)/events.jsonl"
+    #expect(profile.parsePath(earlierDotGrok)?.id == id)
   }
 
   @Test func geminiParsePathRequiresSessionPrefix() {

@@ -267,17 +267,24 @@ nonisolated extension AgentSessionProfile {
       let url = URL(fileURLWithPath: path)
       guard path.contains("/.grok/sessions/") else { return nil }
       let components = url.pathComponents
-      guard let sessionsIndex = components.firstIndex(of: "sessions"),
-        components.count > sessionsIndex + 2
+      // Anchor on a `.grok` component whose next component is `sessions`
+      // (not the first bare `sessions`, and not an earlier unrelated `.grok`).
+      guard let grokIndex = components.indices.first(where: { index in
+        components[index] == ".grok"
+          && components.indices.contains(index + 1)
+          && components[index + 1] == "sessions"
+      }),
+        components.count > grokIndex + 3
       else { return nil }
-      let id = components[sessionsIndex + 2]
+      // Layout: …/.grok/sessions/<encoded-cwd>/<session-id>/…
+      let id = components[grokIndex + 3]
       guard uuid(in: id) != nil else { return nil }
       // Walk up from the open path to the session root
       // (…/sessions/<cwd>/<id>/). Nested paths like `terminal/<log>.log`
       // still resolve; transcript prefers the opened file when it is a
       // known session transcript, otherwise events.jsonl under the root.
       var dir = url.deletingLastPathComponent()
-      while dir.lastPathComponent != id, dir.pathComponents.count > sessionsIndex + 2 {
+      while dir.lastPathComponent != id, dir.pathComponents.count > grokIndex + 3 {
         dir = dir.deletingLastPathComponent()
       }
       guard dir.lastPathComponent == id else { return nil }

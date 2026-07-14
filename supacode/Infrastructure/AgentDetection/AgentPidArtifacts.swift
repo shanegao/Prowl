@@ -108,14 +108,13 @@ nonisolated enum GrokActiveSessions {
 
     for row in rows {
       guard let rowPID = row["pid"] as? Int, rowPID == Int(pid),
-        let id = row["session_id"] as? String, !id.isEmpty
-      else { continue }
-      if let openedAtRaw = row["opened_at"] as? String,
+        let id = row["session_id"] as? String, !id.isEmpty,
+        // Require a parseable opened_at: a missing/unreadable timestamp cannot
+        // prove the claim belongs to this process (pid reuse → stale exact).
+        let openedAtRaw = row["opened_at"] as? String,
         let openedAt = parseOpenedAt(openedAtRaw),
-        openedAt < processStartedAt.addingTimeInterval(-2)
-      {
-        continue
-      }
+        openedAt >= processStartedAt.addingTimeInterval(-2)
+      else { continue }
       let cwd = row["cwd"] as? String
       let transcript = transcriptURL(home: home, sessionID: id, cwd: cwd, fileManager: fileManager)
       return AgentSession(

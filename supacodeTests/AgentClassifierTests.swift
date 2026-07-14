@@ -26,16 +26,20 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "qwen") == .qwen)
     #expect(identifyAgent(processName: "grok") == .grok)
     #expect(identifyAgent(processName: "grok-0.2.101-macos-aarch64") == .grok)
+    // Model ids must not be treated as the install binary.
+    #expect(identifyAgent(processName: "grok-4") == nil)
+    #expect(identifyAgent(processName: "grok-4.5") == nil)
   }
 
   @Test func identifiesGrokAgentAliasCommandLines() throws {
+    // Production argv0 is basename-only; full path is cmdline's first token.
     let job = ForegroundJob(
       processGroupID: 42,
       processes: [
         ForegroundProcess(
           pid: 100,
           name: "agent",
-          argv0: "/Users/me/.grok/bin/agent",
+          argv0: "agent",
           cmdline: "/Users/me/.grok/bin/agent --always-approve"
         )
       ]
@@ -44,6 +48,40 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .grok)
     #expect(result.name == "agent")
+  }
+
+  @Test func ignoresAgentProcessWithGrokModelArgument() {
+    // Unrelated `agent` CLIs that merely take a grok model id must stay unknown.
+    // Production-shaped: basename argv0, no `/.grok/` in the executable path.
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "agent",
+          argv0: "agent",
+          cmdline: "/usr/local/bin/agent --model grok-4"
+        )
+      ]
+    )
+    #expect(identifyAgentInJob(job) == nil)
+  }
+
+  @Test func ignoresWrappedRuntimeWithGrokModelToken() {
+    // Wrapped-runtime cmdline tokens are score-40 candidates; model ids like
+    // `grok-4` must not flip the job to Grok.
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "node",
+          argv0: "node",
+          cmdline: "node /tmp/app.js --model grok-4.5"
+        )
+      ]
+    )
+    #expect(identifyAgentInJob(job) == nil)
   }
 
   @Test func identifiesDirectGrokProcess() throws {
