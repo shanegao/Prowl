@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026.7.14](https://github.com/onevcat/Prowl/releases/tag/v2026.7.14)
+
+### New
+- `prowl list` and `prowl agents` now show short handles (`t1`, `p1`, ...) for tabs and panes in their text output, and `--tab`/`--pane` selectors accept these short handles as well as UUIDs, making it much easier to reference panes across CLI calls. JSON output is unchanged and still uses full UUIDs.
+- `prowl agents` can now report a detected agent's native session details—session ID, transcript path, and detection confidence—for supported CLI agents (Claude Code, Codex, Amp, Copilot, and others), without requiring any hook setup.
+
+### Fixed
+- Active Agents no longer shows the wrong pane's title when multiple agents run in split panes of the same tab; each row now reflects its own pane's title.
+- Worktree deletion errors are now surfaced instead of being silently treated as success, and worktrees that failed to delete due to a locked or stuck registration no longer reappear after the next refresh.
+- Repository roots opened through a symbolic link are now resolved to their canonical Git root, so branches and worktrees load consistently no matter which path was used to open the repo.
+- The sidebar now updates correctly after running `git init` inside a plain (non-Git) folder that was already open in Prowl.
+
+### Improved
+- Removed the non-functional Update Channel picker from Settings → Updates, since Prowl has shipped a single release channel for a while.
+
 ## [2026.7.10](https://github.com/onevcat/Prowl/releases/tag/v2026.7.10)
 
 This release focuses on notification control, PR status reliability, and a few editor and terminal integration additions.
