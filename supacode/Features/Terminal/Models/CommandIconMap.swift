@@ -45,6 +45,7 @@ enum CommandIconMap {
     "kimi": TabIconSource(systemSymbol: "sparkle", assetName: "Kimi"),
     "opencode": TabIconSource(systemSymbol: "sparkle", assetName: "OpenCode"),
     "qwen": TabIconSource(systemSymbol: "sparkle", assetName: "Qwen"),
+    "grok": TabIconSource(systemSymbol: "sparkle", assetName: "Grok"),
     "omp": TabIconSource(systemSymbol: "sparkle", assetName: "OMP"),
     "oh-my-pi": TabIconSource(systemSymbol: "sparkle", assetName: "OMP"),
     "pi": TabIconSource(systemSymbol: "sparkle", assetName: "Pi"),

@@ -24,6 +24,61 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "amp") == .amp)
     #expect(identifyAgent(processName: "amp-local") == .amp)
     #expect(identifyAgent(processName: "qwen") == .qwen)
+    #expect(identifyAgent(processName: "grok") == .grok)
+    #expect(identifyAgent(processName: "grok-0.2.101-macos-aarch64") == .grok)
+  }
+
+  @Test func identifiesGrokAgentAliasCommandLines() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "agent",
+          argv0: "/Users/me/.grok/bin/agent",
+          cmdline: "/Users/me/.grok/bin/agent --always-approve"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .grok)
+    #expect(result.name == "agent")
+  }
+
+  @Test func identifiesDirectGrokProcess() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "grok",
+          argv0: "grok",
+          cmdline: "grok --always-approve"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .grok)
+    #expect(result.name == "grok")
+  }
+
+  @Test func identifiesVersionedGrokBinaryPath() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "grok-0.2.101-macos-aarch64",
+          argv0: "/Users/me/.grok/downloads/grok-0.2.101-macos-aarch64",
+          cmdline: "/Users/me/.grok/downloads/grok-0.2.101-macos-aarch64"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .grok)
   }
 
   @Test func identifiesOhMyPiCommandNames() throws {

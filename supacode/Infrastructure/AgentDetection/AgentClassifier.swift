@@ -1,7 +1,8 @@
 import Foundation
 
 func identifyAgent(processName: String) -> DetectedAgent? {
-  switch processName.lowercased() {
+  let lower = processName.lowercased()
+  switch lower {
   case "pi", "omp", "oh-my-pi":
     return .pi
   case "claude", "claude-code":
@@ -26,7 +27,13 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .amp
   case "qwen":
     return .qwen
+  case "grok":
+    return .grok
   default:
+    // Versioned install binary, e.g. `grok-0.2.101-macos-aarch64`.
+    if lower.hasPrefix("grok-") {
+      return .grok
+    }
     return nil
   }
 }
@@ -74,23 +81,41 @@ private func agentCandidates(for process: ForegroundProcess) -> [(name: String, 
 }
 
 private func identifyAgent(candidate: (name: String, score: Int), process: ForegroundProcess) -> DetectedAgent? {
-  if candidate.name == "agent", isCursorAgentAlias(process) {
-    return .cursor
+  if candidate.name == "agent" {
+    // Cursor and Grok Build both ship an `agent` entrypoint. Disambiguate from
+    // path/cmdline evidence only — bare `agent` stays unknown.
+    if isCursorAgentAlias(process) {
+      return .cursor
+    }
+    if isGrokAgentAlias(process) {
+      return .grok
+    }
+    return nil
   }
   return identifyAgent(processName: candidate.name)
 }
 
 private func isCursorAgentAlias(_ process: ForegroundProcess) -> Bool {
-  let haystack = [
+  let haystack = agentAliasHaystack(process)
+  return haystack.contains("cursor-agent")
+    || haystack.contains("cursor.app")
+}
+
+private func isGrokAgentAlias(_ process: ForegroundProcess) -> Bool {
+  let haystack = agentAliasHaystack(process)
+  return haystack.contains("/.grok/")
+    || haystack.contains("grok-")
+    || haystack.split(whereSeparator: \.isWhitespace).contains("grok")
+}
+
+private func agentAliasHaystack(_ process: ForegroundProcess) -> String {
+  [
     process.argv0,
     process.cmdline,
   ]
   .compactMap(\.self)
   .joined(separator: " ")
   .lowercased()
-
-  return haystack.contains("cursor-agent")
-    || haystack.contains("cursor.app")
 }
 
 private struct AgentCandidate {

@@ -30,6 +30,8 @@ extension DetectedAgent {
       return detectAmp(screen)
     case .qwen:
       return detectQwen(screen)
+    case .grok:
+      return detectGrok(screen)
     }
   }
 }
@@ -514,6 +516,72 @@ nonisolated private func detectQwen(_ content: String) -> AgentRawState {
     return .working
   }
   return .idle
+}
+
+// Grok Build (verified 0.2.101): cancel mid-turn is Ctrl+C (Esc is a no-op),
+// permission chrome offers Allow once / Always allow… / Reject, and status
+// flags include "Loading" / "Awaiting input". Multi-token matches only —
+// single words like "approve" or "loading" appear in transcript text.
+nonisolated private func detectGrok(_ content: String) -> AgentRawState {
+  if hasGrokPermissionPrompt(content) || hasGrokQuestionPrompt(content) {
+    return .blocked
+  }
+  if hasGrokWorkingSignal(content) {
+    return .working
+  }
+  return .idle
+}
+
+nonisolated private func hasGrokPermissionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  let hasAllowOnce = lower.contains("allow once")
+  let hasAlwaysAllow =
+    lower.contains("always allow this command")
+    || lower.contains("always allow on all sessions")
+    || lower.contains("always allow this exact command")
+  let hasReject = lower.contains("reject")
+  if hasAllowOnce && (hasAlwaysAllow || hasReject) {
+    return true
+  }
+  if hasAlwaysAllow && hasReject {
+    return true
+  }
+  if lower.contains("yes, and always allow this exact command")
+    || lower.contains("yes, allow all edits")
+  {
+    return true
+  }
+  return false
+}
+
+nonisolated private func hasGrokQuestionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  return lower.contains("pending: question")
+    || lower.contains("pending: other (type your own answer")
+    || (lower.contains("awaiting your input")
+      && (lower.contains("?") || lower.contains("select") || lower.contains("enter")))
+}
+
+nonisolated private func hasGrokWorkingSignal(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  if lower.contains("tool calls in flight")
+    || lower.contains("working tools")
+    || lower.contains("still running:")
+  {
+    return true
+  }
+  // Status flag rendered while a turn is in progress (distinct from the
+  // idle "Awaiting input" / "Awaiting your input" flags).
+  if content.split(separator: "\n", omittingEmptySubsequences: false).contains(where: { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return trimmed == "Loading" || trimmed.hasPrefix("Loading…") || trimmed.hasPrefix("Loading...")
+  }) {
+    return true
+  }
+  if hasBrailleSpinner(content) || hasSpinnerActivity(content) {
+    return true
+  }
+  return false
 }
 
 nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {

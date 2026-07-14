@@ -58,6 +58,13 @@ struct AgentSessionResolverTests {
           "02d412eb-2402-44d0-be90-faeb3f27fab6"
         )
       ),
+      (
+        .grok,
+        (
+          "/Users/me/.grok/sessions/%2FUsers%2Fme%2FApp/019f5e7e-4269-7e33-9eaf-d535ff8ebafb/events.jsonl",
+          "019f5e7e-4269-7e33-9eaf-d535ff8ebafb"
+        )
+      ),
     ]
 
     for (agent, expected) in fixtures {

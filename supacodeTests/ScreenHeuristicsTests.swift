@@ -540,4 +540,60 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.qwen.detectState(in: "done") == .idle)
     #expect(DetectedAgent.qwen.detectState(in: "> Type your message") == .idle)
   }
+
+  @Test func grokDetection() {
+    // Permission chrome (labels verified against Grok Build 0.2.101 binary).
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          Allow once
+          Always allow this command
+          Always allow on all sessions
+          Reject
+          """
+      ) == .blocked
+    )
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          Yes, and always allow this exact command
+          Yes, allow all edits
+          """
+      ) == .blocked
+    )
+    // Incomplete permission chrome must not trip blocked.
+    #expect(DetectedAgent.grok.detectState(in: "Allow once") == .idle)
+    #expect(DetectedAgent.grok.detectState(in: "please approve the design") == .idle)
+
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          Pending: question
+          Which approach should we take?
+          """
+      ) == .blocked
+    )
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          Awaiting your input
+          Pick an option?
+          ↑↓ select
+          """
+      ) == .blocked
+    )
+
+    #expect(DetectedAgent.grok.detectState(in: "Loading") == .working)
+    #expect(DetectedAgent.grok.detectState(in: "Loading… streaming response") == .working)
+    #expect(DetectedAgent.grok.detectState(in: "deferred: tool calls in flight") == .working)
+    #expect(DetectedAgent.grok.detectState(in: "Working tools") == .working)
+    #expect(DetectedAgent.grok.detectState(in: "These tasks are still running:") == .working)
+    #expect(DetectedAgent.grok.detectState(in: "⠋ Reading AgentClassifier.swift") == .working)
+    #expect(DetectedAgent.grok.detectState(in: "✱ Searching… codebase") == .working)
+
+    #expect(DetectedAgent.grok.detectState(in: "Awaiting input") == .idle)
+    #expect(DetectedAgent.grok.detectState(in: "Awaiting your input") == .idle)
+    #expect(DetectedAgent.grok.detectState(in: "Type a message") == .idle)
+    #expect(DetectedAgent.grok.detectState(in: "done") == .idle)
+  }
 }
