@@ -38,7 +38,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `analyticsEnabled` | Bool | `true` | Send usage analytics (PostHog; off in Debug). |
 | `crashReportsEnabled` | Bool | `true` | Send crash reports (Sentry). |
 | `githubIntegrationEnabled` | Bool | `true` | Enable GitHub/PR features (via `gh`). |
-| `deleteBranchOnDeleteWorktree` | Bool | `false` | Default "delete branch" when deleting a worktree. |
+| `deleteBranchOnAutomaticCleanup` | Bool | `false` | Delete the local branch when automatic cleanup (merged-PR delete action, archived auto-delete) removes a Prowl-created worktree. Migrates the legacy `deleteBranchOnDeleteWorktree` key. The manual delete dialog is independent: it remembers the last confirmed choice in UserDefaults (`deleteBranchOnManualWorktreeDelete`). |
 | `mergedWorktreeAction` | enum? | `nil` | What to do with a merged worktree (e.g. auto-archive); `nil` = ask. |
 | `promptForWorktreeCreation` | Bool | `true` | Show the creation dialog vs. auto-create. |
 | `fetchOriginBeforeWorktreeCreation` | Bool | `true` | `git fetch` before creating a worktree. |
