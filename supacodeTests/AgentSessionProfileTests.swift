@@ -456,11 +456,24 @@ struct AgentSessionProfileTests {
     #expect(session?.id == id)
     #expect(session?.source == .processLog)
     #expect(session?.confidence == .exact)
+    // Only events.jsonl exists — the transcript falls back to it.
     #expect(
       session?.transcriptPath?.resolvingSymlinksInPath()
         == sessionDir.appending(path: "events.jsonl").resolvingSymlinksInPath()
     )
     #expect(GrokActiveSessions.session(home: root, pid: 9999, processStartedAt: processStartedAt) == nil)
+
+    // chat_history.jsonl is the conversation log; prefer it once present.
+    try "{}".write(to: sessionDir.appending(path: "chat_history.jsonl"), atomically: true, encoding: .utf8)
+    let refreshed = GrokActiveSessions.session(
+      home: root,
+      pid: 4242,
+      processStartedAt: processStartedAt
+    )
+    #expect(
+      refreshed?.transcriptPath?.resolvingSymlinksInPath()
+        == sessionDir.appending(path: "chat_history.jsonl").resolvingSymlinksInPath()
+    )
   }
 
   @Test func grokActiveSessionsRejectsStaleClaimsFromReusedPids() throws {
@@ -501,13 +514,13 @@ struct AgentSessionProfileTests {
     let processStartedAt = Date(timeIntervalSince1970: 1_783_800_000)
 
     try """
-      [{"session_id":"11111111-2222-3333-4444-555555555555","pid":4242,"cwd":"/Users/me/App"}]
-      """.write(to: root.appending(path: ".grok/active_sessions.json"), atomically: true, encoding: .utf8)
+    [{"session_id":"11111111-2222-3333-4444-555555555555","pid":4242,"cwd":"/Users/me/App"}]
+    """.write(to: root.appending(path: ".grok/active_sessions.json"), atomically: true, encoding: .utf8)
     #expect(GrokActiveSessions.session(home: root, pid: 4242, processStartedAt: processStartedAt) == nil)
 
     try """
-      [{"session_id":"11111111-2222-3333-4444-555555555555","pid":4242,"cwd":"/Users/me/App","opened_at":"not-a-date"}]
-      """.write(to: root.appending(path: ".grok/active_sessions.json"), atomically: true, encoding: .utf8)
+    [{"session_id":"11111111-2222-3333-4444-555555555555","pid":4242,"cwd":"/Users/me/App","opened_at":"not-a-date"}]
+    """.write(to: root.appending(path: ".grok/active_sessions.json"), atomically: true, encoding: .utf8)
     #expect(GrokActiveSessions.session(home: root, pid: 4242, processStartedAt: processStartedAt) == nil)
   }
 
@@ -534,6 +547,8 @@ struct AgentSessionProfileTests {
 
     let parsedEvents = profile.parsePath(sessionDir.appending(path: "events.jsonl").path)
     #expect(parsedEvents?.id == id)
+    // Every non-chat open file canonicalizes to the conversation log.
+    #expect(parsedEvents?.transcriptPath?.lastPathComponent == "chat_history.jsonl")
 
     try? FileManager.default.createDirectory(
       at: sessionDir.appending(path: "terminal"),
@@ -543,6 +558,9 @@ struct AgentSessionProfileTests {
     FileManager.default.createFile(atPath: nestedPath, contents: Data())
     let parsedNested = profile.parsePath(nestedPath)
     #expect(parsedNested?.id == id)
+    // Non-transcript files resolve to the conversation log at the root.
+    #expect(parsedNested?.transcriptPath?.lastPathComponent == "chat_history.jsonl")
+    #expect(parsedNested?.transcriptPath?.deletingLastPathComponent().lastPathComponent == id)
 
     #expect(profile.parsePath("/Users/me/.grok/sessions/%2FUsers%2Fme%2FApp/not-a-uuid/events.jsonl") == nil)
   }

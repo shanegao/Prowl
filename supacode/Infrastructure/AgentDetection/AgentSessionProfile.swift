@@ -269,11 +269,12 @@ nonisolated extension AgentSessionProfile {
       let components = url.pathComponents
       // Anchor on a `.grok` component whose next component is `sessions`
       // (not the first bare `sessions`, and not an earlier unrelated `.grok`).
-      guard let grokIndex = components.indices.first(where: { index in
-        components[index] == ".grok"
-          && components.indices.contains(index + 1)
-          && components[index + 1] == "sessions"
-      }),
+      guard
+        let grokIndex = components.indices.first(where: { index in
+          components[index] == ".grok"
+            && components.indices.contains(index + 1)
+            && components[index + 1] == "sessions"
+        }),
         components.count > grokIndex + 3
       else { return nil }
       // Layout: …/.grok/sessions/<encoded-cwd>/<session-id>/…
@@ -281,18 +282,18 @@ nonisolated extension AgentSessionProfile {
       guard uuid(in: id) != nil else { return nil }
       // Walk up from the open path to the session root
       // (…/sessions/<cwd>/<id>/). Nested paths like `terminal/<log>.log`
-      // still resolve; transcript prefers the opened file when it is a
-      // known session transcript, otherwise events.jsonl under the root.
+      // still resolve. The transcript is always canonicalized to
+      // chat_history.jsonl (the conversation log): the process also holds
+      // events.jsonl open, which only logs MCP/infrastructure events.
       var dir = url.deletingLastPathComponent()
       while dir.lastPathComponent != id, dir.pathComponents.count > grokIndex + 3 {
         dir = dir.deletingLastPathComponent()
       }
       guard dir.lastPathComponent == id else { return nil }
-      let name = url.lastPathComponent
       let transcript: URL =
-        (name == "events.jsonl" || name == "chat_history.jsonl")
+        url.lastPathComponent == "chat_history.jsonl"
         ? url
-        : dir.appending(path: "events.jsonl")
+        : dir.appending(path: "chat_history.jsonl")
       return AgentSession(id: id, transcriptPath: transcript, source: .recentFile)
     },
     candidateRoots: { home, cwd, _, _ in

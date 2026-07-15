@@ -61,7 +61,7 @@ struct AgentSessionResolverTests {
       (
         .grok,
         (
-          "/Users/me/.grok/sessions/%2FUsers%2Fme%2FApp/019f5e7e-4269-7e33-9eaf-d535ff8ebafb/events.jsonl",
+          "/Users/me/.grok/sessions/%2FUsers%2Fme%2FApp/019f5e7e-4269-7e33-9eaf-d535ff8ebafb/chat_history.jsonl",
           "019f5e7e-4269-7e33-9eaf-d535ff8ebafb"
         )
       ),
@@ -69,7 +69,8 @@ struct AgentSessionResolverTests {
         .grok,
         (
           // Earlier `sessions` path component must not be used as the marker.
-          "/Volumes/sessions/home/.grok/sessions/%2FUsers%2Fme%2FApp/019f5e7e-4269-7e33-9eaf-d535ff8ebafb/events.jsonl",
+          "/Volumes/sessions/home/.grok/sessions/%2FUsers%2Fme%2FApp/019f5e7e-4269-7e33-9eaf-d535ff8ebafb/"
+            + "chat_history.jsonl",
           "019f5e7e-4269-7e33-9eaf-d535ff8ebafb"
         )
       ),

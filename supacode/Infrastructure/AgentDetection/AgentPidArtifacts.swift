@@ -145,10 +145,13 @@ nonisolated enum GrokActiveSessions {
     let sessionsRoot = home.appending(path: ".grok/sessions")
     let candidates: [URL]
     if let cwd {
+      // Prefer chat_history.jsonl: it is the conversation transcript
+      // (messages incl. system prompt); events.jsonl only logs
+      // MCP/infrastructure events.
       let encoded = percentEncodedPath(cwd)
       candidates = [
-        sessionsRoot.appending(path: "\(encoded)/\(sessionID)/events.jsonl"),
         sessionsRoot.appending(path: "\(encoded)/\(sessionID)/chat_history.jsonl"),
+        sessionsRoot.appending(path: "\(encoded)/\(sessionID)/events.jsonl"),
       ]
     } else {
       candidates = []
@@ -159,10 +162,10 @@ nonisolated enum GrokActiveSessions {
     // Fall back to a shallow scan when cwd is missing or encoding diverged.
     let projectDirs = (try? fileManager.contentsOfDirectory(at: sessionsRoot, includingPropertiesForKeys: nil)) ?? []
     for project in projectDirs {
-      let events = project.appending(path: "\(sessionID)/events.jsonl")
-      if fileManager.fileExists(atPath: events.path) { return events }
       let chat = project.appending(path: "\(sessionID)/chat_history.jsonl")
       if fileManager.fileExists(atPath: chat.path) { return chat }
+      let events = project.appending(path: "\(sessionID)/events.jsonl")
+      if fileManager.fileExists(atPath: events.path) { return events }
     }
     return nil
   }
