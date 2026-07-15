@@ -72,7 +72,8 @@ struct WorktreeSettingsView: View {
             case .archive:
               Text("Archives worktrees when their pull requests are merged.")
             case .delete:
-              Text("Deletes worktrees when their pull requests are merged. Uncommitted changes will be lost.")
+              Text("Deletes worktrees when their pull requests are merged. ")
+                + Text("Uncommitted changes will be lost.").foregroundStyle(.red)
             case nil:
               EmptyView()
             }

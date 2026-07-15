@@ -265,6 +265,17 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.deleteBranchOnAutomaticCleanup == false)
   }
 
+  @Test func encodesAutomaticCleanupSettingWithoutLegacyKey() throws {
+    var settings = GlobalSettings.default
+    settings.deleteBranchOnAutomaticCleanup = true
+
+    let encoded = try JSONEncoder().encode(settings)
+    let globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+
+    #expect(globalDict["deleteBranchOnAutomaticCleanup"] as? Bool == true)
+    #expect(globalDict["deleteBranchOnDeleteWorktree"] == nil)
+  }
+
   @Test(.dependencies) func roundTripsExplicitNotificationSound() throws {
     let storage = SettingsTestStorage()
 

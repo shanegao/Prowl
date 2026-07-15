@@ -4202,6 +4202,47 @@ struct RepositoriesFeatureTests {
     await store.receive(\.worktreeLifecycle.worktreeDeleted)
   }
 
+  @Test(.dependencies) func dismissingDeletePromptDoesNotRememberChangedChoice() async {
+    let worktree = makeWorktree(id: "/tmp/wt", name: "owl")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeLifecycle(.requestDeleteWorktree(worktree.id, repository.id))) {
+      $0.deleteWorktreeConfirmation = DeleteWorktreeConfirmation(
+        id: 0,
+        title: "Delete worktree?",
+        message: "Delete \(worktree.name)? The worktree directory will be removed.",
+        targets: [
+          RepositoriesFeature.DeleteWorktreeTarget(
+            worktreeID: worktree.id, repositoryID: repository.id)
+        ],
+        deleteBranch: false
+      )
+      $0.nextDeleteWorktreeConfirmationID = 1
+    }
+    await store.send(.worktreeLifecycle(.deleteWorktreePromptDeleteBranchChanged(true))) {
+      $0.deleteWorktreeConfirmation?.deleteBranch = true
+    }
+    await store.send(.worktreeLifecycle(.deleteWorktreePromptDismissed)) {
+      $0.deleteWorktreeConfirmation = nil
+    }
+    await store.send(.worktreeLifecycle(.requestDeleteWorktree(worktree.id, repository.id))) {
+      $0.deleteWorktreeConfirmation = DeleteWorktreeConfirmation(
+        id: 1,
+        title: "Delete worktree?",
+        message: "Delete \(worktree.name)? The worktree directory will be removed.",
+        targets: [
+          RepositoriesFeature.DeleteWorktreeTarget(
+            worktreeID: worktree.id, repositoryID: repository.id)
+        ],
+        deleteBranch: false
+      )
+      $0.nextDeleteWorktreeConfirmationID = 2
+    }
+  }
+
   @Test(.dependencies) func deletePromptConfirmedAsksBeforeForceDeletingBranch() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)

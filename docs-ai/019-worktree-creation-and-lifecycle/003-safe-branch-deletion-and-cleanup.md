@@ -1,4 +1,4 @@
-# 019 — Amendment: Safe Branch Deletion & Cleanup Hardening (#375, #383; follow-up 2026-07)
+# 019 — Amendment: Safe Branch Deletion & Cleanup Hardening (#375, #383; follow-up #592)
 
 ## Context
 
@@ -32,7 +32,7 @@ PR #383 (merged 2026-06-03, "Harden failed worktree cleanup"):
 - Only relocate existing worktree directories that actually contain `.git` metadata.
 - Failed-creation cleanup no longer requests branch deletion at all.
 
-## Follow-up (2026-07): split manual preselect from automatic cleanup
+## Follow-up (2026-07-16, #592): split manual preselect from automatic cleanup
 
 The single `deleteBranchOnDeleteWorktree` setting from #375 drove two unrelated
 behaviors: preselecting the manual dialog toggle (gated on Prowl-created worktrees)
@@ -62,7 +62,7 @@ Decisions:
 
 ## Refs
 
-- PRs #375, #383; follow-up PR splitting the settings (2026-07); tests in
+- PRs #375, #383; follow-up PR #592 splitting the settings (2026-07-16); tests in
   `supacodeTests/GitClientRemoveWorktreeTests`, `RepositoriesFeatureTests`, and
   `SettingsFilePersistenceTests` (legacy-key migration).
 
