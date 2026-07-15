@@ -596,4 +596,80 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.grok.detectState(in: "Type a message") == .idle)
     #expect(DetectedAgent.grok.detectState(in: "done") == .idle)
   }
+
+  // Fixtures below are verbatim screen captures from Grok Build 0.2.101
+  // running inside a Prowl pane.
+  @Test func grokDetectionMatchesCapturedDialogChrome() {
+    // Bash tool approval — no "Allow once" / "Always allow …" rows here.
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          ◆ Sleep 12s then print DONE_MARKER… 51s                    52s ⇣21.1k [↓][stop]
+          ┃  Sleep 12s then print DONE_MARKER
+          ┃  sleep 12 && echo DONE_MARKER
+          ┃
+          ┃  1 (●) Yes, and don't ask again for anything (always-approve mode)
+          ┃  2 (○) Yes, proceed
+          ┃  3 (○) No, reject (type to add feedback)
+          ┃
+          1/3:select  │  Ctrl+o:always-approve  │  Ctrl+c:cancel
+          """
+      ) == .blocked
+    )
+    // File-edit approval.
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          ┃  Allow Edit to /tmp/grok_probe.txt?
+          ┃
+          ┃  1 (○) Yes, and don't ask again for anything (always-approve mode)
+          ┃  2 (○) Yes, allow all edits during this session
+          ┃  3 (○) Yes
+          ┃  4 (●) No, reject (type to add feedback)
+          ┃
+          1/4:select  │  Ctrl+o:always-approve  │  Ctrl+c:cancel
+          """
+      ) == .blocked
+    )
+    // Ask-user question dialog.
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          ◆ Waiting on answers for When working in this repo, which response style do you prefer?
+          ┃  When working in this repo, which response style do you prefer?
+          ┃
+          ┃  1 (○) Concise                 Short answers, minimal explanation unless needed
+          ┃  2 (○) Balanced (Recommended)  Brief conclusion plus key reasoning when useful
+          ┃  z (○) Type your answer here
+          ┃
+          ┃  ↑/↓ navigate · y copy                                        Enter:submit
+          Esc:unselect  │  Tab:scrollback  │  Shift+x:dismiss
+          """
+      ) == .blocked
+    )
+    // Streaming / tool-execution status lines use a braille spinner.
+    #expect(DetectedAgent.grok.detectState(in: "⠧ Waiting for response… 0.0s        0.0s ⇣20.9k [stop]") == .working)
+    #expect(DetectedAgent.grok.detectState(in: "⠦ Thinking… 0.2s                    1.0s ⇣21.0k [stop]") == .working)
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: "⠙ Sleep 12s then print DONE_MARKER… 20s                21s ⇣21.3k [↓][stop]"
+      ) == .working
+    )
+    // Idle prompt: input frame, model label, shortcut footer.
+    #expect(
+      DetectedAgent.grok.detectState(
+        in: """
+          ╭──────────────────────────────────────────────╮
+          │ ❯                                            │
+          ╰────────────────────────────── Grok 4.5 (high) ─╯
+          Shift+Tab:mode  │  Ctrl+x:shortcuts
+          """
+      ) == .idle
+    )
+    // Completed-turn summary in scrollback stays idle.
+    #expect(DetectedAgent.grok.detectState(in: "Worked for 3.6s.                stop  [hooks: 1]") == .idle)
+    // A lone yes-row in transcript prose must not read as an approval dialog.
+    #expect(DetectedAgent.grok.detectState(in: "The user said yes, proceed with the plan.") == .idle)
+    #expect(DetectedAgent.grok.detectState(in: "I chose to reject the first approach.") == .idle)
+  }
 }
