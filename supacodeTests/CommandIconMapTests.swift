@@ -78,6 +78,7 @@ struct CommandIconMapTests {
     #expect(CommandIconMap.iconForFirstToken("cline")?.assetName == "Cline")
     #expect(CommandIconMap.iconForFirstToken("droid")?.assetName == "Droid")
     #expect(CommandIconMap.iconForFirstToken("qwen")?.assetName == "Qwen")
+    #expect(CommandIconMap.iconForFirstToken("grok")?.assetName == "Grok")
     // Aider has no bundled brand asset — sparkle fallback only.
     #expect(CommandIconMap.iconForFirstToken("aider")?.systemSymbol == "sparkle")
     #expect(CommandIconMap.iconForFirstToken("aider")?.assetName == nil)

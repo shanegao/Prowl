@@ -30,6 +30,8 @@ extension DetectedAgent {
       return detectAmp(screen)
     case .qwen:
       return detectQwen(screen)
+    case .grok:
+      return detectGrok(screen)
     }
   }
 }
@@ -514,6 +516,97 @@ nonisolated private func detectQwen(_ content: String) -> AgentRawState {
     return .working
   }
   return .idle
+}
+
+// Grok Build (verified 0.2.101): cancel mid-turn is Ctrl+C (Esc is a no-op).
+// Approval dialogs pair numbered yes-rows ("Yes, proceed", "Yes, allow all
+// edits during this session") with a reject row ("No, reject (type to add
+// feedback)") above a "Ctrl+o:always-approve" footer; ask-user dialogs render
+// "Waiting on answers for …" with a "Type your answer here" row. Working
+// turns show a braille spinner line ("⠧ Thinking… 0.2s"). Multi-token matches
+// only — single words like "approve" or "loading" appear in transcript text.
+nonisolated private func detectGrok(_ content: String) -> AgentRawState {
+  if hasGrokPermissionPrompt(content) || hasGrokQuestionPrompt(content) {
+    return .blocked
+  }
+  if hasGrokWorkingSignal(content) {
+    return .working
+  }
+  return .idle
+}
+
+nonisolated private func hasGrokPermissionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  // Tool approval dialog (verified on-screen, 0.2.101): a yes-row and a
+  // reject-row are always rendered together. Requiring the pair keeps
+  // transcript prose containing one of the phrases from matching.
+  let hasApprovalYesRow =
+    lower.contains("yes, proceed")
+    || lower.contains("yes, allow")
+    || lower.contains("yes, always allow")
+    || lower.contains("(always-approve mode)")
+  let hasApprovalNoRow =
+    lower.contains("no, reject")
+    || lower.contains("no, and tell grok")
+  if hasApprovalYesRow && hasApprovalNoRow {
+    return true
+  }
+  // Footer rendered only while an approval dialog is pending.
+  if lower.contains("ctrl+o:always-approve") {
+    return true
+  }
+  let hasAllowOnce = lower.contains("allow once")
+  let hasAlwaysAllow =
+    lower.contains("always allow this command")
+    || lower.contains("always allow on all sessions")
+    || lower.contains("always allow this exact command")
+  let hasReject = lower.contains("reject")
+  if hasAllowOnce && (hasAlwaysAllow || hasReject) {
+    return true
+  }
+  if hasAlwaysAllow && hasReject {
+    return true
+  }
+  if lower.contains("yes, and always allow this exact command")
+    || lower.contains("yes, allow all edits")
+  {
+    return true
+  }
+  return false
+}
+
+nonisolated private func hasGrokQuestionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  // Ask-user dialog (verified on-screen, 0.2.101): "◆ Waiting on answers for
+  // <question>" header plus a free-form "z (○) Type your answer here" row.
+  return lower.contains("waiting on answers for")
+    || lower.contains("type your answer here")
+    || lower.contains("pending: question")
+    || lower.contains("pending: other (type your own answer")
+    || (lower.contains("awaiting your input")
+      && (lower.contains("?") || lower.contains("select") || lower.contains("enter")))
+}
+
+nonisolated private func hasGrokWorkingSignal(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  if lower.contains("tool calls in flight")
+    || lower.contains("working tools")
+    || lower.contains("still running:")
+  {
+    return true
+  }
+  // Status flag rendered while a turn is in progress (distinct from the
+  // idle "Awaiting input" / "Awaiting your input" flags).
+  if content.split(separator: "\n", omittingEmptySubsequences: false).contains(where: { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return trimmed == "Loading" || trimmed.hasPrefix("Loading…") || trimmed.hasPrefix("Loading...")
+  }) {
+    return true
+  }
+  if hasBrailleSpinner(content) || hasSpinnerActivity(content) {
+    return true
+  }
+  return false
 }
 
 nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
