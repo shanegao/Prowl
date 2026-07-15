@@ -54,6 +54,13 @@ struct IdentifiedAgentProcess: Equatable, Sendable {
   let agent: DetectedAgent
   let name: String
   let process: ForegroundProcess
+
+  /// Icon token for `CommandIconMap`. The shared `agent` entrypoint name maps
+  /// to the Cursor icon there, so alias-identified agents resolve through the
+  /// detected agent instead of the raw process name.
+  var iconLookupToken: String {
+    name == "agent" ? agent.iconLookupToken : name
+  }
 }
 
 func identifyAgentInJob(_ job: ForegroundJob) -> IdentifiedAgentProcess? {
@@ -102,6 +109,12 @@ private func identifyAgent(candidate: (name: String, score: Int), process: Foreg
     if isGrokAgentAlias(process) {
       return .grok
     }
+    return nil
+  }
+  // Grok Build is a direct Mach-O executable, never a wrapped-runtime script.
+  // A bare `grok` cmdline token is a model argument (`node app.js --model
+  // grok`), not the agent — only argv0/name evidence may identify it.
+  if candidate.name == "grok", candidate.score == 40 {
     return nil
   }
   return identifyAgent(processName: candidate.name)

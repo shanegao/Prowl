@@ -48,6 +48,9 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .grok)
     #expect(result.name == "agent")
+    // The shared `agent` name maps to the Cursor icon in CommandIconMap;
+    // the icon token must resolve through the detected agent instead.
+    #expect(result.iconLookupToken == "grok")
   }
 
   @Test func ignoresAgentProcessWithGrokModelArgument() {
@@ -68,20 +71,20 @@ struct AgentClassifierTests {
   }
 
   @Test func ignoresWrappedRuntimeWithGrokModelToken() {
-    // Wrapped-runtime cmdline tokens are score-40 candidates; model ids like
-    // `grok-4` must not flip the job to Grok.
-    let job = ForegroundJob(
-      processGroupID: 42,
-      processes: [
-        ForegroundProcess(
-          pid: 100,
-          name: "node",
-          argv0: "node",
-          cmdline: "node /tmp/app.js --model grok-4.5"
-        )
-      ]
-    )
-    #expect(identifyAgentInJob(job) == nil)
+    // Wrapped-runtime cmdline tokens are score-40 candidates; model ids —
+    // bare `grok` included — must not flip the job to Grok.
+    for cmdline in [
+      "node /tmp/app.js --model grok-4.5",
+      "node /tmp/app.js --model grok",
+    ] {
+      let job = ForegroundJob(
+        processGroupID: 42,
+        processes: [
+          ForegroundProcess(pid: 100, name: "node", argv0: "node", cmdline: cmdline)
+        ]
+      )
+      #expect(identifyAgentInJob(job) == nil)
+    }
   }
 
   @Test func identifiesDirectGrokProcess() throws {
@@ -160,6 +163,9 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .cursor)
     #expect(result.name == "agent")
+    // Same icon either way ("agent" and "cursor" both map to the Cursor
+    // asset); the token just resolves through the detected agent now.
+    #expect(result.iconLookupToken == "cursor")
   }
 
   @Test func ignoresGenericAgentProcessWithoutCursorContext() {
