@@ -271,6 +271,7 @@ struct AppFeature {
         )
         let worktrees = state.repositories.worktreesForInfoWatcher()
         let openedWorktreeIDs = openedWorktreeIDsForInfoWatcher(from: state.repositories)
+        let plainRepositoryRoots = state.repositories.plainRepositoryRootsForInfoWatcher()
         let shouldRestoreLayout =
           state.launchRestoreMode == .restoreLayout
           && state.repositories.snapshotPersistencePhase == .active
@@ -307,6 +308,9 @@ struct AppFeature {
             .run { _ in
               await worktreeInfoWatcher.send(.setOpenedWorktreeIDs(openedWorktreeIDs))
             },
+            .run { _ in
+              await worktreeInfoWatcher.send(.setPlainRepositoryRoots(plainRepositoryRoots))
+            },
           ]
           if shouldRestoreLayout {
             effects.append(
@@ -329,6 +333,9 @@ struct AppFeature {
           },
           .run { _ in
             await worktreeInfoWatcher.send(.setOpenedWorktreeIDs(openedWorktreeIDs))
+          },
+          .run { _ in
+            await worktreeInfoWatcher.send(.setPlainRepositoryRoots(plainRepositoryRoots))
           },
         ]
         if shouldRestoreLayout {
@@ -440,7 +447,6 @@ struct AppFeature {
           .send(
             .updates(
               .applySettings(
-                updateChannel: settings.updateChannel,
                 automaticallyChecks: settings.updatesAutomaticallyCheckForUpdates
               )
             )

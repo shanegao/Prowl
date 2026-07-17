@@ -56,7 +56,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | [`components/github-pull-requests.md`](components/github-pull-requests.md) | GitHub PR integration via `gh`: PR status, CI checks, merge/close/re-run actions from the command palette. |
 | [`components/custom-actions.md`](components/custom-actions.md) | Run Script (`⌘R`/`⌘.`), Setup & Archive scripts, and per-repo Custom Commands with their own buttons & hotkeys. Injected env vars. |
 | [`components/settings.md`](components/settings.md) | The Settings window (`⌘,`): every tab and what it controls. |
-| [`components/updates.md`](components/updates.md) | Sparkle auto-updates: channels, auto-check, `⌘⇧U`. |
+| [`components/updates.md`](components/updates.md) | Sparkle auto-updates: auto-check, `⌘⇧U`. |
 | [`components/cli.md`](components/cli.md) | The `prowl` CLI — let an agent inspect and drive panes (`list`, `read`, `send`, `key`, `focus`, `tab`, `pane`, `open`, `handoff`). |
 | [`components/handoff.md`](components/handoff.md) | Hand a task off between agents: the `.prowl/handoff/` artifact, captured session context, the protocol agents follow, `prowl handoff`, and the command-palette action. |
 

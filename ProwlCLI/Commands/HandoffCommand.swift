@@ -7,7 +7,7 @@ import ProwlCLIShared
 struct HandoffCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "handoff",
-    abstract: "Refresh, archive, and hand off the cross-agent task artifact in a workspace.",
+    abstract: "Refresh, archive, and hand off the cross-agent task artifact in a runnable target.",
     subcommands: [
       HandoffSaveCommand.self,
       HandoffToCommand.self,
@@ -51,7 +51,8 @@ struct HandoffToCommand: ParsableCommand {
   )
 
   @Argument(
-    help: "The agent to hand off to. Launch supported: \(HandoffAgentSupport.launchableAgentsDescription); use --no-launch for other detected agents."
+    help:
+      "The agent to hand off to. Launch supported: \(HandoffAgentSupport.launchableAgentsDescription); use --no-launch for other detected agents."
   )
   var agent: String
 
@@ -79,7 +80,8 @@ struct HandoffToCommand: ParsableCommand {
       if !noLaunch, !HandoffAgentSupport.canLaunch(normalizedAgent) {
         throw ExitError(
           code: CLIErrorCode.invalidArgument,
-          message: "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
+          message:
+            "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
         )
       }
       let envelope = CommandEnvelope(

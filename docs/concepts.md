@@ -35,9 +35,10 @@ Repository            a git repo, workspace, or plain folder added to Prowl
   starts with one pane and can be **split** horizontally/vertically into more.
   "Pane" and "surface" mean the same thing; the CLI and UI both use "pane".
 
-> **For the `prowl` CLI:** every pane has a stable **UUID** (`pane.id`), every tab
-> has a `tab.id`, and every worktree has a `worktree.id` (its path). Target work
-> by these IDs — never by tab title, which is free-form and can lie. See
+> **For the `prowl` CLI:** JSON exposes canonical UUIDs as `pane.id` and `tab.id`;
+> text `list` and `agents` output also exposes compact, process-scoped `pN` / `tN`
+> handles for explicit targeting. Neither should be cached across app restarts.
+> Never target by tab title, which is free-form and can lie. See
 > [`components/cli.md`](components/cli.md).
 
 ## View modes — three ways to see the same worktrees

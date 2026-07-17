@@ -26,7 +26,6 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `appearanceMode` | enum (`system`/`light`/`dark`) | `dark` | App appearance. |
 | `defaultEditorID` | String | `auto` | Default app to open worktrees (overridable per repo); `auto` prefers an app matching the detected project type. |
 | `confirmBeforeQuit` | Bool | `true` | Confirm before quitting Prowl. |
-| `updateChannel` | enum (`stable`/`tip`) | `stable` | Sparkle release channel. |
 | `updatesAutomaticallyCheckForUpdates` | Bool | `true` | Background update checks. |
 | `updatesAutomaticallyDownloadUpdates` | Bool | `false` | Auto-download updates. |
 | `inAppNotificationsEnabled` | Bool | `true` | In-app alerts / bell indicators. |
@@ -39,7 +38,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `analyticsEnabled` | Bool | `true` | Send usage analytics (PostHog; off in Debug). |
 | `crashReportsEnabled` | Bool | `true` | Send crash reports (Sentry). |
 | `githubIntegrationEnabled` | Bool | `true` | Enable GitHub/PR features (via `gh`). |
-| `deleteBranchOnDeleteWorktree` | Bool | `false` | Default "delete branch" when deleting a worktree. |
+| `deleteBranchOnAutomaticCleanup` | Bool | `false` | Delete the local branch when automatic cleanup (merged-PR delete action, archived auto-delete) removes a Prowl-created worktree. Migrates the legacy `deleteBranchOnDeleteWorktree` key. The manual delete dialog is independent: it remembers the last confirmed choice in UserDefaults (`deleteBranchOnManualWorktreeDelete`). |
 | `mergedWorktreeAction` | enum? | `nil` | What to do with a merged worktree (e.g. auto-archive); `nil` = ask. |
 | `promptForWorktreeCreation` | Bool | `true` | Show the creation dialog vs. auto-create. |
 | `fetchOriginBeforeWorktreeCreation` | Bool | `true` | `git fetch` before creating a worktree. |
@@ -55,7 +54,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `canvasDefaultLayout` | enum (`uniform`/`tile`) | `tile` | Initial Canvas layout: `uniform` packs same-size cards, `tile` resizes cards to fill the screen. |
 | `dimUnfocusedSplits` | Bool | `true` | Dim panes that aren't focused. |
 | `autoShowActiveAgentsPanel` | Bool | `false` | Auto-open the Active Agents panel on a new agent. |
-| `showActiveAgentTabTitles` | Bool | `false` | Show tab titles (vs. branch) in the agents panel. |
+| `showActiveAgentTabTitles` | Bool | `false` | Show pane titles (surface title, falling back to the tab title; vs. branch) in the agents panel. |
 | `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |
 | `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. |
 | `windowTintCustomColor` | color | default | The custom tint color (when `windowTintMode = custom`). |

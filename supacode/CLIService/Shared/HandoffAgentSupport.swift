@@ -14,6 +14,7 @@ public enum HandoffAgentSupport {
     "droid",
     "amp",
     "qwen",
+    "grok",
   ]
 
   public static let launchableAgents = ["claude", "codex"]

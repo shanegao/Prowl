@@ -298,13 +298,9 @@ extension AppFeature {
       let now = Date()
       do {
         try await Task.detached {
-          let resolvedSessionContext = HandoffTranscriptResolver().resolve(
-            sessionContext: sessionContext,
-            rootURL: rootURL
-          )
           _ = try store.save(
             outgoingAgent: outgoing,
-            sessionContext: resolvedSessionContext,
+            sessionContext: sessionContext,
             note: nil,
             now: now
           )

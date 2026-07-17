@@ -2,7 +2,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var appearanceMode: AppearanceMode
   var defaultEditorID: String
   var confirmBeforeQuit: Bool
-  var updateChannel: UpdateChannel
   var updatesAutomaticallyCheckForUpdates: Bool
   var updatesAutomaticallyDownloadUpdates: Bool
   var inAppNotificationsEnabled: Bool
@@ -15,7 +14,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
-  var deleteBranchOnDeleteWorktree: Bool
+  var deleteBranchOnAutomaticCleanup: Bool
   var mergedWorktreeAction: MergedWorktreeAction?
   var promptForWorktreeCreation: Bool
   var fetchOriginBeforeWorktreeCreation: Bool
@@ -48,7 +47,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     appearanceMode: .dark,
     defaultEditorID: OpenWorktreeAction.automaticSettingsID,
     confirmBeforeQuit: true,
-    updateChannel: .stable,
     updatesAutomaticallyCheckForUpdates: true,
     updatesAutomaticallyDownloadUpdates: false,
     inAppNotificationsEnabled: true,
@@ -61,7 +59,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     analyticsEnabled: true,
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
-    deleteBranchOnDeleteWorktree: false,
+    deleteBranchOnAutomaticCleanup: false,
     mergedWorktreeAction: nil,
     promptForWorktreeCreation: true,
     fetchOriginBeforeWorktreeCreation: true,
@@ -93,7 +91,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     appearanceMode: AppearanceMode,
     defaultEditorID: String,
     confirmBeforeQuit: Bool,
-    updateChannel: UpdateChannel,
     updatesAutomaticallyCheckForUpdates: Bool,
     updatesAutomaticallyDownloadUpdates: Bool,
     inAppNotificationsEnabled: Bool,
@@ -106,7 +103,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
-    deleteBranchOnDeleteWorktree: Bool,
+    deleteBranchOnAutomaticCleanup: Bool,
     mergedWorktreeAction: MergedWorktreeAction? = nil,
     promptForWorktreeCreation: Bool,
     fetchOriginBeforeWorktreeCreation: Bool = true,
@@ -136,7 +133,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
     self.confirmBeforeQuit = confirmBeforeQuit
-    self.updateChannel = updateChannel
     self.updatesAutomaticallyCheckForUpdates = updatesAutomaticallyCheckForUpdates
     self.updatesAutomaticallyDownloadUpdates = updatesAutomaticallyDownloadUpdates
     self.inAppNotificationsEnabled = inAppNotificationsEnabled
@@ -149,7 +145,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
-    self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
+    self.deleteBranchOnAutomaticCleanup = deleteBranchOnAutomaticCleanup
     self.mergedWorktreeAction = mergedWorktreeAction
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.fetchOriginBeforeWorktreeCreation = fetchOriginBeforeWorktreeCreation
@@ -182,7 +178,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(appearanceMode, forKey: .appearanceMode)
     try container.encode(defaultEditorID, forKey: .defaultEditorID)
     try container.encode(confirmBeforeQuit, forKey: .confirmBeforeQuit)
-    try container.encode(updateChannel, forKey: .updateChannel)
     try container.encode(updatesAutomaticallyCheckForUpdates, forKey: .updatesAutomaticallyCheckForUpdates)
     try container.encode(updatesAutomaticallyDownloadUpdates, forKey: .updatesAutomaticallyDownloadUpdates)
     try container.encode(inAppNotificationsEnabled, forKey: .inAppNotificationsEnabled)
@@ -195,7 +190,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(analyticsEnabled, forKey: .analyticsEnabled)
     try container.encode(crashReportsEnabled, forKey: .crashReportsEnabled)
     try container.encode(githubIntegrationEnabled, forKey: .githubIntegrationEnabled)
-    try container.encode(deleteBranchOnDeleteWorktree, forKey: .deleteBranchOnDeleteWorktree)
+    try container.encode(deleteBranchOnAutomaticCleanup, forKey: .deleteBranchOnAutomaticCleanup)
     try container.encodeIfPresent(mergedWorktreeAction, forKey: .mergedWorktreeAction)
     try container.encode(promptForWorktreeCreation, forKey: .promptForWorktreeCreation)
     try container.encode(fetchOriginBeforeWorktreeCreation, forKey: .fetchOriginBeforeWorktreeCreation)
@@ -229,7 +224,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case appearanceMode
     case defaultEditorID
     case confirmBeforeQuit
-    case updateChannel
     case updatesAutomaticallyCheckForUpdates
     case updatesAutomaticallyDownloadUpdates
     case inAppNotificationsEnabled
@@ -242,7 +236,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case analyticsEnabled
     case crashReportsEnabled
     case githubIntegrationEnabled
-    case deleteBranchOnDeleteWorktree
+    case deleteBranchOnAutomaticCleanup
     case mergedWorktreeAction
     case promptForWorktreeCreation
     case fetchOriginBeforeWorktreeCreation
@@ -273,6 +267,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     // Legacy keys for migration
     case automaticallyArchiveMergedWorktrees
     case notificationSoundEnabled
+    case deleteBranchOnDeleteWorktree
   }
 
   init(from decoder: any Decoder) throws {
@@ -284,9 +279,6 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     confirmBeforeQuit =
       try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeQuit)
       ?? Self.default.confirmBeforeQuit
-    updateChannel =
-      try container.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel)
-      ?? Self.default.updateChannel
     updatesAutomaticallyCheckForUpdates = try container.decode(Bool.self, forKey: .updatesAutomaticallyCheckForUpdates)
     updatesAutomaticallyDownloadUpdates = try container.decode(Bool.self, forKey: .updatesAutomaticallyDownloadUpdates)
     inAppNotificationsEnabled =
@@ -317,9 +309,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     githubIntegrationEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .githubIntegrationEnabled)
       ?? Self.default.githubIntegrationEnabled
-    deleteBranchOnDeleteWorktree =
-      try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
-      ?? Self.default.deleteBranchOnDeleteWorktree
+    deleteBranchOnAutomaticCleanup = try Self.decodeDeleteBranchOnAutomaticCleanup(from: container)
     mergedWorktreeAction = try Self.decodeMergedWorktreeAction(from: container)
     promptForWorktreeCreation =
       try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)
@@ -438,6 +428,21 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       return legacyEnabled ? Self.default.notificationSound : .never
     }
     return Self.default.notificationSound
+  }
+
+  /// Falls back to the legacy `deleteBranchOnDeleteWorktree` key: users who
+  /// opted into branch deletion before the setting was split keep branch
+  /// deletion during automatic cleanup.
+  private static func decodeDeleteBranchOnAutomaticCleanup(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> Bool {
+    if let value = try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnAutomaticCleanup) {
+      return value
+    }
+    if let legacy = try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree) {
+      return legacy
+    }
+    return Self.default.deleteBranchOnAutomaticCleanup
   }
 
   private static func decodeMergedWorktreeAction(

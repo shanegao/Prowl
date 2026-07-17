@@ -13,13 +13,17 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
   /// display falls back to `worktreeID`/`worktreeName`.
   let workingDirectory: URL?
   let tabID: TerminalTabID
-  let tabTitle: String
+  /// The title of the agent's own pane: the surface's live title when it has one,
+  /// falling back to the tab's display title. Kept per-pane so agents in different
+  /// splits of one tab don't all mirror the focused pane's title.
+  let paneTitle: String
   let surfaceID: UUID
   let paneIndex: Int
   /// Command/process token used for row icon lookup. This can be more specific than
   /// `agent` for aliases that share one semantic agent, e.g. `omp` vs `pi`.
   let iconLookupToken: String
   let agent: DetectedAgent
+  var session: AgentSession?
   let rawState: AgentRawState
   let displayState: AgentDisplayState
   let lastChangedAt: Date

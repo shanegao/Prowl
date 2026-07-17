@@ -78,7 +78,7 @@ struct GitClientRemoveWorktreeTests {
     #expect(calls.contains { $0.suffix(3) == ["branch", "-d", "feature"] })
   }
 
-  @Test func removeWorktreeDoesNotMoveDirectoryWhenPathIsNotRegisteredExactly() async throws {
+  @Test func removeWorktreeFailsWithoutMovingDirectoryWhenPathIsNotRegisteredExactly() async throws {
     let fileManager = FileManager.default
     let rootURL = fileManager.temporaryDirectory.appending(
       path: "prowl-remove-worktree-\(UUID().uuidString)",
@@ -119,7 +119,9 @@ struct GitClientRemoveWorktreeTests {
       repositoryRootURL: rootURL
     )
 
-    _ = try await client.removeWorktree(worktree, deleteBranch: true)
+    await #expect(throws: GitClientError.self) {
+      _ = try await client.removeWorktree(worktree, deleteBranch: true)
+    }
 
     let parentExists = fileManager.fileExists(atPath: parentURL.path(percentEncoded: false))
     let childExists = fileManager.fileExists(atPath: childURL.path(percentEncoded: false))
@@ -178,6 +180,142 @@ struct GitClientRemoveWorktreeTests {
     #expect(!stillExists)
     let calls = await store.calls
     #expect(calls.contains { $0.contains("prune") })
+  }
+
+  @Test func removeWorktreeFallsBackWhenPruneLeavesLockedRegistration() async throws {
+    let fileManager = FileManager.default
+    let worktreeURL = fileManager.temporaryDirectory.appending(
+      path: "prowl-locked-worktree-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    try fileManager.createDirectory(at: worktreeURL, withIntermediateDirectories: true)
+    try Data("gitdir: /tmp/repo/.git/worktrees/locked\n".utf8)
+      .write(to: worktreeURL.appending(path: ".git"))
+    defer {
+      try? fileManager.removeItem(at: worktreeURL)
+    }
+
+    let worktreePath = worktreeURL.path(percentEncoded: false)
+    let store = ShellCallStore()
+    let shell = ShellClient(
+      run: { _, arguments, _ in
+        await store.record(arguments)
+        if arguments.contains("--porcelain") {
+          return ShellOutput(
+            stdout: "worktree \(worktreePath)\nHEAD abc\nlocked external-lock\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("remove") {
+          throw ShellClientError(
+            command: "git worktree remove --force \(worktreePath)",
+            stdout: "",
+            stderr: "fatal: cannot remove a locked working tree, lock reason: external-lock",
+            exitCode: 128
+          )
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+    )
+    let client = GitClient(shell: shell)
+    let worktree = Worktree(
+      id: worktreePath,
+      name: "locked",
+      detail: "../locked",
+      workingDirectory: worktreeURL,
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+
+    await #expect(throws: GitClientError.self) {
+      _ = try await client.removeWorktree(worktree, deleteBranch: false)
+    }
+
+    let calls = await store.calls
+    #expect(calls.filter { $0.contains("--porcelain") }.count == 2)
+    #expect(calls.contains { $0.contains("prune") })
+    #expect(calls.contains { $0.contains("remove") })
+    #expect(fileManager.fileExists(atPath: worktreePath))
+  }
+
+  @Test func removeWorktreePropagatesDirectRemovalFailure() async {
+    let worktreePath = "/tmp/prowl-direct-remove-\(UUID().uuidString)"
+    let shell = ShellClient(
+      run: { _, arguments, _ in
+        if arguments.contains("--porcelain") {
+          return ShellOutput(
+            stdout: "worktree \(worktreePath)\nHEAD abc\nlocked external-lock\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        throw ShellClientError(
+          command: "git worktree remove --force \(worktreePath)",
+          stdout: "",
+          stderr: "fatal: cannot remove a locked working tree",
+          exitCode: 128
+        )
+      },
+      runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+    )
+    let client = GitClient(shell: shell)
+    let worktree = Worktree(
+      id: worktreePath,
+      name: "locked",
+      detail: "../locked",
+      workingDirectory: URL(fileURLWithPath: worktreePath),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+
+    await #expect(throws: GitClientError.self) {
+      _ = try await client.removeWorktree(worktree, deleteBranch: false)
+    }
+  }
+
+  @Test func removeWorktreeMatchesArbitrarySymlinkedParentPath() async throws {
+    let fileManager = FileManager.default
+    let rootURL = fileManager.temporaryDirectory.appending(
+      path: "prowl-symlink-worktree-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    let realParentURL = rootURL.appending(path: "real", directoryHint: .isDirectory)
+    let symlinkParentURL = rootURL.appending(path: "linked", directoryHint: .isDirectory)
+    let realWorktreeURL = realParentURL.appending(path: "feature", directoryHint: .isDirectory)
+    let symlinkWorktreeURL = symlinkParentURL.appending(path: "feature", directoryHint: .isDirectory)
+    try fileManager.createDirectory(at: realWorktreeURL, withIntermediateDirectories: true)
+    try fileManager.createSymbolicLink(at: symlinkParentURL, withDestinationURL: realParentURL)
+    try Data("gitdir: /tmp/repo/.git/worktrees/feature\n".utf8)
+      .write(to: realWorktreeURL.appending(path: ".git"))
+    defer {
+      try? fileManager.removeItem(at: rootURL)
+    }
+
+    let shell = ShellClient(
+      run: { _, arguments, _ in
+        if arguments.contains("--porcelain") {
+          return ShellOutput(
+            stdout: "worktree \(realWorktreeURL.path(percentEncoded: false))\nHEAD abc\ndetached\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+    )
+    let client = GitClient(shell: shell)
+    let worktree = Worktree(
+      id: symlinkWorktreeURL.path(percentEncoded: false),
+      name: "feature",
+      detail: "../feature",
+      workingDirectory: symlinkWorktreeURL,
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+
+    _ = try await client.removeWorktree(worktree, deleteBranch: false)
+
+    #expect(!fileManager.fileExists(atPath: realWorktreeURL.path(percentEncoded: false)))
   }
 
   @Test func forceDeleteLocalBranchUsesForceFlag() async throws {

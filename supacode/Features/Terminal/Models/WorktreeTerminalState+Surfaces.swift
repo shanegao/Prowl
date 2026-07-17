@@ -126,6 +126,7 @@ extension WorktreeTerminalState {
         newSurface.setOcclusion(true)
       }
       focusSurface(newSurface, in: tabId)
+      _ = registerTargetHandle(for: newSurface.id)
       return newSurface.id
     } catch {
       newSurface.closeSurface()
@@ -212,6 +213,7 @@ extension WorktreeTerminalState {
           newSurface.setOcclusion(true)
         }
         focusSurface(newSurface, in: tabId)
+        _ = registerTargetHandle(for: newSurface.id)
         return true
       } catch {
         newSurface.closeSurface()
@@ -312,7 +314,11 @@ extension WorktreeTerminalState {
   }
 
   func closeAllSurfaces() {
+    for tab in tabManager.tabs {
+      unregisterTargetHandle(for: tab.id)
+    }
     for surface in surfaces.values {
+      unregisterTargetHandle(for: surface.id)
       surface.closeSurface()
     }
     surfaces.removeAll()
@@ -368,10 +374,16 @@ extension WorktreeTerminalState {
   func configureBridgeCallbacks(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     view.bridge.onTitleChange = { [weak self, weak view] title in
       guard let self, let view else { return }
-      if self.focusedSurfaceIdByTab[tabId] == view.id {
-        if self.tabManager.updateTitle(tabId, title: title) {
-          self.refreshAgentEntriesForTitleChange(in: tabId)
-        }
+      if self.focusedSurfaceIdByTab[tabId] == view.id,
+        self.tabManager.updateTitle(tabId, title: title)
+      {
+        // The tab's display title moved: refresh the whole tab because it is
+        // the title fallback for panes without their own title.
+        self.refreshAgentEntriesForTitleChange(in: tabId)
+      } else {
+        // Unfocused pane, or the tab title didn't visibly change (custom title
+        // mask / no-op): only this pane's own title moved.
+        self.refreshAgentEntryForTitleChange(surfaceID: view.id, in: tabId)
       }
       self.noteTitleForCommandDetection(title, surfaceId: view.id, tabId: tabId)
     }
@@ -606,6 +618,7 @@ extension WorktreeTerminalState {
   /// without dropping them here the worktree's unseen indicator (bell + Dock
   /// badge) would stay lit until the user manually dismisses everything.
   func forgetSurface(_ surfaceID: UUID) {
+    unregisterTargetHandle(for: surfaceID)
     surfaces.removeValue(forKey: surfaceID)
     surfaceRunningStartedAtById.removeValue(forKey: surfaceID)
     autoCloseSurfaceIds.remove(surfaceID)
@@ -825,6 +838,7 @@ extension WorktreeTerminalState {
       focusedSurfaceIdByTab.removeValue(forKey: tabId)
       removeBoundDirectoryTab(tabId)
       tabManager.closeTab(tabId)
+      unregisterTargetHandle(for: tabId)
       if tabId == runScriptTabId {
         setRunScriptTabId(nil)
       }

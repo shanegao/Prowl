@@ -9,7 +9,6 @@ struct SettingsFeature {
     var appearanceMode: AppearanceMode
     var defaultEditorID: String
     var confirmBeforeQuit: Bool
-    var updateChannel: UpdateChannel
     var updatesAutomaticallyCheckForUpdates: Bool
     var updatesAutomaticallyDownloadUpdates: Bool
     var inAppNotificationsEnabled: Bool
@@ -22,7 +21,7 @@ struct SettingsFeature {
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
-    var deleteBranchOnDeleteWorktree: Bool
+    var deleteBranchOnAutomaticCleanup: Bool
     var mergedWorktreeAction: MergedWorktreeAction?
     var archivedAutoDeletePeriod: AutoDeletePeriod?
     var promptForWorktreeCreation: Bool
@@ -68,7 +67,6 @@ struct SettingsFeature {
       appearanceMode = settings.appearanceMode
       defaultEditorID = normalizedDefaultEditorID
       confirmBeforeQuit = settings.confirmBeforeQuit
-      updateChannel = settings.updateChannel
       updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
       updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
@@ -81,7 +79,7 @@ struct SettingsFeature {
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
-      deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
+      deleteBranchOnAutomaticCleanup = settings.deleteBranchOnAutomaticCleanup
       mergedWorktreeAction = settings.mergedWorktreeAction
       archivedAutoDeletePeriod = settings.archivedAutoDeletePeriod
       promptForWorktreeCreation = settings.promptForWorktreeCreation
@@ -117,7 +115,6 @@ struct SettingsFeature {
         appearanceMode: appearanceMode,
         defaultEditorID: defaultEditorID,
         confirmBeforeQuit: confirmBeforeQuit,
-        updateChannel: updateChannel,
         updatesAutomaticallyCheckForUpdates: updatesAutomaticallyCheckForUpdates,
         updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
         inAppNotificationsEnabled: inAppNotificationsEnabled,
@@ -130,7 +127,7 @@ struct SettingsFeature {
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
-        deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
+        deleteBranchOnAutomaticCleanup: deleteBranchOnAutomaticCleanup,
         mergedWorktreeAction: mergedWorktreeAction,
         promptForWorktreeCreation: promptForWorktreeCreation,
         fetchOriginBeforeWorktreeCreation: fetchRemoteBeforeWorktreeCreation,
@@ -239,7 +236,6 @@ struct SettingsFeature {
         state.appearanceMode = normalizedSettings.appearanceMode
         state.defaultEditorID = normalizedSettings.defaultEditorID
         state.confirmBeforeQuit = normalizedSettings.confirmBeforeQuit
-        state.updateChannel = normalizedSettings.updateChannel
         state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
         state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
@@ -252,7 +248,7 @@ struct SettingsFeature {
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
-        state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
+        state.deleteBranchOnAutomaticCleanup = normalizedSettings.deleteBranchOnAutomaticCleanup
         state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
         state.archivedAutoDeletePeriod = normalizedSettings.archivedAutoDeletePeriod
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation

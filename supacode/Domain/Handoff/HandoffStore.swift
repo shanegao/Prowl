@@ -4,7 +4,7 @@ import Foundation
 /// On-disk store for the cross-agent handoff artifact that lives under a
 /// runnable target's `.prowl/handoff/` directory.
 ///
-/// Layout (see `doc-onevcat/plans/2026-06-11-codex-claude-handoff-design.md`):
+/// Layout (see `docs/components/handoff.md`):
 /// ```
 /// <root>/.prowl/handoff/
 ///   current.md            agent-authored handoff artifact

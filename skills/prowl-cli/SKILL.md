@@ -10,7 +10,7 @@ Use `prowl` only when the task is to inspect or control the running Prowl GUI ap
 
 ## Safe Default Workflow
 
-Always resolve a concrete pane UUID before `read`, `send`, `key`, `focus`, or destructive close commands.
+For automation, always resolve a concrete pane UUID before `read`, `send`, `key`, `focus`, or destructive close commands. Text `list` and `agents` output also exposes current-process `pN` / `tN` handles for concise same-session handoffs; use them only with explicit `--pane` / `--tab` flags.
 
 ```bash
 prowl list --json
@@ -213,7 +213,7 @@ prowl read --pane "$pane" --last 120 --wait-stable --json
 
 When no agent is blocked, use the same pattern with `working`, `done`, or `idle` depending on the task. The JSON payload also includes `.project.name`, `.project.branch`, `.worktree.path`, `.tab.title`, and `.pane.focused`, so automation can filter by human project label while still targeting the concrete pane.
 
-`-t/--target` can auto-resolve pane UUID, tab UUID, or worktree id/name/path, but explicit `--pane <uuid>` is safer for automation.
+`-t/--target` can auto-resolve pane UUID, tab UUID, or worktree id/name/path, but not short handles. Explicit `--pane <uuid>` is safer for automation; explicit `--pane <pN>` is useful for a same-session human or agent handoff.
 
 ## Argument Rules
 
@@ -276,7 +276,7 @@ Common codes and recovery:
 - `APP_NOT_RUNNING`: Prowl is not reachable, or the socket is missing/stale. Ask before restarting the app.
 - `SOCKET_PERMISSION_DENIED`: the socket exists but the sandbox or filesystem permissions blocked `connect()`. Report this as a permission/sandbox problem, not as an app-liveness problem.
 - `TRANSPORT_FAILED`: the socket connection broke or the socket path is invalid (for example `ENOTSOCK` or a too-long `PROWL_CLI_SOCKET`). Recheck which Prowl instance owns the socket.
-- `TARGET_NOT_FOUND` / `TARGET_NOT_UNIQUE`: run `prowl list --json` again and choose an explicit pane UUID.
+- `TARGET_NOT_FOUND` / `TARGET_NOT_UNIQUE`: run `prowl list --json` again and choose an explicit pane UUID, or refresh text `prowl list` and use its current `pN` handle.
 - `EMPTY_INPUT`: `send` got neither argv text nor stdin.
 - `NO_ACTIVE_PANE`: no pane resolved for positional (focused-pane) targeting; pass an explicit `--pane`.
 - `INVALID_ARGUMENT`: illegal flag or flag combination, such as `--capture --no-wait`.

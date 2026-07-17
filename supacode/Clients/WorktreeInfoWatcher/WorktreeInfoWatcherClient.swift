@@ -11,6 +11,7 @@ struct WorktreeInfoWatcherClient {
     case setSelectedWorktreeID(Worktree.ID?)
     case refreshLineChanges
     case setPullRequestTrackingEnabled(Bool)
+    case setPlainRepositoryRoots([URL])
     case stop
   }
 
@@ -20,6 +21,7 @@ struct WorktreeInfoWatcherClient {
     case repositoryWorktreesChanged(repositoryRootURL: URL)
     case repositoryRemoteConfigurationChanged(repositoryRootURL: URL)
     case repositoryPullRequestRefresh(repositoryRootURL: URL, worktreeIDs: [Worktree.ID])
+    case plainRepositoryBecameGitRepository(URL)
   }
 }
 

@@ -44,9 +44,9 @@ selected worktree has a pull request).
 - **App:** Check for Updates, Open Settings, Open Repository, **Install Command
   Line Tool**, Repo Settings.
 - **Custom commands:** your per-repo Custom Commands appear here too.
-- **Handoff** (workspaces only): **Hand off → Claude Code** / **Hand off → Codex**
-  refresh + archive the handoff artifact and launch the receiving agent in a new
-  tab. See [handoff](handoff.md).
+- **Handoff** (every runnable workspace, repository/worktree, or plain folder):
+  **Hand off → Claude Code** / **Hand off → Codex** refresh + archive the handoff
+  artifact and launch the receiving agent in a new tab. See [handoff](handoff.md).
 - **Debug** (Debug builds only): toast/update/dock simulations.
 
 ## Behavior notes

@@ -734,9 +734,11 @@ struct GitClient {
     let rootPath = worktree.repositoryRootURL.path(percentEncoded: false)
     let worktreeURL = worktree.workingDirectory.standardizedFileURL
     let worktreePath = Self.canonicalWorktreePath(worktreeURL.path(percentEncoded: false))
-    let registeredWorktreePaths = try await registeredWorktreePaths(rootPath: rootPath)
-    guard registeredWorktreePaths.contains(worktreePath) else {
-      return worktree.workingDirectory
+    let initialWorktreePaths = try await registeredWorktreePaths(rootPath: rootPath)
+    guard initialWorktreePaths.contains(worktreePath) else {
+      throw GitClientError.worktreeNotRegistered(
+        path: worktree.workingDirectory.path(percentEncoded: false)
+      )
     }
     let relocatedURL =
       Self.worktreeDirectoryHasGitMetadata(worktreeURL)
@@ -744,12 +746,26 @@ struct GitClient {
       : nil
     if let relocatedURL {
       do {
-        _ = try await runGit(
+        _ = try? await runGit(
           operation: .worktreePrune,
           arguments: ["-C", rootPath, "worktree", "prune", "--expire=now"]
         )
+        let remainingWorktreePaths = try await registeredWorktreePaths(rootPath: rootPath)
+        if remainingWorktreePaths.contains(worktreePath) {
+          try await runGitWorktreeRemove(rootPath: rootPath, worktreePath: worktreePath)
+        }
       } catch {
-        await runGitWorktreeRemove(rootPath: rootPath, worktreePath: worktreePath)
+        let removalError = error
+        do {
+          try FileManager.default.moveItem(at: relocatedURL, to: worktreeURL)
+        } catch {
+          throw GitClientError.worktreeRecoveryFailed(
+            path: worktreeURL.path(percentEncoded: false),
+            removalError: removalError.localizedDescription,
+            recoveryError: error.localizedDescription
+          )
+        }
+        throw removalError
       }
       if deleteBranch {
         _ = try? await deleteLocalBranch(
@@ -763,7 +779,7 @@ struct GitClient {
       }
       return worktree.workingDirectory
     }
-    await runGitWorktreeRemove(rootPath: rootPath, worktreePath: worktreePath)
+    try await runGitWorktreeRemove(rootPath: rootPath, worktreePath: worktreePath)
     if deleteBranch {
       _ = try? await deleteLocalBranch(
         named: worktree.name,
@@ -1072,8 +1088,8 @@ struct GitClient {
   nonisolated private func runGitWorktreeRemove(
     rootPath: String,
     worktreePath: String
-  ) async {
-    _ = try? await runGit(
+  ) async throws {
+    _ = try await runGit(
       operation: .worktreeRemove,
       arguments: [
         "-C",
@@ -1125,11 +1141,14 @@ struct GitClient {
     return FileManager.default.fileExists(atPath: gitMetadataURL.path(percentEncoded: false))
   }
 
-  /// Normalizes a worktree path to the same canonical form `worktrees(for:)` stores, so paths
-  /// reported by git (which keep `/private` symlink prefixes) compare equal to the standardized
-  /// URLs Prowl tracks internally.
+  /// Resolves filesystem symlinks and normalizes a worktree path so Git's raw on-disk paths
+  /// compare equal to the URLs Prowl tracks internally.
   nonisolated static func canonicalWorktreePath(_ path: String) -> String {
-    URL(fileURLWithPath: path).standardizedFileURL.path(percentEncoded: false)
+    URL(fileURLWithPath: path)
+      .standardizedFileURL
+      .resolvingSymlinksInPath()
+      .standardizedFileURL
+      .path(percentEncoded: false)
   }
 
   nonisolated static func parseGitWorktreePorcelainPaths(_ output: String) -> Set<String> {

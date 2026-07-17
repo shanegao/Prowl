@@ -82,6 +82,34 @@ struct HandoffCommandHandlerTests {
     #expect(content.contains(".prowl/handoff/sessions/"))
   }
 
+  @Test func savePreservesResolvedNativeSessionContext() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      sessionContext: HandoffStore.SessionContext(
+        agent: "codex",
+        sessionID: "native-session",
+        paneID: "pane-0",
+        paneTitle: "codex",
+        source: "open_file",
+        confidence: "exact",
+        transcriptPath: "/tmp/native-session.jsonl",
+        excerptText: "working on handoff"
+      )
+    )
+
+    let response = await handler.handle(envelope: envelope(HandoffInput(action: .save)))
+
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    let session = try #require(payload.sessionContext)
+    #expect(session.sessionID == "native-session")
+    #expect(session.source == "open_file")
+    #expect(session.confidence == "exact")
+    #expect(session.transcriptPath == "/tmp/native-session.jsonl")
+  }
+
   @Test func toRefreshesArchivesAndLaunches() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }

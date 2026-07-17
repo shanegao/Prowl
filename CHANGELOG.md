@@ -1,5 +1,47 @@
 # Changelog
 
+## [2026.7.17](https://github.com/onevcat/Prowl/releases/tag/v2026.7.17)
+
+Grok Build agent detection and a reworked branch-deletion memory setting.
+
+### New
+- Prowl now detects Grok Build (xAI's `grok` CLI) as an agent, showing its icon in the tab and tracking status transitions between idle, working, and blocked (e.g. bash approval, ask-user prompts).
+
+### Improved
+- When manually deleting a worktree, the "Also delete local branch" toggle now remembers your last confirmed choice for next time.
+- Automatic branch cleanup (for merged PRs and expired archived worktrees) is now controlled by its own separate setting in Worktree Settings, independent of the manual delete toggle.
+
+## [2026.7.14](https://github.com/onevcat/Prowl/releases/tag/v2026.7.14)
+
+### New
+- `prowl list` and `prowl agents` now show short handles (`t1`, `p1`, ...) for tabs and panes in their text output, and `--tab`/`--pane` selectors accept these short handles as well as UUIDs, making it much easier to reference panes across CLI calls. JSON output is unchanged and still uses full UUIDs.
+- `prowl agents` can now report a detected agent's native session details—session ID, transcript path, and detection confidence—for supported CLI agents (Claude Code, Codex, Amp, Copilot, and others), without requiring any hook setup.
+
+### Fixed
+- Active Agents no longer shows the wrong pane's title when multiple agents run in split panes of the same tab; each row now reflects its own pane's title.
+- Worktree deletion errors are now surfaced instead of being silently treated as success, and worktrees that failed to delete due to a locked or stuck registration no longer reappear after the next refresh.
+- Repository roots opened through a symbolic link are now resolved to their canonical Git root, so branches and worktrees load consistently no matter which path was used to open the repo.
+- The sidebar now updates correctly after running `git init` inside a plain (non-Git) folder that was already open in Prowl.
+
+### Improved
+- Removed the non-functional Update Channel picker from Settings → Updates, since Prowl has shipped a single release channel for a while.
+
+## [2026.7.10](https://github.com/onevcat/Prowl/releases/tag/v2026.7.10)
+
+This release focuses on notification control, PR status reliability, and a few editor and terminal integration additions.
+
+### New
+- Added a notification sound picker in Settings → Notifications: choose from system sounds, "Prowl Classic", or turn sounds off entirely. Selecting a sound plays a quick preview.
+- Added a "Mute notifications for the active pane" setting (on by default): when a notification comes from the pane you're already viewing, the banner, sound, and dock bounce are skipped since you're already looking at it. Turn it off in Settings → Notifications if you want notifications even while viewing the pane.
+- Terminal sessions now report `TERM_PROGRAM=prowl` (with `TERM_PROGRAM_VERSION`), so shell scripts and coding agents can detect they're running inside Prowl.
+- Added Open actions for Zed Preview, IntelliJ IDEA EAP, and Nova in the worktree "Open" menu.
+
+### Fixed
+- Fixed PR status badges flickering to "Blocked" or briefly disappearing during refresh, including when GitHub temporarily reports an unresolved mergeable state.
+- Fixed the Diff window (⌘⇧Y) following the system appearance instead of Prowl's own Dark/Light/System setting.
+- Fixed symlinked config files (e.g. `settings.json` linked into a dotfiles repo) being replaced with a regular file on save, breaking the symlink.
+- Fixed spurious "not a git repository" errors when your login shell isn't zsh or bash (nushell, pwsh, csh, sh/dash/ksh), which could also make Prowl fail to detect `gh`.
+
 ## [2026.7.4](https://github.com/onevcat/Prowl/releases/tag/v2026.7.4)
 
 ### New

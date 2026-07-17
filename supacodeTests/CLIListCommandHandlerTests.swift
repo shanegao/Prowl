@@ -20,18 +20,21 @@ struct CLIListCommandHandlerTests {
             tabs: [
               .init(
                 id: UUID(uuidString: "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0")!,
+                handle: 1,
                 title: "Prowl 1",
                 selected: true,
                 focusedPaneID: UUID(uuidString: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764")!,
                 panes: [
                   .init(
                     id: UUID(uuidString: "1344AEF5-3BA6-4B75-A07E-1F36C63A34B0")!,
+                    handle: 2,
                     title: "tests",
                     cwd: "/Users/onevcat/Projects/Prowl",
                     agent: "codex"
                   ),
                   .init(
                     id: UUID(uuidString: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764")!,
+                    handle: 3,
                     title: "build",
                     cwd: "/Users/onevcat/Projects/Prowl",
                     agent: nil
@@ -50,12 +53,14 @@ struct CLIListCommandHandlerTests {
             tabs: [
               .init(
                 id: UUID(uuidString: "A2B07BBA-9DD0-4C77-9D76-2B3E0AF12096")!,
+                handle: 4,
                 title: "Notes",
                 selected: true,
                 focusedPaneID: UUID(uuidString: "EF65FF31-1B72-40B2-80DA-3AA87B7B6858")!,
                 panes: [
                   .init(
                     id: UUID(uuidString: "EF65FF31-1B72-40B2-80DA-3AA87B7B6858")!,
+                    handle: 5,
                     title: "notes",
                     cwd: "/Users/onevcat/Projects/Notes",
                     agent: nil
@@ -93,10 +98,52 @@ struct CLIListCommandHandlerTests {
 
     #expect(payload.items[0].task.status == .running)
     #expect(payload.items[2].task.status == .idle)
-
-    // Detected agent flows through to the payload.
     #expect(payload.items[0].pane.agent == "codex")
     #expect(payload.items[1].pane.agent == nil)
+    #expect(payload.items.allSatisfy { $0.tab.handle == nil && $0.pane.handle == nil })
+    let rawPayload = try #require(response.data?.bytes)
+    let rawPayloadString = try #require(String(bytes: rawPayload, encoding: .utf8))
+    #expect(!rawPayloadString.contains("\"handle\""))
+  }
+
+  @Test func includesShortHandlesInTextPayload() async throws {
+    let tabID = UUID()
+    let paneID = UUID()
+    let handler = ListCommandHandler {
+      ListRuntimeSnapshot(
+        worktrees: [
+          .init(
+            id: "worktree",
+            name: "main",
+            path: "/tmp/worktree",
+            rootPath: "/tmp/worktree",
+            kind: .git,
+            taskStatus: .idle,
+            tabs: [
+              .init(
+                id: tabID,
+                handle: 12,
+                title: "Tab",
+                selected: true,
+                focusedPaneID: paneID,
+                panes: [.init(id: paneID, handle: 13, title: "shell", cwd: "/tmp/worktree")]
+              )
+            ]
+          )
+        ],
+        focusedWorktreeID: "worktree"
+      )
+    }
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(output: .text, command: .list(ListInput()))
+    )
+    let payload = try #require(try response.data?.decode(as: ListCommandPayload.self))
+
+    #expect(payload.items[0].tab.id == tabID.uuidString)
+    #expect(payload.items[0].tab.handle == 12)
+    #expect(payload.items[0].pane.id == paneID.uuidString)
+    #expect(payload.items[0].pane.handle == 13)
   }
 
   @Test func returnsListFailedWhenSnapshotProviderThrows() async {

@@ -411,7 +411,7 @@ struct AppFeatureHandoffTests {
       worktreeName: "Checkout Flow",
       workingDirectory: nil,
       tabID: tabID,
-      tabTitle: agent.rawValue,
+      paneTitle: agent.rawValue,
       surfaceID: surfaceID,
       paneIndex: 1,
       iconLookupToken: agent.iconLookupToken,

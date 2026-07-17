@@ -33,6 +33,7 @@ enum ListRuntimeSnapshotBuilder {
         let panes = tabSnapshot.panes.map { paneSnapshot in
           ListRuntimeSnapshot.Pane(
             id: paneSnapshot.id,
+            handle: paneSnapshot.handle,
             title: paneSnapshot.title,
             cwd: normalizeAbsolutePath(paneSnapshot.cwd),
             agent: paneSnapshot.agent
@@ -45,6 +46,7 @@ enum ListRuntimeSnapshotBuilder {
 
         return ListRuntimeSnapshot.Tab(
           id: tabSnapshot.id,
+          handle: tabSnapshot.handle,
           title: tabSnapshot.title,
           selected: tabSnapshot.selected,
           focusedPaneID: tabSnapshot.focusedPaneID,

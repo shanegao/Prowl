@@ -98,13 +98,9 @@ final class HandoffCommandHandler: CommandHandler {
     let note = input.note
     do {
       let result = try await Task.detached {
-        let sessionContext = HandoffTranscriptResolver().resolve(
-          sessionContext: target.sessionContext,
-          rootURL: store.rootURL
-        )
-        return try store.save(
+        try store.save(
           outgoingAgent: outgoing,
-          sessionContext: sessionContext,
+          sessionContext: target.sessionContext,
           note: note,
           now: timestamp
         )
@@ -137,13 +133,9 @@ final class HandoffCommandHandler: CommandHandler {
     do {
       // Refresh the appendix, then archive the current artifact before launching.
       saveResult = try await Task.detached {
-        let sessionContext = HandoffTranscriptResolver().resolve(
-          sessionContext: target.sessionContext,
-          rootURL: store.rootURL
-        )
-        return try store.save(
+        try store.save(
           outgoingAgent: outgoing,
-          sessionContext: sessionContext,
+          sessionContext: target.sessionContext,
           note: nil,
           now: timestamp
         )
@@ -196,11 +188,7 @@ final class HandoffCommandHandler: CommandHandler {
 
   private func handleStatus(target: HandoffResolvedTarget, store: HandoffStore) async -> CommandResponse {
     let (status, sessionContext) = await Task.detached {
-      let sessionContext = HandoffTranscriptResolver().resolve(
-        sessionContext: target.sessionContext,
-        rootURL: store.rootURL
-      )
-      return (store.readStatus(), sessionContext)
+      (store.readStatus(), target.sessionContext)
     }.value
     return success(
       payload: HandoffCommandPayload(

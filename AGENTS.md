@@ -1,4 +1,4 @@
-This fork is primarily for onevcat-specific customizations; before doing any release work, read `doc-onevcat/fork-sync-and-release.md` (and `doc-onevcat/change-list.md`) for fork publishing guidance.
+This fork is primarily for onevcat-specific customizations; before doing any release work, read `docs-ai/001-fork-bootstrap-and-release-pipeline/release-runbook.md` (and the upstream ledger `docs-ai/017-upstream-sync-process/upstream-ledger.md`) for fork publishing guidance. Fork history and design decisions are recorded under `docs-ai/` (see `docs-ai/README.md`).
 
 ## Build Commands
 
@@ -17,8 +17,7 @@ make log-stream                  # Stream app logs (subsystem: com.onevcat.prowl
 make build-cli                   # Build CLI (prowl) via SwiftPM
 make test-cli-smoke              # Run CLI smoke tests (unit-level)
 make test-cli-integration        # Run CLI integration tests (socket round-trip)
-make bump-version                # Bump version (date-based YYYY.M.DD) and create git tag
-make bump-and-release            # Bump version and push to trigger release
+make bump-version                # Bump version (date-based YYYY.M.DD) and create git tag; used by release.sh
 ```
 
 Run a single test class or method:
@@ -127,6 +126,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - After a task, ensure the app builds: `make build-app`
 - When working on CLI code (`ProwlCLI/`, `ProwlCLITests/`, `Package.swift`), run `make build-cli`, `make test-cli-smoke`, and `make test-cli-integration` before committing.
 - When you change user-facing behavior (keyboard shortcuts, settings, the `prowl` CLI, or a feature's UX), update the matching file under `docs/` in the same change. For a full audit, run the `sync-docs` skill.
+- `docs-ai/` is curated, durable product/design documentation — never a working-note archive. Use the `write-ai-doc` skill only for a substantial feature or a non-trivial fix whose design and result must guide future implementation. Do not create entries for reviews, audits, routine research or investigations, status reports, test runs, or docs-only work unless onevcat explicitly asks for a `docs-ai/` record. When uncertain, do not create an entry. For qualifying work, create `docs-ai/NNN-<slug>/000-plan.md` before coding and complete `001-action.md` after implementation. Follow-up work on the same topic amends the existing entry (see `docs-ai/README.md`).
 - When implementing a new feature or fixing a bug that is unrelated to the current branch's active work, first create a dedicated branch from the latest `origin/main`; then work, commit, push, and open a PR from that branch.
 - Automatically commit your changes and your changes only. Do not use `git add .`
 - Before you go on your task, check the current git branch name, if it's something generic like an animal name, name it accordingly. Do not do this for main branch

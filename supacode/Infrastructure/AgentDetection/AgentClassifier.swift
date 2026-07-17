@@ -1,7 +1,8 @@
 import Foundation
 
 func identifyAgent(processName: String) -> DetectedAgent? {
-  switch processName.lowercased() {
+  let lower = processName.lowercased()
+  switch lower {
   case "pi", "omp", "oh-my-pi":
     return .pi
   case "claude", "claude-code":
@@ -26,24 +27,55 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .amp
   case "qwen":
     return .qwen
+  case "grok":
+    return .grok
   default:
+    // Versioned install binary only, e.g. `grok-0.2.101-macos-aarch64`.
+    // Must not match model-id tokens like `grok-4` / `grok-4.5` that show up
+    // as argv fragments of other agents (score-40 wrapped-runtime candidates).
+    if isGrokVersionedBinaryName(lower) {
+      return .grok
+    }
     return nil
   }
 }
 
-func identifyAgentInJob(_ job: ForegroundJob) -> (agent: DetectedAgent, name: String)? {
+/// Install packages are named `grok-<semver>-<platform>-<arch>` (verified
+/// against `~/.grok/downloads/grok-0.2.101-macos-aarch64`). Model ids
+/// (`grok-4`, `grok-4.5`) never include a platform segment.
+private func isGrokVersionedBinaryName(_ lower: String) -> Bool {
+  guard lower.hasPrefix("grok-") else { return false }
+  return lower.contains("-macos-")
+    || lower.contains("-linux-")
+    || lower.contains("-windows-")
+}
+
+struct IdentifiedAgentProcess: Equatable, Sendable {
+  let agent: DetectedAgent
+  let name: String
+  let process: ForegroundProcess
+
+  /// Icon token for `CommandIconMap`. The shared `agent` entrypoint name maps
+  /// to the Cursor icon there, so alias-identified agents resolve through the
+  /// detected agent instead of the raw process name.
+  var iconLookupToken: String {
+    name == "agent" ? agent.iconLookupToken : name
+  }
+}
+
+func identifyAgentInJob(_ job: ForegroundJob) -> IdentifiedAgentProcess? {
   var best: AgentCandidate?
 
   for process in job.processes {
     for candidate in agentCandidates(for: process) {
       guard let agent = identifyAgent(candidate: candidate, process: process) else { continue }
       if best == nil || candidate.score > best!.score {
-        best = AgentCandidate(score: candidate.score, agent: agent, name: candidate.name)
+        best = AgentCandidate(score: candidate.score, agent: agent, name: candidate.name, process: process)
       }
     }
   }
 
-  return best.map { ($0.agent, $0.name) }
+  return best.map { IdentifiedAgentProcess(agent: $0.agent, name: $0.name, process: $0.process) }
 }
 
 private func agentCandidates(for process: ForegroundProcess) -> [(name: String, score: Int)] {
@@ -68,29 +100,69 @@ private func agentCandidates(for process: ForegroundProcess) -> [(name: String, 
 }
 
 private func identifyAgent(candidate: (name: String, score: Int), process: ForegroundProcess) -> DetectedAgent? {
-  if candidate.name == "agent", isCursorAgentAlias(process) {
-    return .cursor
+  if candidate.name == "agent" {
+    // Cursor and Grok Build both ship an `agent` entrypoint. Disambiguate from
+    // path/cmdline evidence only — bare `agent` stays unknown.
+    if isCursorAgentAlias(process) {
+      return .cursor
+    }
+    if isGrokAgentAlias(process) {
+      return .grok
+    }
+    return nil
+  }
+  // Grok Build is a direct Mach-O executable, never a wrapped-runtime script.
+  // A bare `grok` cmdline token is a model argument (`node app.js --model
+  // grok`), not the agent — only argv0/name evidence may identify it.
+  if candidate.name == "grok", candidate.score == 40 {
+    return nil
   }
   return identifyAgent(processName: candidate.name)
 }
 
 private func isCursorAgentAlias(_ process: ForegroundProcess) -> Bool {
-  let haystack = [
+  let haystack = agentAliasHaystack(process)
+  return haystack.contains("cursor-agent")
+    || haystack.contains("cursor.app")
+}
+
+private func isGrokAgentAlias(_ process: ForegroundProcess) -> Bool {
+  // Production `argv0` is basename-only (`ProcessDetection` strips the path);
+  // the full executable path is the first whitespace token of `cmdline`.
+  // Only inspect those two executable locations — never later argv tokens
+  // (e.g. `agent --model grok-4` must stay unknown).
+  let executablePaths = [
+    process.argv0,
+    process.cmdline?.split(whereSeparator: \.isWhitespace).first.map(String.init),
+  ]
+  .compactMap { $0?.lowercased() }
+
+  for path in executablePaths {
+    if path.contains("/.grok/") {
+      return true
+    }
+    if let basename = ProcessDetection.basename(path), isGrokVersionedBinaryName(basename) {
+      return true
+    }
+  }
+  return false
+}
+
+private func agentAliasHaystack(_ process: ForegroundProcess) -> String {
+  [
     process.argv0,
     process.cmdline,
   ]
   .compactMap(\.self)
   .joined(separator: " ")
   .lowercased()
-
-  return haystack.contains("cursor-agent")
-    || haystack.contains("cursor.app")
 }
 
 private struct AgentCandidate {
   let score: Int
   let agent: DetectedAgent
   let name: String
+  let process: ForegroundProcess
 }
 
 private func normalizedProcessName(_ raw: String) -> String? {

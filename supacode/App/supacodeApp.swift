@@ -132,7 +132,7 @@ struct SupacodeApp: App {
     #if !DEBUG
       let infoDictionary = Bundle.main.infoDictionary ?? [:]
       let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
-      let environment = initialSettings.updateChannel == .tip ? "tip" : "production"
+      let environment = "production"
 
       if initialSettings.crashReportsEnabled, let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
         SentrySDK.start { options in
@@ -437,15 +437,19 @@ struct SupacodeApp: App {
       return nil
     }
 
-    let detectedAgent = state.surfaceAgentStates[paneID]?.detectedAgent?.rawValue
+    let agentState = state.surfaceAgentStates[paneID]
+    let detectedAgent = agentState?.detectedAgent?.rawValue
+    let nativeSession = agentState?.session
     let title = paneTitle ?? state.paneTitle(surfaceID: paneID, fallbackTabTitle: "")
     let screenText = surface.readScreenContentsForCLI() ?? surface.readViewportContentsForCLI()
     return HandoffStore.SessionContext(
       agent: detectedAgent,
+      sessionID: nativeSession?.id,
       paneID: paneID.uuidString,
       paneTitle: title.isEmpty ? nil : title,
-      source: screenText == nil ? "terminal-unavailable" : "terminal-scrollback",
-      confidence: "fallback",
+      source: nativeSession?.source.rawValue ?? (screenText == nil ? "terminal-unavailable" : "terminal-scrollback"),
+      confidence: nativeSession?.confidence.rawValue ?? "fallback",
+      transcriptPath: nativeSession?.transcriptPath?.path(percentEncoded: false),
       excerptText: screenText
     )
   }

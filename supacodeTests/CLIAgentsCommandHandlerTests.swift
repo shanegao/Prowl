@@ -41,16 +41,41 @@ struct CLIAgentsCommandHandlerTests {
     #expect(agent.tab.title == "issue 330")
     #expect(agent.tab.selected)
     #expect(agent.pane.id == fixture.tabPaneID.uuidString)
+    #expect(agent.pane.handle == nil)
     #expect(agent.pane.index == 2)
     #expect(agent.pane.title == "omp")
     #expect(agent.pane.cwd == "/tmp/project-repo/Sources")
     #expect(agent.pane.focused)
+    #expect(agent.session?.id == "019f4f1b-3650-7661-a56d-351f02f01139")
+    #expect(agent.session?.path == "/tmp/pi-session.jsonl")
+    #expect(agent.session?.confidence == "high")
+    #expect(agent.session?.source == "transcript_match")
 
     let idleAgent = payload.agents[1]
     #expect(idleAgent.status == .idle)
     #expect(idleAgent.project.name == "Tab Repo")
     #expect(idleAgent.project.branch == "main")
     #expect(idleAgent.pane.focused == false)
+    let rawPayload = try #require(response.data?.bytes)
+    let rawPayloadString = try #require(String(bytes: rawPayload, encoding: .utf8))
+    #expect(!rawPayloadString.contains("\"handle\""))
+  }
+
+  @Test func includesPaneHandlesOnlyInTextPayload() async throws {
+    let fixture = makePayloadFixture()
+    let handler = AgentsCommandHandler {
+      fixture.snapshot
+    }
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(output: .text, command: .agents(AgentsInput()))
+    )
+    let payload = try #require(try response.data?.decode(as: AgentsCommandPayload.self))
+
+    #expect(payload.agents[0].id == fixture.tabPaneID.uuidString)
+    #expect(payload.agents[0].pane.id == fixture.tabPaneID.uuidString)
+    #expect(payload.agents[0].pane.handle == 12)
+    #expect(payload.agents[1].pane.handle == 11)
   }
 
   @Test func returnsAgentsFailedWhenSnapshotProviderThrows() async {
@@ -117,6 +142,12 @@ struct CLIAgentsCommandHandlerTests {
           paneIndex: 2,
           iconLookupToken: "omp",
           agent: .pi,
+          session: AgentSession(
+            id: "019f4f1b-3650-7661-a56d-351f02f01139",
+            transcriptPath: URL(fileURLWithPath: "/tmp/pi-session.jsonl"),
+            source: .transcriptMatch,
+            confidence: .high
+          ),
           rawState: .blocked,
           displayState: .blocked,
           lastChangedAt: Date(timeIntervalSince1970: 1_789_999_200)
@@ -160,11 +191,12 @@ struct CLIAgentsCommandHandlerTests {
       worktreeName: input.worktree.name,
       workingDirectory: input.workingDirectory,
       tabID: TerminalTabID(rawValue: input.tabID),
-      tabTitle: "issue 330",
+      paneTitle: "issue 330",
       surfaceID: input.paneID,
       paneIndex: input.paneIndex,
       iconLookupToken: input.iconLookupToken,
       agent: input.agent,
+      session: input.session,
       rawState: input.rawState,
       displayState: input.displayState,
       lastChangedAt: input.lastChangedAt
@@ -189,12 +221,13 @@ struct CLIAgentsCommandHandlerTests {
           tabs: [
             .init(
               id: tabID,
+              handle: 10,
               title: "issue 330",
               selected: true,
               focusedPaneID: tabPaneID,
               panes: [
-                .init(id: otherPaneID, title: "zsh", cwd: "/tmp/tab-repo", agent: nil),
-                .init(id: tabPaneID, title: "omp", cwd: "/tmp/project-repo/Sources", agent: nil),
+                .init(id: otherPaneID, handle: 11, title: "zsh", cwd: "/tmp/tab-repo"),
+                .init(id: tabPaneID, handle: 12, title: "omp", cwd: "/tmp/project-repo/Sources"),
               ]
             )
           ]
@@ -220,6 +253,7 @@ struct CLIAgentsCommandHandlerTests {
     let paneIndex: Int
     let iconLookupToken: String
     let agent: DetectedAgent
+    var session: AgentSession?
     let rawState: AgentRawState
     let displayState: AgentDisplayState
     let lastChangedAt: Date

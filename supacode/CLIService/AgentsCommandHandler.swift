@@ -26,10 +26,10 @@ final class AgentsCommandHandler: CommandHandler {
   }
 
   // swiftlint:disable:next async_without_await
-  func handle(envelope _: CommandEnvelope) async -> CommandResponse {
+  func handle(envelope: CommandEnvelope) async -> CommandResponse {
     do {
       let snapshot = try snapshotProvider()
-      let payload = makePayload(from: snapshot)
+      let payload = makePayload(from: snapshot, includeHandles: envelope.output == .text)
       return try CommandResponse(
         ok: true,
         command: "agents",
@@ -49,7 +49,10 @@ final class AgentsCommandHandler: CommandHandler {
     }
   }
 
-  private func makePayload(from snapshot: AgentsRuntimeSnapshot) -> AgentsCommandPayload {
+  private func makePayload(
+    from snapshot: AgentsRuntimeSnapshot,
+    includeHandles: Bool
+  ) -> AgentsCommandPayload {
     let repositoriesState = snapshot.repositoriesState
     let metadata = SidebarListView.activeAgentWorktreeMetadata(
       repositories: repositoriesState.repositories,
@@ -101,11 +104,20 @@ final class AgentsCommandHandler: CommandHandler {
         ),
         pane: AgentsCommandPane(
           id: terminalContext.pane.id.uuidString,
+          handle: includeHandles ? terminalContext.pane.handle : nil,
           index: entry.paneIndex,
           title: terminalContext.pane.title,
           cwd: terminalContext.pane.cwd,
           focused: terminalContext.focused
-        )
+        ),
+        session: entry.session.map {
+          AgentsCommandSession(
+            id: $0.id,
+            path: $0.transcriptPath?.path,
+            confidence: $0.confidence.rawValue,
+            source: $0.source.rawValue
+          )
+        }
       )
     }
 

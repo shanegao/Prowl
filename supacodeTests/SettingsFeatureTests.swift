@@ -14,7 +14,6 @@ struct SettingsFeatureTests {
       appearanceMode: .dark,
       defaultEditorID: OpenWorktreeAction.automaticSettingsID,
       confirmBeforeQuit: true,
-      updateChannel: .stable,
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
@@ -23,7 +22,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: false,
       crashReportsEnabled: true,
       githubIntegrationEnabled: true,
-      deleteBranchOnDeleteWorktree: false,
+      deleteBranchOnAutomaticCleanup: false,
       mergedWorktreeAction: .archive,
       promptForWorktreeCreation: true
     )
@@ -39,7 +38,6 @@ struct SettingsFeatureTests {
       $0.appearanceMode = .dark
       $0.defaultEditorID = OpenWorktreeAction.automaticSettingsID
       $0.confirmBeforeQuit = true
-      $0.updateChannel = .stable
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true
       $0.inAppNotificationsEnabled = false
@@ -48,7 +46,7 @@ struct SettingsFeatureTests {
       $0.analyticsEnabled = false
       $0.crashReportsEnabled = true
       $0.githubIntegrationEnabled = true
-      $0.deleteBranchOnDeleteWorktree = false
+      $0.deleteBranchOnAutomaticCleanup = false
       $0.mergedWorktreeAction = .archive
       $0.promptForWorktreeCreation = true
     }
@@ -60,7 +58,6 @@ struct SettingsFeatureTests {
       appearanceMode: .system,
       defaultEditorID: OpenWorktreeAction.automaticSettingsID,
       confirmBeforeQuit: true,
-      updateChannel: .stable,
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: false,
       inAppNotificationsEnabled: false,
@@ -69,7 +66,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
-      deleteBranchOnDeleteWorktree: true,
+      deleteBranchOnAutomaticCleanup: true,
       mergedWorktreeAction: nil,
       promptForWorktreeCreation: false
     )
@@ -87,7 +84,6 @@ struct SettingsFeatureTests {
       appearanceMode: .light,
       defaultEditorID: initialSettings.defaultEditorID,
       confirmBeforeQuit: initialSettings.confirmBeforeQuit,
-      updateChannel: initialSettings.updateChannel,
       updatesAutomaticallyCheckForUpdates: initialSettings.updatesAutomaticallyCheckForUpdates,
       updatesAutomaticallyDownloadUpdates: initialSettings.updatesAutomaticallyDownloadUpdates,
       inAppNotificationsEnabled: initialSettings.inAppNotificationsEnabled,
@@ -96,7 +92,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: initialSettings.analyticsEnabled,
       crashReportsEnabled: initialSettings.crashReportsEnabled,
       githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
-      deleteBranchOnDeleteWorktree: initialSettings.deleteBranchOnDeleteWorktree,
+      deleteBranchOnAutomaticCleanup: initialSettings.deleteBranchOnAutomaticCleanup,
       mergedWorktreeAction: initialSettings.mergedWorktreeAction,
       promptForWorktreeCreation: initialSettings.promptForWorktreeCreation
     )
@@ -237,7 +233,6 @@ struct SettingsFeatureTests {
       appearanceMode: .light,
       defaultEditorID: OpenWorktreeAction.automaticSettingsID,
       confirmBeforeQuit: false,
-      updateChannel: .tip,
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
@@ -246,7 +241,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
-      deleteBranchOnDeleteWorktree: true,
+      deleteBranchOnAutomaticCleanup: true,
       mergedWorktreeAction: .archive,
       promptForWorktreeCreation: false
     )
@@ -255,7 +250,6 @@ struct SettingsFeatureTests {
       $0.appearanceMode = .light
       $0.defaultEditorID = OpenWorktreeAction.automaticSettingsID
       $0.confirmBeforeQuit = false
-      $0.updateChannel = .tip
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true
       $0.inAppNotificationsEnabled = false
@@ -264,7 +258,7 @@ struct SettingsFeatureTests {
       $0.analyticsEnabled = true
       $0.crashReportsEnabled = false
       $0.githubIntegrationEnabled = true
-      $0.deleteBranchOnDeleteWorktree = true
+      $0.deleteBranchOnAutomaticCleanup = true
       $0.mergedWorktreeAction = .archive
       $0.promptForWorktreeCreation = false
       $0.selection = selection

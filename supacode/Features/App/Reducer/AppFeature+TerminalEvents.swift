@@ -204,13 +204,9 @@ extension AppFeature {
     return .run { _ in
       do {
         _ = try await Task.detached {
-          let resolvedSessionContext = HandoffTranscriptResolver().resolve(
-            sessionContext: sessionContext,
-            rootURL: rootURL
-          )
-          return try store.save(
+          try store.save(
             outgoingAgent: agent,
-            sessionContext: resolvedSessionContext,
+            sessionContext: sessionContext,
             note: note,
             now: saveDate
           )

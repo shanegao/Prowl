@@ -47,7 +47,7 @@ struct AgentDetectionDiagnostic {
   let childPID: pid_t?
   let processGroupID: pid_t?
   let job: ForegroundJob?
-  let identified: (agent: DetectedAgent, name: String)?
+  let identified: IdentifiedAgentProcess?
   let retainedAgent: DetectedAgent?
   let raw: AgentRawState?
   let stabilized: AgentRawState?
@@ -64,6 +64,7 @@ final class WorktreeTerminalState {
   let tabManager: TerminalTabManager
   let runtime: GhosttyRuntime
   let worktree: Worktree
+  private let targetHandleRegistry: TerminalTargetHandleRegistry
   @ObservationIgnored
   @SharedReader private var repositorySettings: RepositorySettings
   var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
@@ -181,10 +182,12 @@ final class WorktreeTerminalState {
     runtime: GhosttyRuntime,
     worktree: Worktree,
     runSetupScript: Bool = false,
-    defaultFontSize: Float32? = nil
+    defaultFontSize: Float32? = nil,
+    targetHandleRegistry: TerminalTargetHandleRegistry? = nil
   ) {
     self.runtime = runtime
     self.worktree = worktree
+    self.targetHandleRegistry = targetHandleRegistry ?? TerminalTargetHandleRegistry()
     self.pendingSetupScript = runSetupScript
     self.defaultFontSize = defaultFontSize
     self.tabManager = TerminalTabManager()
@@ -197,6 +200,30 @@ final class WorktreeTerminalState {
   var worktreeID: Worktree.ID { worktree.id }
   var worktreeName: String { worktree.name }
   var repositoryRootURL: URL { worktree.repositoryRootURL }
+
+  func registerTargetHandle(for tabID: TerminalTabID) -> Int {
+    targetHandleRegistry.register(tabID: tabID)
+  }
+
+  func registerTargetHandle(for paneID: UUID) -> Int {
+    targetHandleRegistry.register(paneID: paneID)
+  }
+
+  func tabHandle(for tabID: TerminalTabID) -> Int? {
+    targetHandleRegistry.handle(for: tabID)
+  }
+
+  func paneHandle(for paneID: UUID) -> Int? {
+    targetHandleRegistry.handle(for: paneID)
+  }
+
+  func unregisterTargetHandle(for tabID: TerminalTabID) {
+    targetHandleRegistry.unregister(tabID: tabID)
+  }
+
+  func unregisterTargetHandle(for paneID: UUID) {
+    targetHandleRegistry.unregister(paneID: paneID)
+  }
 
   var activeSurfaceView: GhosttySurfaceView? {
     guard let selectedTabId = tabManager.selectedTabId,
@@ -436,6 +463,10 @@ final class WorktreeTerminalState {
       workingDirectoryOverride: creation.workingDirectoryOverride,
       context: creation.context
     )
+    _ = registerTargetHandle(for: tabId)
+    for surface in tree.leaves() {
+      _ = registerTargetHandle(for: surface.id)
+    }
     tabIsRunningById[tabId] = false
     if creation.focusing, let surface = tree.root?.leftmostLeaf() {
       focusSurface(surface, in: tabId)
@@ -608,6 +639,7 @@ final class WorktreeTerminalState {
     guard confirmCloseIfNeeded(tabIds: [tabId], mode: confirmation) else { return false }
     let wasRunScriptTab = tabId == runScriptTabId
     removeTree(for: tabId)
+    unregisterTargetHandle(for: tabId)
     removeBoundDirectoryTab(tabId)
     tabManager.closeTab(tabId)
     if let selected = tabManager.selectedTabId {

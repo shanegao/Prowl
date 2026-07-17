@@ -120,16 +120,32 @@ extension WorktreeTerminalState {
     } else {
       seen = previous.seen
     }
-    let iconLookupToken = identified?.name ?? previous.iconLookupToken ?? agent.iconLookupToken
+    let iconLookupToken = identified?.iconLookupToken ?? previous.iconLookupToken ?? agent.iconLookupToken
+    let workingDirectory = activeAgentWorkingDirectory(surfaceID: surfaceID)
+    let (session, sessionMissStreak) = await resolveRetainedSession(
+      identified: identified,
+      previous: previous,
+      workingDirectory: workingDirectory,
+      activeText: activeText
+    )
+    // Re-check after the suspension: the pane may have been closed and its
+    // agent state cleaned up while the resolver was doing file inspection;
+    // writing below would resurrect a ghost Active Agents entry.
+    guard surfaces[surfaceID] != nil else { return false }
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
-    let next = PaneAgentState(
+    var next = PaneAgentState(
       detectedAgent: agent,
+      // Presence holds keep the last known pid so a probe gap does not flap
+      // the session to nil and back (the resolver re-binds on the next hit).
+      agentProcessID: identified?.process.pid ?? previous.agentProcessID,
+      session: session,
       iconLookupToken: iconLookupToken,
       fallbackState: raw,
       state: stabilized,
       seen: seen,
       lastChangedAt: lastChangedAt
     )
+    next.sessionMissStreak = sessionMissStreak
     // Limit logging to meaningful transitions - agent identity or
     // stabilized state changes. Raw oscillation and `seen` flips are
     // routine and would otherwise dominate the log stream.
@@ -153,6 +169,28 @@ extension WorktreeTerminalState {
     updateTabAgentBusyState(for: tabId)
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
     return true
+  }
+
+  private func resolveRetainedSession(
+    identified: IdentifiedAgentProcess?,
+    previous: PaneAgentState,
+    workingDirectory: URL?,
+    activeText: String
+  ) async -> (session: AgentSession?, missStreak: Int) {
+    var resolution = AgentSessionResolution(session: nil, isFresh: false)
+    if let identified {
+      resolution = await AgentSessionResolver.shared.resolve(
+        identified: identified,
+        workingDirectory: workingDirectory,
+        activeText: activeText
+      )
+    }
+    return PaneAgentState.retainedSession(
+      resolved: resolution.session,
+      isFresh: resolution.isFresh,
+      previous: previous,
+      identifiedPID: identified?.process.pid
+    )
   }
 
   func markAgentSeen(surfaceID: UUID) {
@@ -189,18 +227,25 @@ extension WorktreeTerminalState {
   }
 
   /// Re-emit Active Agents entries for every pane in `tabId` so the panel picks
-  /// up a fresh tab-title snapshot. Title changes (OSC-2, focus sync, manual
+  /// up a fresh title snapshot. Title changes (OSC-2, focus sync, manual
   /// rename) don't move agent detection state, so without this nudge the
-  /// subtitle only refreshes on the next agent state transition.
+  /// subtitle only refreshes on the next agent state transition. Used when the
+  /// tab's display title changes, since it is every pane's title fallback.
   func refreshAgentEntriesForTitleChange(in tabId: TerminalTabID) {
     let surfaceIDs = trees[tabId]?.leaves().map(\.id) ?? []
     for surfaceID in surfaceIDs {
-      guard let state = surfaceAgentStates[surfaceID],
-        state.detectedAgent != nil,
-        state.state != .unknown
-      else { continue }
-      emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: state)
+      refreshAgentEntryForTitleChange(surfaceID: surfaceID, in: tabId)
     }
+  }
+
+  /// Single-pane variant for a surface whose own title changed without moving
+  /// the tab title (e.g. an unfocused split's OSC-2 update).
+  func refreshAgentEntryForTitleChange(surfaceID: UUID, in tabId: TerminalTabID) {
+    guard let state = surfaceAgentStates[surfaceID],
+      state.detectedAgent != nil,
+      state.state != .unknown
+    else { return }
+    emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: state)
   }
 
   func emitAgentEntry(surfaceID: UUID, tabId: TerminalTabID, state: PaneAgentState) {
@@ -223,11 +268,12 @@ extension WorktreeTerminalState {
       worktreeName: worktree.name,
       workingDirectory: workingDirectory,
       tabID: tabId,
-      tabTitle: tabTitle,
+      paneTitle: paneTitle(surfaceID: surfaceID, fallbackTabTitle: tabTitle),
       surfaceID: surfaceID,
       paneIndex: paneIndex,
       iconLookupToken: state.iconLookupToken ?? agent.iconLookupToken,
       agent: agent,
+      session: state.session,
       rawState: state.fallbackState,
       displayState: state.displayState,
       lastChangedAt: state.lastChangedAt

@@ -21,6 +21,7 @@ public struct AgentsCommandAgent: Codable, Equatable {
   public let worktree: AgentsCommandWorktree
   public let tab: AgentsCommandTab
   public let pane: AgentsCommandPane
+  public let session: AgentsCommandSession?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -33,6 +34,7 @@ public struct AgentsCommandAgent: Codable, Equatable {
     case worktree
     case tab
     case pane
+    case session
   }
 
   public init(
@@ -45,7 +47,8 @@ public struct AgentsCommandAgent: Codable, Equatable {
     project: AgentsCommandProject,
     worktree: AgentsCommandWorktree,
     tab: AgentsCommandTab,
-    pane: AgentsCommandPane
+    pane: AgentsCommandPane,
+    session: AgentsCommandSession? = nil
   ) {
     self.id = id
     self.type = type
@@ -57,6 +60,21 @@ public struct AgentsCommandAgent: Codable, Equatable {
     self.worktree = worktree
     self.tab = tab
     self.pane = pane
+    self.session = session
+  }
+}
+
+public struct AgentsCommandSession: Codable, Equatable {
+  public let id: String
+  public let path: String?
+  public let confidence: String
+  public let source: String
+
+  public init(id: String, path: String?, confidence: String, source: String) {
+    self.id = id
+    self.path = path
+    self.confidence = confidence
+    self.source = source
   }
 }
 
@@ -117,13 +135,15 @@ public struct AgentsCommandTab: Codable, Equatable {
 
 public struct AgentsCommandPane: Codable, Equatable {
   public let id: String
+  public let handle: Int?
   public let index: Int
   public let title: String
   public let cwd: String?
   public let focused: Bool
 
-  public init(id: String, index: Int, title: String, cwd: String?, focused: Bool) {
+  public init(id: String, handle: Int? = nil, index: Int, title: String, cwd: String?, focused: Bool) {
     self.id = id
+    self.handle = handle
     self.index = index
     self.title = title
     self.cwd = cwd

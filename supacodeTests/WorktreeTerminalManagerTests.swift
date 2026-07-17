@@ -193,6 +193,57 @@ struct WorktreeTerminalManagerTests {
     #expect(state.closeSurface(id: surfaceId, confirmation: .skip) == false)
   }
 
+  @Test func targetHandlesAreGlobalAndReassignedAfterClose() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let firstWorktree = makeWorktree()
+    let secondWorktree = makeWorktree(id: "/tmp/repo/wt-2", name: "wt-2")
+    let firstState = manager.state(for: firstWorktree)
+    let secondState = manager.state(for: secondWorktree)
+
+    let firstTabID = try #require(firstState.createTab())
+    let firstPaneID = try #require(firstState.focusedSurfaceId(in: firstTabID))
+    let secondTabID = try #require(secondState.createTab())
+    let secondPaneID = try #require(secondState.focusedSurfaceId(in: secondTabID))
+
+    #expect(firstState.tabHandle(for: firstTabID) == 1)
+    #expect(firstState.paneHandle(for: firstPaneID) == 2)
+    #expect(secondState.tabHandle(for: secondTabID) == 3)
+    #expect(secondState.paneHandle(for: secondPaneID) == 4)
+
+    #expect(firstState.closeTab(firstTabID, confirmation: .skip))
+    #expect(firstState.tabHandle(for: firstTabID) == nil)
+    #expect(firstState.paneHandle(for: firstPaneID) == nil)
+
+    let replacementTabID = try #require(firstState.createTab())
+    let replacementPaneID = try #require(firstState.focusedSurfaceId(in: replacementTabID))
+
+    #expect(firstState.tabHandle(for: replacementTabID) == 5)
+    #expect(firstState.paneHandle(for: replacementPaneID) == 6)
+  }
+
+  @Test func layoutRestoreReassignsHandlesForRestoredTabIDs() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let tabID = try #require(state.createTab())
+    let originalPaneID = try #require(state.focusedSurfaceId(in: tabID))
+    let originalTabHandle = try #require(state.tabHandle(for: tabID))
+    let originalPaneHandle = try #require(state.paneHandle(for: originalPaneID))
+    let snapshot = try #require(state.makeLayoutSnapshotWorktree())
+
+    #expect(state.applyLayoutSnapshot(snapshot))
+
+    let restoredTabID = try #require(state.tabManager.tabs.first?.id)
+    let restoredPaneID = try #require(state.focusedSurfaceId(in: restoredTabID))
+    let restoredTabHandle = try #require(state.tabHandle(for: restoredTabID))
+    let restoredPaneHandle = try #require(state.paneHandle(for: restoredPaneID))
+
+    #expect(restoredTabID == tabID)
+    #expect(restoredTabHandle > originalTabHandle)
+    #expect(restoredPaneHandle > originalPaneHandle)
+    #expect(state.paneHandle(for: originalPaneID) == nil)
+  }
+
   @Test func notificationIndicatorUsesCurrentCountOnStreamStart() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

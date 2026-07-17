@@ -48,15 +48,14 @@ Prowl atomically replaces this generated file on every `save`. Separating it fro
 `current.md` prevents background saves from overwriting prose being edited by an
 agent or editor. Archives combine a read-only snapshot of both files.
 
-`sessions/<ts>-<pane>.md` is a normalized excerpt from the outgoing pane. Today it
+`sessions/<ts>-<pane>.md` is a normalized excerpt from the outgoing pane. It
 captures the current terminal screen/scrollback and records the detected agent,
 session id, pane, source, confidence, and native transcript path when one is
-available. Claude Code sessions are resolved from
-`~/.claude/projects/<encoded-cwd>/*.jsonl`; Codex sessions are resolved from
-`~/.codex/sessions/**/rollout-*.jsonl` by matching the rollout `cwd`. When native
-exactly one native session matches, `confidence` is `medium`; ambiguous native
-matches are omitted. Prowl still writes the terminal excerpt with fallback
-confidence.
+available. These native fields come from the pid-anchored session identity already
+attached to the pane (the same metadata exposed by `prowl agents`); handoff does
+not run a second cwd-based transcript scan. Ambiguous or unavailable sessions are
+omitted rather than guessed. Prowl still writes the terminal excerpt with
+`fallback` confidence.
 
 ## The protocol
 
@@ -89,7 +88,7 @@ prowl handoff status     [target]
   `.prowl/handoff/current.md` and `.prowl/handoff/context.md`. Interactive launch
   is verified for `claude` and `codex`. `--no-launch` archives + saves only and accepts the full detected-agent
   token list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`,
-  `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`.
+  `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`, `grok`.
 - **`status`** reports the artifact path, whether it exists, the detected current
   agent, and the last log line.
 
