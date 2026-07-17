@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.7.17](https://github.com/onevcat/Prowl/releases/tag/v2026.7.17)
+
+Grok Build agent detection and a reworked branch-deletion memory setting.
+
+### New
+- Prowl now detects Grok Build (xAI's `grok` CLI) as an agent, showing its icon in the tab and tracking status transitions between idle, working, and blocked (e.g. bash approval, ask-user prompts).
+
+### Improved
+- When manually deleting a worktree, the "Also delete local branch" toggle now remembers your last confirmed choice for next time.
+- Automatic branch cleanup (for merged PRs and expired archived worktrees) is now controlled by its own separate setting in Worktree Settings, independent of the manual delete toggle.
+
 ## [2026.7.14](https://github.com/onevcat/Prowl/releases/tag/v2026.7.14)
 
 ### New
