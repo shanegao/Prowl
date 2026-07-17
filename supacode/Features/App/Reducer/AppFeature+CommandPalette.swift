@@ -321,6 +321,7 @@ extension AppFeature {
         .createTabWithInput(
           worktree,
           input: kickoff,
+          workingDirectory: rootURL,
           runSetupScriptIfNew: false,
           autoCloseOnSuccess: false,
           customCommandName: "Hand off → \(agent)",

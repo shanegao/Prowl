@@ -189,6 +189,28 @@ struct HandoffStoreTests {
     #expect(FileManager.default.fileExists(atPath: firstURL.path(percentEncoded: false)))
     #expect(FileManager.default.fileExists(atPath: secondURL.path(percentEncoded: false)))
   }
+  @Test func reserveFileURLIsExclusiveAcrossConcurrentCalls() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let directory = root.appending(path: "sessions", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+    let reserved = try await withThrowingTaskGroup(of: URL.self, returning: [URL].self) { group in
+      for _ in 0..<40 {
+        group.addTask {
+          try HandoffStore.reserveFileURL(in: directory, stem: "same", fileExtension: "md")
+        }
+      }
+      var urls: [URL] = []
+      for try await url in group {
+        urls.append(url)
+      }
+      return urls
+    }
+
+    #expect(Set(reserved).count == 40)
+    #expect(reserved.allSatisfy { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) })
+  }
 
   @Test func saveTwiceReplacesGeneratedContext() throws {
     let root = try makeTempRoot()

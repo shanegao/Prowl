@@ -698,7 +698,12 @@ struct SupacodeApp: App {
           terminalManager: terminalManager
         )
         let state = terminalManager.state(for: worktree)
-        guard let tabID = state.createTab(initialInput: kickoff) else {
+        guard
+          let tabID = state.createTab(
+            initialInput: kickoff,
+            workingDirectoryOverride: URL(fileURLWithPath: target.rootPath, isDirectory: true)
+          )
+        else {
           return nil
         }
         let resolver = makeTargetResolver(appStore: appStore, terminalManager: terminalManager)

@@ -216,11 +216,18 @@ nonisolated struct HandoffStore: Sendable {
     try fileManager.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
 
     let stem = "\(Self.fileStamp(now))-\(Self.slug(from))-to-\(Self.slug(toAgent))"
-    let destination = Self.availableFileURL(in: archiveDirectory, stem: stem, fileExtension: "md")
+    let destination = try Self.reserveFileURL(in: archiveDirectory, stem: stem, fileExtension: "md")
+    var didWrite = false
+    defer {
+      if !didWrite {
+        try? fileManager.removeItem(at: destination)
+      }
+    }
     let prose = try String(contentsOf: currentURL, encoding: .utf8)
     let context = (try? String(contentsOf: contextURL, encoding: .utf8)) ?? ""
     let snapshot = context.isEmpty ? prose : "\(prose.trimmingCharacters(in: .whitespacesAndNewlines))\n\n\(context)\n"
     try snapshot.write(to: destination, atomically: true, encoding: .utf8)
+    didWrite = true
     return "handoff/archive/\(destination.lastPathComponent)"
   }
 
@@ -331,7 +338,13 @@ nonisolated struct HandoffStore: Sendable {
     guard let context else { return nil }
 
     let stem = "\(Self.fileStamp(now))-\(Self.slug(context.paneID))"
-    let destination = Self.availableFileURL(in: sessionDirectory, stem: stem, fileExtension: "md")
+    let destination = try Self.reserveFileURL(in: sessionDirectory, stem: stem, fileExtension: "md")
+    var didWrite = false
+    defer {
+      if !didWrite {
+        try? FileManager.default.removeItem(at: destination)
+      }
+    }
     let relativePath = "handoff/sessions/\(destination.lastPathComponent)"
     let payload = HandoffSessionPayload(
       agent: context.agent,
@@ -346,6 +359,7 @@ nonisolated struct HandoffStore: Sendable {
 
     let markdown = Self.renderSessionContext(context, payload: payload, now: now)
     try markdown.write(to: destination, atomically: true, encoding: .utf8)
+    didWrite = true
     return payload
   }
 
@@ -459,15 +473,28 @@ nonisolated struct HandoffStore: Sendable {
     return String(allowed)
   }
 
-  private static func availableFileURL(in directory: URL, stem: String, fileExtension: String) -> URL {
-    let fileManager = FileManager.default
-    var candidate = directory.appending(path: "\(stem).\(fileExtension)")
-    var suffix = 2
-    while fileManager.fileExists(atPath: candidate.path(percentEncoded: false)) {
-      candidate = directory.appending(path: "\(stem)-\(suffix).\(fileExtension)")
+  /// Atomically reserve a unique destination before its content is written.
+  /// Reservation makes the following atomic replacement safe against concurrent
+  /// saves that share a timestamp and file stem.
+  static func reserveFileURL(in directory: URL, stem: String, fileExtension: String) throws -> URL {
+    var suffix = 1
+    while true {
+      let suffixPart = suffix == 1 ? "" : "-\(suffix)"
+      let candidate = directory.appending(path: "\(stem)\(suffixPart).\(fileExtension)")
+      let descriptor = Darwin.open(
+        candidate.path(percentEncoded: false),
+        O_WRONLY | O_CREAT | O_EXCL,
+        S_IRUSR | S_IWUSR
+      )
+      if descriptor >= 0 {
+        _ = Darwin.close(descriptor)
+        return candidate
+      }
+      guard errno == EEXIST else {
+        throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+      }
       suffix += 1
     }
-    return candidate
   }
 
   static func parseShortstat(_ text: String) -> (insertions: Int, deletions: Int) {

@@ -21,6 +21,7 @@ struct TerminalClient {
     case createTabWithInput(
       Worktree,
       input: String,
+      workingDirectory: URL? = nil,
       runSetupScriptIfNew: Bool,
       autoCloseOnSuccess: Bool,
       customCommandName: String? = nil,

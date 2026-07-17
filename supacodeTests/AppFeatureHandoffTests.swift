@@ -138,6 +138,7 @@ struct AppFeatureHandoffTests {
       case .createTabWithInput(
         _,
         input: let input,
+        workingDirectory: let workingDirectory,
         runSetupScriptIfNew: let runSetup,
         autoCloseOnSuccess: let autoClose,
         customCommandName: let name,
@@ -152,6 +153,7 @@ struct AppFeatureHandoffTests {
     #expect(autoClose == false)
     #expect(name == "Hand off → claude")
     #expect(icon == nil)
+    #expect(workingDirectory == root)
 
     // The handoff artifact was materialized in the workspace root.
     let store2 = HandoffStore(rootURL: root)

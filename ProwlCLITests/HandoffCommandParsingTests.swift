@@ -12,6 +12,12 @@ final class HandoffCommandParsingTests: XCTestCase {
       .auto("App")
     )
   }
+  func testSaveRejectsPositionalTargetAlongsideFlagSelector() throws {
+    let command = try HandoffSaveCommand.parse(["App", "--worktree", "Other"])
+
+    XCTAssertThrowsError(try command.selector.resolve(positionalTarget: command.target))
+  }
+
 
   func testToAcceptsPositionalTargetAfterAgent() throws {
     let command = try HandoffToCommand.parse(["claude", "App"])
