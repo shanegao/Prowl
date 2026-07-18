@@ -41,7 +41,8 @@ cwd, which is weaker than the pid-anchored, ambiguity-safe native session identi
 ### Non-goals
 
 - Committing, pushing, changing git state, or approving a blocked agent action.
-- Automatic session resume/fork, transcript parsing, or a cooperative agent hook protocol.
+- Automatic session resume/fork beyond the narrow source-summary operation planned in
+  [047.002](002-resume-authored-handoff.md), transcript parsing, or a cooperative agent hook protocol.
 - Reliable retrieval of an agent's final response; that remains the separate, opt-in native
   integration proposed by #473.
 - Editable workspace membership, tracked separately by #535.
@@ -81,4 +82,5 @@ cwd, which is weaker than the pid-anchored, ambiguity-safe native session identi
 
 ## Amendments
 
-- None yet.
+- Updated 2026-07-18: plan resume-authored semantic preparation before `handoff to`; this supersedes
+  the first wave's blanket resume exclusion — see [002-resume-authored-handoff](002-resume-authored-handoff.md).
