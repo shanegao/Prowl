@@ -48,6 +48,7 @@ nonisolated struct AgentSessionProfile: Sendable {
     case .droid: .droid
     case .opencode: .opencode
     case .amp: .amp
+    case .qoder: .init()
     case .qwen: .qwen
     case .grok: .grok
     }

@@ -28,6 +28,8 @@ extension DetectedAgent {
       return detectDroid(screen)
     case .amp:
       return detectAmp(screen)
+    case .qoder:
+      return detectQoder(screen)
     case .qwen:
       return detectQwen(screen)
     case .grok:
@@ -516,6 +518,46 @@ nonisolated private func detectQwen(_ content: String) -> AgentRawState {
     return .working
   }
   return .idle
+}
+
+// Qoder CLI 1.0.48 renders a permission menu with the three option labels
+// below, while an active turn uses a braille spinner footer ending in
+// "(esc to cancel, <elapsed>)". Restrict both checks to the active tail so
+// completed transcript text does not keep a pane blocked or working.
+nonisolated private func detectQoder(_ content: String) -> AgentRawState {
+  let currentInteraction = qoderCurrentInteractionRegion(content)
+  if hasQoderPermissionPrompt(currentInteraction) {
+    return .blocked
+  }
+  if hasQoderWorkingFooter(currentInteraction) {
+    return .working
+  }
+  return .idle
+}
+
+nonisolated private func qoderCurrentInteractionRegion(_ content: String) -> String {
+  content
+    .split(separator: "\n", omittingEmptySubsequences: false)
+    .map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+    .suffix(8)
+    .joined(separator: "\n")
+}
+
+nonisolated private func hasQoderPermissionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  return lower.contains("allow once")
+    && lower.contains("allow for this session")
+    && lower.contains("reject and type something")
+}
+
+nonisolated private func hasQoderWorkingFooter(_ content: String) -> Bool {
+  content.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    guard let first = trimmed.unicodeScalars.first else { return false }
+    return (0x2800...0x28FF).contains(Int(first.value))
+      && trimmed.lowercased().contains("(esc to cancel,")
+  }
 }
 
 // Grok Build (verified 0.2.101): cancel mid-turn is Ctrl+C (Esc is a no-op).

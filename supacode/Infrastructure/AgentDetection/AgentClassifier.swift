@@ -25,6 +25,8 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .droid
   case "amp", "amp-local":
     return .amp
+  case "qodercli":
+    return .qoder
   case "qwen":
     return .qwen
   case "grok":
