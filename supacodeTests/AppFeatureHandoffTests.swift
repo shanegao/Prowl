@@ -151,22 +151,31 @@ struct AppFeatureHandoffTests {
         )
       }
       $0.agentRuntimeClient = AgentRuntimeClient(
-        makeStartInvocation: { try AgentRuntimeAdapterRegistry.makeStartInvocation($0) },
-        resume: { request, directory in
+        resume: { request, _ in
           resumed.setValue(request)
-          let handoffURL = directory.appending(path: ".prowl/handoff", directoryHint: .isDirectory)
-          try FileManager.default.createDirectory(at: handoffURL, withIntermediateDirectories: true)
-          try "## Objective\n\nPalette source status.\n".write(
-            to: handoffURL.appending(path: "current.md"),
-            atomically: true,
-            encoding: .utf8
-          )
-          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+          return """
+            # Handoff
+
+            ## Objective
+            Palette source status.
+
+            ## Current State
+            Ready to hand off.
+
+            ## Next Steps
+            1. Continue in claude.
+            """
         }
       )
     }
 
     await store.send(.commandPalette(.delegate(.handoffToAgent("claude"))))
+    await store.receive(\.repositories.showToast) {
+      $0.repositories.statusToast = .inProgress("Preparing handoff from codex…")
+    }
+    await store.receive(\.repositories.dismissToast) {
+      $0.repositories.statusToast = nil
+    }
     await store.finish()
 
     #expect(sent.value.count == 1)
@@ -202,9 +211,10 @@ struct AppFeatureHandoffTests {
     #expect(!log.contains("agent → claude  (command palette)"))
     #expect(log.contains("preparation=completed"))
     #expect(resumed.value?.agent == .codex)
-    #expect(resumed.value?.configuration.model == "gpt-5.4")
-    #expect(resumed.value?.configuration.executionMode == .unrestricted)
+    #expect(resumed.value?.model == "gpt-5.4")
+    // Prowl transcribed the source reply into current.md.
     let current = try String(contentsOf: store2.currentURL, encoding: .utf8)
+    #expect(current.hasPrefix("# Handoff"))
     #expect(current.contains("Palette source status."))
   }
 

@@ -157,3 +157,11 @@ or a source model string to another vendor.
   preserves a source model only for same-adapter resumes, maps explicitly
   observed unrestricted execution across Codex and Claude Code, and records
   completion, failure, or skipped preparation in the handoff log.
+- 2026-07-18 (review hardening, same PR): resume became read-only by
+  construction. `AgentResumeRequest` dropped its execution mode and carries only
+  a same-adapter model; the resumed agent replies with the artifact content
+  (Codex `--output-last-message`, Claude Code `-p` stdout) and Prowl validates
+  and transcribes it. `AgentRuntimeClient.resume` returns the reply text and is
+  bounded by a 2-minute timeout with child termination. Codex `--yolo` is
+  recognized as explicit unrestricted observation. Details in
+  [047.002](../047-cross-agent-handoff/002-resume-authored-handoff.md).

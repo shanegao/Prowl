@@ -4,6 +4,21 @@ import Testing
 
 @testable import supacode
 
+/// A shape-valid preparation reply used when a test does not care about the
+/// reply content itself.
+nonisolated private let preparedHandoffReply = """
+  # Handoff
+
+  ## Objective
+  Ship the checkout flow.
+
+  ## Current State
+  Tests are green.
+
+  ## Next Steps
+  1. Review the PR.
+  """
+
 @MainActor
 struct HandoffCommandHandlerTests {
   private func makeTempRoot() throws -> URL {
@@ -45,7 +60,7 @@ struct HandoffCommandHandlerTests {
       worktreeID: "ws", worktreeName: "Workspace", tabID: "tab-1", paneID: "pane-1", paneTitle: "claude"
     ),
     launchSpy: (@MainActor (AgentStartRequest) -> Void)? = nil,
-    preparationSpy: (@Sendable (AgentResumeRequest, URL) async -> HandoffPreparationOutcome)? = nil,
+    preparationSpy: (@Sendable (AgentResumeRequest, URL) async throws -> String)? = nil,
   ) -> HandoffCommandHandler {
     HandoffCommandHandler(
       resolveProvider: { _ in
@@ -67,8 +82,8 @@ struct HandoffCommandHandlerTests {
         return launched
       },
       preparationProvider: { request, directory in
-        guard let preparationSpy else { return .skipped }
-        return await preparationSpy(request, directory)
+        guard let preparationSpy else { return preparedHandoffReply }
+        return try await preparationSpy(request, directory)
       },
       now: { [fixedDate] in fixedDate }
     )
@@ -100,23 +115,29 @@ struct HandoffCommandHandlerTests {
     #expect(content.contains(".prowl/handoff/sessions/"))
   }
 
-  @Test func saveResumesVerifiedSourceBeforePersistingHandoff() async throws {
+  @Test func saveTranscribesVerifiedSourceReplyBeforePersistingHandoff() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let resumed = LockIsolated<AgentResumeRequest?>(nil)
     let handler = makeHandler(
       root: root,
       outgoingAgent: "codex",
-      preparationSpy: { request, directory in
+      preparationSpy: { request, _ in
         resumed.setValue(request)
-        let handoffURL = directory.appending(path: ".prowl/handoff", directoryHint: .isDirectory)
-        try? FileManager.default.createDirectory(at: handoffURL, withIntermediateDirectories: true)
-        try? "## Objective\n\nSource-authored status.\n".write(
-          to: handoffURL.appending(path: "current.md"),
-          atomically: true,
-          encoding: .utf8
-        )
-        return .completed
+        return """
+          Here is the updated artifact:
+
+          # Handoff
+
+          ## Objective
+          Source-authored status.
+
+          ## Current State
+          Awaiting review.
+
+          ## Next Steps
+          1. Hand off.
+          """
       }
     )
 
@@ -125,10 +146,60 @@ struct HandoffCommandHandlerTests {
     #expect(response.ok)
     #expect(resumed.value?.agent == .codex)
     #expect(resumed.value?.session.confidence == .exact)
-    #expect(resumed.value?.configuration.model == "gpt-5.4")
-    #expect(resumed.value?.configuration.executionMode == .unrestricted)
+    #expect(resumed.value?.model == "gpt-5.4")
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    #expect(payload.preparation == "completed")
+    // Prowl transcribed the reply (preamble dropped) into current.md.
     let content = try String(contentsOf: HandoffStore(rootURL: root).currentURL, encoding: .utf8)
+    #expect(content.hasPrefix("# Handoff"))
     #expect(content.contains("Source-authored status."))
+    // One save produces exactly one log line, carrying the preparation outcome.
+    let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
+    let entries = log.split(separator: "\n").filter { $0.hasPrefix("- ") }
+    #expect(entries.count == 1)
+    #expect(entries.first?.contains("preparation=completed") == true)
+  }
+
+  @Test func saveMarksPreparationFailedForUnusableReply() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      preparationSpy: { _, _ in "I could not update the handoff file." }
+    )
+
+    let response = await handler.handle(envelope: envelope(HandoffInput(action: .save)))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    #expect(payload.preparation == "failed")
+    // The scaffolded template stays in place; no reply prose leaks into it.
+    let content = try String(contentsOf: HandoffStore(rootURL: root).currentURL, encoding: .utf8)
+    #expect(content == HandoffStore.template)
+    let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
+    #expect(log.contains("preparation=failed"))
+  }
+
+  @Test func saveSkipsPreparationWhenDisabled() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let resumeCalled = LockIsolated(false)
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      preparationSpy: { _, _ in
+        resumeCalled.setValue(true)
+        return preparedHandoffReply
+      }
+    )
+
+    let response = await handler.handle(envelope: envelope(HandoffInput(action: .save, prepare: false)))
+
+    #expect(response.ok)
+    #expect(resumeCalled.value == false)
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    #expect(payload.preparation == "skipped")
   }
 
   @Test func preparationRequiresVerifiableSourceSession() {
@@ -146,6 +217,24 @@ struct HandoffCommandHandlerTests {
         observation: AgentLaunchObservation(executionMode: .unrestricted)
       ) == nil
     )
+  }
+
+  @Test func preparationRequestKeepsSameAdapterModelOnly() throws {
+    let request = try #require(
+      HandoffCommandHandler.preparationRequest(
+        outgoingAgent: "codex",
+        session: AgentSession(
+          id: "9B0E3B0E-67B3-4D45-A3A0-7DD9BC713711",
+          transcriptPath: nil,
+          source: .openFile,
+          confidence: .high
+        ),
+        observation: AgentLaunchObservation(model: "gpt-5.4", executionMode: .unrestricted)
+      )
+    )
+
+    #expect(request.agent == .codex)
+    #expect(request.model == "gpt-5.4")
   }
 
   @Test func savePreservesResolvedNativeSessionContext() async throws {

@@ -253,26 +253,30 @@ launch the receiving agent. Centred on [workspaces](workspaces.md), but works fo
 any runnable target. Three subcommands:
 
 ```bash
-prowl handoff save       [target] [--note "…"]              # refresh context + session excerpt
-prowl handoff to <agent> [target] [--note "…"] [--no-launch]
+prowl handoff save       [target] [--note "…"] [--no-prepare]   # refresh context + session excerpt
+prowl handoff to <agent> [target] [--note "…"] [--no-launch] [--no-prepare]
 prowl handoff status     [target]
 ```
 
 - **`save`** — when Prowl has an exact or high-confidence native session for
   the detected outgoing Claude Code or Codex process, it first resumes that
-  session non-interactively and asks it to update agent-authored `current.md`.
-  It then refreshes `.prowl/handoff/context.md` from live git state (per-repo
-  branch + change counts, changed-file list, detected outgoing agent, and
-  captured session excerpt). The log records whether source preparation
-  completed, failed, or was skipped. `current.md` is seeded from a template on
-  the first run; Prowl never directly rewrites it later.
+  session non-interactively (read-only, bounded to 2 minutes) and asks it to
+  **reply** with the updated agent-authored `current.md`; Prowl validates the
+  reply and transcribes it into the file. It then refreshes
+  `.prowl/handoff/context.md` from live git state (per-repo branch + change
+  counts, changed-file list, detected outgoing agent, and captured session
+  excerpt). The single `save` log line records whether source preparation
+  completed, failed, or was skipped. `--no-prepare` skips the source turn for a
+  fast mechanical refresh. `current.md` is seeded from a template on the first
+  run; Prowl only rewrites it to transcribe a validated preparation reply.
 - **`to <agent>`** — performs the same safe source preparation, saves, archives
   the current artifact to `.prowl/handoff/archive/<ts>-<from>-to-<to>.md`, and
   launches the receiving agent in a **new tab** with a semantic kickoff prompt
   for `current.md` and generated `context.md`. Returns the launched `pane`.
   An observed unrestricted source execution policy is translated between the
-  verified Claude Code and Codex adapters; model identifiers remain with their
-  original agent family. `--no-launch` still prepares, archives, and saves.
+  verified Claude Code and Codex adapters for the destination launch only;
+  model identifiers remain with their original agent family. `--no-launch`
+  still prepares, archives, and saves; `--no-prepare` skips the source turn.
   Interactive launch is verified for `claude` and `codex`; `--no-launch`
   accepts the full detected-agent list: `pi`, `claude`, `codex`, `gemini`,
   `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`,
@@ -288,7 +292,8 @@ prowl handoff save --note "ui done, api next" --json
 The outgoing agent is whatever Prowl detects in the target's pane (see
 `pane.agent` in [`list`](#prowl-list)). Response payload includes `action`,
 `artifact_path`, `outgoing_agent`, `to_agent`, `repos`, `changed_file_count`,
-`archived_path`, `session_context`, and `launched_pane`. `session_context` includes
+`archived_path`, `session_context`, `preparation` (`completed` / `failed` /
+`skipped`, for `save` and `to`), and `launched_pane`. `session_context` includes
 the generated excerpt path plus native `session_id` / `transcript_path` only when
 the selected pane already has unambiguous native-session evidence (the same
 identity exposed by `prowl agents`). When no session is resolved, Prowl keeps the

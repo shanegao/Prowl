@@ -64,6 +64,83 @@ struct HandoffStoreTests {
     #expect(deletions == 0)
   }
 
+  // MARK: - preparedArtifact (pure)
+
+  @Test func preparedArtifactAcceptsPlainDocument() {
+    let reply = """
+      # Handoff
+
+      ## Objective
+      Ship it.
+
+      ## Current State
+      Green.
+
+      ## Next Steps
+      1. Review.
+      """
+    #expect(HandoffStore.preparedArtifact(fromAgentReply: reply) == reply + "\n")
+  }
+
+  @Test func preparedArtifactUnwrapsCodeFenceAndDropsPreamble() {
+    let reply = """
+      Sure! Here's the updated handoff:
+
+      ```markdown
+      # Handoff
+
+      ## Objective
+      Ship it.
+
+      ## Current State
+      Green.
+
+      ## Next Steps
+      1. Review.
+      ```
+      """
+    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    #expect(artifact?.hasPrefix("# Handoff") == true)
+    #expect(artifact?.contains("```") == false)
+    #expect(artifact?.contains("Sure!") == false)
+  }
+
+  @Test func preparedArtifactRejectsUnusableReplies() {
+    #expect(HandoffStore.preparedArtifact(fromAgentReply: "") == nil)
+    #expect(HandoffStore.preparedArtifact(fromAgentReply: "I could not update the file.") == nil)
+    // Missing required sections.
+    #expect(HandoffStore.preparedArtifact(fromAgentReply: "# Handoff\n\n## Objective\nOnly this.") == nil)
+    // Echoing the seeded template back is not a prepared artifact.
+    #expect(HandoffStore.preparedArtifact(fromAgentReply: HandoffStore.template) == nil)
+  }
+
+  @Test func applyPreparationReplyTranscribesIntoCurrent() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+
+    let reply = """
+      # Handoff
+
+      ## Objective
+      Ship it.
+
+      ## Current State
+      Green.
+
+      ## Next Steps
+      1. Review.
+      """
+    #expect(store.applyPreparationReply(reply))
+    let content = try String(contentsOf: store.currentURL, encoding: .utf8)
+    #expect(content == reply + "\n")
+
+    // An unusable reply leaves the transcribed artifact untouched.
+    #expect(store.applyPreparationReply("nope") == false)
+    let unchanged = try String(contentsOf: store.currentURL, encoding: .utf8)
+    #expect(unchanged == reply + "\n")
+  }
+
   // MARK: - save (filesystem; non-git root)
 
   @Test func scaffoldSelfIgnoresHandoffInGitRepository() throws {

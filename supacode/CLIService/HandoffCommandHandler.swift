@@ -24,17 +24,13 @@ struct HandoffLaunchedPane: Sendable, Equatable {
   let paneTitle: String
 }
 
-enum HandoffPreparationOutcome: String, Equatable, Sendable {
-  case completed
-  case skipped
-  case failed
-}
-
 @MainActor
 final class HandoffCommandHandler: CommandHandler {
   typealias ResolveProvider = @MainActor (TargetSelector) -> Result<HandoffResolvedTarget, TargetResolverError>
   typealias LaunchProvider = @MainActor (HandoffResolvedTarget, AgentStartRequest) -> HandoffLaunchedPane?
-  typealias PreparationProvider = @Sendable (AgentResumeRequest, URL) async -> HandoffPreparationOutcome
+  /// Resumes the source session headlessly and returns its reply text; the
+  /// handler validates the reply and transcribes it into `current.md`.
+  typealias PreparationProvider = @Sendable (AgentResumeRequest, URL) async throws -> String
 
   /// Agents this command can launch (it injects an agent-specific kickoff command).
   static let supportedAgents = HandoffAgentSupport.launchableAgents
@@ -108,20 +104,18 @@ final class HandoffCommandHandler: CommandHandler {
   ) async -> CommandResponse {
     let outgoing = target.outgoingAgent
     let note = input.note
-    let preparation = await prepareOutgoingAgent(for: target)
+    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store)
     do {
       let result = try await Task.detached {
         try store.save(
           outgoingAgent: outgoing,
           sessionContext: target.sessionContext,
           note: note,
+          preparation: preparation,
           now: timestamp
         )
       }.value
-      try? await Task.detached {
-        try store.appendLog("handoff save  preparation=\(preparation.rawValue)", now: timestamp)
-      }.value
-      return success(payload: makePayload(action: .save, save: result))
+      return success(payload: makePayload(action: .save, save: result, preparation: preparation))
     } catch {
       return errorResponse(
         code: CLIErrorCode.handoffFailed,
@@ -146,7 +140,7 @@ final class HandoffCommandHandler: CommandHandler {
     guard let destinationAgent = DetectedAgent(rawValue: toAgent) else {
       return errorResponse(code: CLIErrorCode.invalidArgument, message: "Unknown handoff agent: \(toAgent).")
     }
-    let preparation = await prepareOutgoingAgent(for: target)
+    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store)
 
     let saveResult: HandoffStore.SaveResult
     let archivedPath: String?
@@ -219,13 +213,19 @@ final class HandoffCommandHandler: CommandHandler {
         save: saveResult,
         toAgent: toAgent,
         archivedPath: archivedPath,
-        launched: launched
+        launched: launched,
+        preparation: preparation
       )
     )
   }
 
-  private func prepareOutgoingAgent(for target: HandoffResolvedTarget) async -> HandoffPreparationOutcome {
+  private func prepareOutgoingAgent(
+    input: HandoffInput,
+    target: HandoffResolvedTarget,
+    store: HandoffStore
+  ) async -> HandoffPreparationOutcome {
     guard
+      input.prepare,
       let request = Self.preparationRequest(
         outgoingAgent: target.outgoingAgent,
         session: target.outgoingSession,
@@ -234,10 +234,17 @@ final class HandoffCommandHandler: CommandHandler {
     else {
       return .skipped
     }
-    return await preparationProvider(
-      request,
-      URL(fileURLWithPath: target.rootPath, isDirectory: true)
-    )
+    do {
+      let reply = try await preparationProvider(
+        request,
+        URL(fileURLWithPath: target.rootPath, isDirectory: true)
+      )
+      return await Task.detached {
+        store.applyPreparationReply(reply) ? HandoffPreparationOutcome.completed : .failed
+      }.value
+    } catch {
+      return .failed
+    }
   }
 
   // MARK: - status
@@ -295,19 +302,18 @@ final class HandoffCommandHandler: CommandHandler {
       agent: agent,
       session: session,
       prompt: preparationPrompt(),
-      configuration: AgentRuntimeAdapterRegistry.inheritedConfiguration(
-        from: agent,
-        observation: observation,
-        to: agent
-      )
+      model: observation?.model
     )
   }
 
   nonisolated static func preparationPrompt() -> String {
-    "Prepare the Prowl handoff now. Update .prowl/handoff/current.md with the current Objective, "
-      + "Current State, What Has Been Done, Open Questions, Risks / Watch Out, and Next Steps. "
-      + "Preserve useful existing agent notes; do not edit context.md, log.md, or archives. "
-      + "Do not commit, push, or make unrelated code changes. When the handoff is complete, exit."
+    "Prowl handoff preparation. Reply with the complete updated contents of .prowl/handoff/current.md "
+      + "and nothing else: a markdown document titled \"# Handoff\" with the sections \"## Objective\", "
+      + "\"## Current State\", \"## What Has Been Done\", \"## Open Questions\", \"## Risks / Watch Out\", "
+      + "\"## Next Steps\", and \"## Suggested Prompt For Next Agent\". Carry forward still-relevant notes "
+      + "from the existing file. Base the update on what you already know from this session; do not run "
+      + "commands, read extra files, or edit anything — Prowl writes the file from your reply. "
+      + "Be concise and answer in a single reply."
   }
 
   // MARK: - Payload
@@ -317,7 +323,8 @@ final class HandoffCommandHandler: CommandHandler {
     save: HandoffStore.SaveResult,
     toAgent: String? = nil,
     archivedPath: String? = nil,
-    launched: HandoffLaunchedPane? = nil
+    launched: HandoffLaunchedPane? = nil,
+    preparation: HandoffPreparationOutcome? = nil
   ) -> HandoffCommandPayload {
     HandoffCommandPayload(
       action: action,
@@ -337,6 +344,7 @@ final class HandoffCommandHandler: CommandHandler {
       changedFileCount: save.totalChangedFiles,
       archivedPath: archivedPath,
       sessionContext: save.sessionContext,
+      preparation: preparation?.rawValue,
       launchedPane: launched.map {
         HandoffPanePayload(
           worktreeID: $0.worktreeID,

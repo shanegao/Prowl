@@ -188,6 +188,9 @@ public struct HandoffInput: Codable, Sendable {
   /// When false, `to` refreshes + archives the handoff but does not launch the
   /// receiving agent (the human takes over manually).
   public let launch: Bool
+  /// When false, skip asking the detected source agent to refresh `current.md`
+  /// before the save (`--no-prepare`).
+  public let prepare: Bool
 
   enum CodingKeys: String, CodingKey {
     case action
@@ -195,6 +198,7 @@ public struct HandoffInput: Codable, Sendable {
     case toAgent = "to_agent"
     case note
     case launch
+    case prepare
   }
 
   public init(
@@ -202,13 +206,15 @@ public struct HandoffInput: Codable, Sendable {
     selector: TargetSelector = .none,
     toAgent: String? = nil,
     note: String? = nil,
-    launch: Bool = true
+    launch: Bool = true,
+    prepare: Bool = true
   ) {
     self.action = action
     self.selector = selector
     self.toAgent = toAgent
     self.note = note
     self.launch = launch
+    self.prepare = prepare
   }
 
   public init(from decoder: Decoder) throws {
@@ -218,6 +224,7 @@ public struct HandoffInput: Codable, Sendable {
     self.toAgent = try container.decodeIfPresent(String.self, forKey: .toAgent)
     self.note = try container.decodeIfPresent(String.self, forKey: .note)
     self.launch = try container.decodeIfPresent(Bool.self, forKey: .launch) ?? true
+    self.prepare = try container.decodeIfPresent(Bool.self, forKey: .prepare) ?? true
   }
 }
 

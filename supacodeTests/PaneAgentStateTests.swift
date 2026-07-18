@@ -136,6 +136,7 @@ struct PaneAgentStateTests {
     // A plain shell (no detected agent) is never busy, even mid-output.
     #expect(!PaneAgentState(detectedAgent: nil, state: .working).isBusy)
   }
+
   @Test func launchObservationRetainsOnlyForSameProcess() {
     let observation = AgentLaunchObservation(model: "gpt-5.4", executionMode: .unrestricted)
     let previous = PaneAgentState(agentProcessID: 42, launchObservation: observation)

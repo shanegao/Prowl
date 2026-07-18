@@ -21,20 +21,31 @@
   Codex and Claude Code, while a model remains same-adapter only.
 - Added source-authored preparation to `handoff save`, `handoff to`, and the Command Palette. An
   exact/high source session is resumed before Prowl saves generated context; completion, failure,
-  and skipped preparation are recorded in `log.md`.
+  and skipped preparation are recorded in `log.md` and the CLI payload's `preparation` field.
+- Review hardening (same PR): the preparation resume is read-only by construction —
+  `AgentResumeRequest` carries no execution mode, the source agent replies with the document
+  (Codex via `--output-last-message`, Claude Code via `-p` stdout), and Prowl validates and
+  transcribes the reply into `current.md` via `HandoffStore`. One resume turn is bounded by a
+  2-minute timeout with child termination; `--no-prepare` skips the turn; `save` records the
+  outcome on a single log line; Codex's `--yolo` alias counts as observed unrestricted; the
+  Command Palette shows progress/warning toasts during preparation.
 - Updated the handoff, CLI, and Command Palette documentation with the safety boundary and
   configuration inheritance rules.
 
 ## Verification
 
 - `make check`
-- Focused `xcodebuild test` selection covering `AgentRuntimeAdapterTests`, PID-scoped launch
-  observation, `HandoffCommandHandlerTests`, and Command Palette source preparation: 21 passed.
+- Focused `xcodebuild test` selection covering `AgentRuntimeAdapterTests` (argv, reply file,
+  timeout), `HandoffStoreTests` (reply validation/transcription), PID-scoped launch observation,
+  `HandoffCommandHandlerTests` (transcription, `--no-prepare`, unusable replies), and Command
+  Palette source preparation with toasts: 63 passed.
+- `make build-cli`, `make test-cli-smoke`, `make test-cli-integration` (63 passed) for the
+  `--no-prepare` flag and payload changes.
 - `make build-app`: Debug macOS app built successfully with zero warnings.
 
 ## Deliberate limits
 
 Only Claude Code and Codex have verified runtime adapters. Prowl never infers an execution policy
-from an absent argv flag, never passes a model identifier across those agent families, and never
-falls back to a cwd-based session scan. Unsupported detected agents remain available through
-`handoff to --no-launch`.
+from an absent argv flag, never passes a model identifier across those agent families, never
+escalates permissions for a headless resume, and never falls back to a cwd-based session scan.
+Unsupported detected agents remain available through `handoff to --no-launch`.

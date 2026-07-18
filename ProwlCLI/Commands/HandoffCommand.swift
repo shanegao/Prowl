@@ -31,12 +31,23 @@ struct HandoffSaveCommand: ParsableCommand {
   @Option(name: .long, help: "Optional note appended to the handoff log.")
   var note: String?
 
+  @Flag(
+    name: .customLong("no-prepare"),
+    help: "Skip asking the detected source agent to refresh current.md before saving."
+  )
+  var noPrepare = false
+
   mutating func run() throws {
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let envelope = CommandEnvelope(
         output: options.outputMode,
         command: .handoff(
-          HandoffInput(action: .save, selector: try selector.resolve(positionalTarget: target), note: note)
+          HandoffInput(
+            action: .save,
+            selector: try selector.resolve(positionalTarget: target),
+            note: note,
+            prepare: !noPrepare
+          )
         )
       )
       try CLIRunner.execute(envelope)
@@ -68,6 +79,12 @@ struct HandoffToCommand: ParsableCommand {
   @Flag(name: .customLong("no-launch"), help: "Archive + save only; do not launch the receiving agent.")
   var noLaunch = false
 
+  @Flag(
+    name: .customLong("no-prepare"),
+    help: "Skip asking the detected source agent to refresh current.md before saving."
+  )
+  var noPrepare = false
+
   mutating func run() throws {
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let rawAgent = agent.lowercased()
@@ -92,7 +109,8 @@ struct HandoffToCommand: ParsableCommand {
             selector: try selector.resolve(positionalTarget: target),
             toAgent: normalizedAgent,
             note: note,
-            launch: !noLaunch
+            launch: !noLaunch,
+            prepare: !noPrepare
           )
         )
       )

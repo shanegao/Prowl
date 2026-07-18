@@ -46,10 +46,12 @@ selected worktree has a pull request).
 - **Custom commands:** your per-repo Custom Commands appear here too.
 - **Handoff** (every runnable workspace, repository/worktree, or plain folder):
   **Hand off → Claude Code** / **Hand off → Codex** safely resumes the outgoing
-  native session to update agent-authored notes when available, then refreshes,
-  archives, and launches the receiving agent in a new tab. An
-  observed unrestricted execution policy carries across the verified adapters;
-  cross-agent model identifiers do not. See [handoff](handoff.md).
+  native session read-only to collect updated agent-authored notes when
+  available — a toolbar progress toast shows while the source agent writes its
+  summary — then refreshes, archives, and launches the receiving agent in a new
+  tab. An observed unrestricted execution policy carries across the verified
+  adapters for the destination launch; cross-agent model identifiers do not.
+  See [handoff](handoff.md).
 - **Debug** (Debug builds only): toast/update/dock simulations.
 
 ## Behavior notes

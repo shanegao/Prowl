@@ -1,6 +1,13 @@
 import Darwin
 import Foundation
 
+/// Outcome of asking the outgoing agent to refresh `current.md` before a save.
+nonisolated enum HandoffPreparationOutcome: String, Equatable, Sendable {
+  case completed
+  case skipped
+  case failed
+}
+
 /// On-disk store for the cross-agent handoff artifact that lives under a
 /// runnable target's `.prowl/handoff/` directory.
 ///
@@ -173,6 +180,7 @@ nonisolated struct HandoffStore: Sendable {
     outgoingAgent: String?,
     sessionContext: SessionContext? = nil,
     note: String?,
+    preparation: HandoffPreparationOutcome? = nil,
     now: Date
   ) throws -> SaveResult {
     try ensureScaffold()
@@ -191,7 +199,10 @@ nonisolated struct HandoffStore: Sendable {
     try appendix.write(to: contextURL, atomically: true, encoding: .utf8)
 
     let total = repos.reduce(0) { $0 + $1.changedFileCount }
-    let logLine = "save  agent=\(outgoingAgent ?? "unknown")  repos=\(repos.count)  changed=\(total)"
+    var logLine = "save  agent=\(outgoingAgent ?? "unknown")  repos=\(repos.count)  changed=\(total)"
+    if let preparation {
+      logLine += "  preparation=\(preparation.rawValue)"
+    }
     try appendLog(logLine + Self.noteSuffix(note), now: now)
 
     return SaveResult(
@@ -201,6 +212,61 @@ nonisolated struct HandoffStore: Sendable {
       repos: repos,
       changedFiles: changedFiles
     )
+  }
+
+  // MARK: - Prepared artifact
+
+  /// Validates a source agent's preparation reply and transcribes it into
+  /// `current.md`. Prowl never authors semantic prose: the reply text is the
+  /// source agent's, this method only checks shape and writes it verbatim.
+  /// Returns false (leaving the existing artifact in place) when the reply is
+  /// empty, still the seeded template, or missing the core semantic sections.
+  func applyPreparationReply(_ reply: String) -> Bool {
+    guard let artifact = Self.preparedArtifact(fromAgentReply: reply) else { return false }
+    do {
+      try FileManager.default.createDirectory(at: handoffDirectory, withIntermediateDirectories: true)
+      try artifact.write(to: currentURL, atomically: true, encoding: .utf8)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /// Normalizes a preparation reply into artifact content, or nil when unusable.
+  static func preparedArtifact(fromAgentReply reply: String) -> String? {
+    var text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+    text = droppingOpeningFence(text)
+    text = droppingPreamble(text)
+    text = droppingClosingFence(text)
+    let requiredSections = ["## Objective", "## Current State", "## Next Steps"]
+    guard !text.isEmpty, requiredSections.allSatisfy(text.contains) else { return nil }
+    guard text != template.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+    return text + "\n"
+  }
+
+  /// Unwraps the opening line of a markdown code fence ("```markdown").
+  private static func droppingOpeningFence(_ text: String) -> String {
+    guard text.hasPrefix("```") else { return text }
+    let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+    return lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// Drops chat preamble ahead of the artifact ("Sure, here's the file: …").
+  private static func droppingPreamble(_ text: String) -> String {
+    guard !text.hasPrefix("#") else { return text }
+    let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+    guard let start = lines.firstIndex(where: { $0.hasPrefix("# ") || $0.hasPrefix("## ") }) else {
+      return text
+    }
+    return lines[start...].joined(separator: "\n")
+  }
+
+  /// Drops a trailing code-fence line left over after preamble removal.
+  private static func droppingClosingFence(_ text: String) -> String {
+    var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+    guard let last = lines.last, last.trimmingCharacters(in: .whitespaces) == "```" else { return text }
+    lines.removeLast()
+    return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   // MARK: - Archive

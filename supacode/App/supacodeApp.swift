@@ -773,13 +773,8 @@ struct SupacodeApp: App {
   nonisolated private static func prepareHandoffSource(
     request: AgentResumeRequest,
     directory: URL
-  ) async -> HandoffPreparationOutcome {
-    do {
-      _ = try await AgentRuntimeClient.liveValue.resume(request, in: directory)
-      return .completed
-    } catch {
-      return .failed
-    }
+  ) async throws -> String {
+    try await AgentRuntimeClient.liveValue.resume(request, in: directory)
   }
 
   private static func makeCLISocketServer(
