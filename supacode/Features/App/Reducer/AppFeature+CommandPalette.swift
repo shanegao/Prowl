@@ -289,13 +289,47 @@ extension AppFeature {
     guard let worktree = state.repositories.selectedTerminalWorktree else {
       return .none
     }
-    let kickoff = HandoffCommandHandler.kickoff(for: agent)
+    guard let destinationAgent = DetectedAgent(rawValue: agent) else { return .none }
     let rootURL = worktree.workingDirectory
     let sessionContext = terminalClient.handoffSessionContext(worktree.id)
     let outgoing = sessionContext?.agent
+    let preparationRequest = HandoffCommandHandler.preparationRequest(
+      outgoingAgent: outgoing,
+      session: terminalClient.handoffAgentSession(worktree.id),
+      observation: terminalClient.handoffLaunchObservation(worktree.id)
+    )
+    let configuration: AgentLaunchConfiguration
+    if let sourceAgent = outgoing.flatMap(DetectedAgent.init(rawValue:)) {
+      configuration = AgentRuntimeAdapterRegistry.inheritedConfiguration(
+        from: sourceAgent,
+        observation: terminalClient.handoffLaunchObservation(worktree.id),
+        to: destinationAgent
+      )
+    } else {
+      configuration = .init()
+    }
+    let request = AgentStartRequest(
+      agent: destinationAgent,
+      prompt: HandoffCommandHandler.kickoffPrompt(),
+      configuration: configuration
+    )
+    guard let kickoff = try? AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput else {
+      return .none
+    }
     return .run { send in
       let store = HandoffStore(rootURL: rootURL)
       let now = Date()
+      let preparation: HandoffPreparationOutcome
+      if let preparationRequest {
+        do {
+          _ = try await agentRuntimeClient.resume(preparationRequest, in: rootURL)
+          preparation = .completed
+        } catch {
+          preparation = .failed
+        }
+      } else {
+        preparation = .skipped
+      }
       do {
         try await Task.detached {
           _ = try store.save(
@@ -306,7 +340,8 @@ extension AppFeature {
           )
           _ = try store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
           try store.appendLog(
-            "handoff prepared  from=\(outgoing ?? "agent")  to=\(agent)  launch=requested  source=command-palette",
+            "handoff prepared  from=\(outgoing ?? "agent")  to=\(agent)  preparation=\(preparation.rawValue)  "
+              + "launch=requested  source=command-palette",
             now: now
           )
         }.value

@@ -1,3 +1,4 @@
+import ComposableArchitecture
 import Foundation
 import Testing
 
@@ -22,6 +23,16 @@ struct HandoffCommandHandlerTests {
   private func makeHandler(
     root: URL,
     outgoingAgent: String?,
+    outgoingLaunchObservation: AgentLaunchObservation? = AgentLaunchObservation(
+      model: "gpt-5.4",
+      executionMode: .unrestricted
+    ),
+    outgoingSession: AgentSession? = AgentSession(
+      id: "9B0E3B0E-67B3-4D45-A3A0-7DD9BC713711",
+      transcriptPath: nil,
+      source: .openFile,
+      confidence: .exact
+    ),
     sessionContext: HandoffStore.SessionContext? = HandoffStore.SessionContext(
       agent: "codex",
       paneID: "pane-0",
@@ -33,7 +44,8 @@ struct HandoffCommandHandlerTests {
     launched: HandoffLaunchedPane? = HandoffLaunchedPane(
       worktreeID: "ws", worktreeName: "Workspace", tabID: "tab-1", paneID: "pane-1", paneTitle: "claude"
     ),
-    launchSpy: (@MainActor (String) -> Void)? = nil
+    launchSpy: (@MainActor (AgentStartRequest) -> Void)? = nil,
+    preparationSpy: (@Sendable (AgentResumeRequest, URL) async -> HandoffPreparationOutcome)? = nil,
   ) -> HandoffCommandHandler {
     HandoffCommandHandler(
       resolveProvider: { _ in
@@ -44,13 +56,19 @@ struct HandoffCommandHandlerTests {
             rootPath: root.path(percentEncoded: false),
             paneID: "pane-0",
             outgoingAgent: outgoingAgent,
+            outgoingLaunchObservation: outgoingLaunchObservation,
+            outgoingSession: outgoingSession,
             sessionContext: sessionContext
           )
         )
       },
-      launchProvider: { _, kickoff in
-        launchSpy?(kickoff)
+      launchProvider: { _, request in
+        launchSpy?(request)
         return launched
+      },
+      preparationProvider: { request, directory in
+        guard let preparationSpy else { return .skipped }
+        return await preparationSpy(request, directory)
       },
       now: { [fixedDate] in fixedDate }
     )
@@ -80,6 +98,54 @@ struct HandoffCommandHandlerTests {
     let content = try String(contentsOf: store.contextURL, encoding: .utf8)
     #expect(content.contains("Session Context:"))
     #expect(content.contains(".prowl/handoff/sessions/"))
+  }
+
+  @Test func saveResumesVerifiedSourceBeforePersistingHandoff() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let resumed = LockIsolated<AgentResumeRequest?>(nil)
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      preparationSpy: { request, directory in
+        resumed.setValue(request)
+        let handoffURL = directory.appending(path: ".prowl/handoff", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: handoffURL, withIntermediateDirectories: true)
+        try? "## Objective\n\nSource-authored status.\n".write(
+          to: handoffURL.appending(path: "current.md"),
+          atomically: true,
+          encoding: .utf8
+        )
+        return .completed
+      }
+    )
+
+    let response = await handler.handle(envelope: envelope(HandoffInput(action: .save)))
+
+    #expect(response.ok)
+    #expect(resumed.value?.agent == .codex)
+    #expect(resumed.value?.session.confidence == .exact)
+    #expect(resumed.value?.configuration.model == "gpt-5.4")
+    #expect(resumed.value?.configuration.executionMode == .unrestricted)
+    let content = try String(contentsOf: HandoffStore(rootURL: root).currentURL, encoding: .utf8)
+    #expect(content.contains("Source-authored status."))
+  }
+
+  @Test func preparationRequiresVerifiableSourceSession() {
+    let session = AgentSession(
+      id: "ambiguous-session",
+      transcriptPath: nil,
+      source: .recentFile,
+      confidence: .medium
+    )
+
+    #expect(
+      HandoffCommandHandler.preparationRequest(
+        outgoingAgent: "codex",
+        session: session,
+        observation: AgentLaunchObservation(executionMode: .unrestricted)
+      ) == nil
+    )
   }
 
   @Test func savePreservesResolvedNativeSessionContext() async throws {
@@ -114,11 +180,11 @@ struct HandoffCommandHandlerTests {
     let root = try makeTempRoot()
     defer { remove(root) }
 
-    var launchedKickoff: String?
+    var launchedRequest: AgentStartRequest?
     let handler = makeHandler(
       root: root,
       outgoingAgent: "codex",
-      launchSpy: { launchedKickoff = $0 }
+      launchSpy: { launchedRequest = $0 }
     )
 
     let response = await handler.handle(
@@ -132,10 +198,12 @@ struct HandoffCommandHandlerTests {
     #expect(payload.archivedPath?.hasPrefix("handoff/archive/") == true)
     #expect(payload.launchedPane?.paneID == "pane-1")
 
-    // The launched agent's kickoff command targets the handoff artifact.
-    #expect(launchedKickoff?.hasPrefix("claude ") == true)
-    #expect(launchedKickoff?.contains(".prowl/handoff/current.md") == true)
-    #expect(launchedKickoff?.contains("Session Context excerpt") == true)
+    // The receiving adapter gets a semantic handoff prompt and only portable
+    // source configuration. Cross-agent model identifiers must not leak.
+    #expect(launchedRequest?.agent == .claude)
+    #expect(launchedRequest?.configuration.model == nil)
+    #expect(launchedRequest?.configuration.executionMode == .unrestricted)
+    #expect(launchedRequest?.prompt.contains(".prowl/handoff/current.md") == true)
 
     // Log records the transition.
     let store = HandoffStore(rootURL: root)

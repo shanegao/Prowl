@@ -258,19 +258,25 @@ prowl handoff to <agent> [target] [--note "…"] [--no-launch]
 prowl handoff status     [target]
 ```
 
-- **`save`** — refresh `.prowl/handoff/context.md` from live git state (per-repo
+- **`save`** — when Prowl has an exact or high-confidence native session for
+  the detected outgoing Claude Code or Codex process, it first resumes that
+  session non-interactively and asks it to update agent-authored `current.md`.
+  It then refreshes `.prowl/handoff/context.md` from live git state (per-repo
   branch + change counts, changed-file list, detected outgoing agent, and
-  captured session excerpt) and append a line to `.prowl/handoff/log.md`.
-  `current.md` contains agent-authored prose and is seeded from a template on the
-  first run; later saves never rewrite it.
-- **`to <agent>`** — `save`, then archive the current artifact to
-  `.prowl/handoff/archive/<ts>-<from>-to-<to>.md`, then launch the receiving
-  agent in a **new tab** whose kickoff prompt points it at
-  `.prowl/handoff/current.md` and generated `context.md`. Returns the launched `pane`. `--no-launch`
-  archives + saves only (you take over manually). Interactive launch is verified
-  for `claude` and `codex`; `--no-launch` accepts the full detected-agent list:
-  `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`, `opencode`,
-  `copilot`, `kimi`, `droid`, `amp`, `qwen`, `grok`.
+  captured session excerpt). The log records whether source preparation
+  completed, failed, or was skipped. `current.md` is seeded from a template on
+  the first run; Prowl never directly rewrites it later.
+- **`to <agent>`** — performs the same safe source preparation, saves, archives
+  the current artifact to `.prowl/handoff/archive/<ts>-<from>-to-<to>.md`, and
+  launches the receiving agent in a **new tab** with a semantic kickoff prompt
+  for `current.md` and generated `context.md`. Returns the launched `pane`.
+  An observed unrestricted source execution policy is translated between the
+  verified Claude Code and Codex adapters; model identifiers remain with their
+  original agent family. `--no-launch` still prepares, archives, and saves.
+  Interactive launch is verified for `claude` and `codex`; `--no-launch`
+  accepts the full detected-agent list: `pi`, `claude`, `codex`, `gemini`,
+  `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`,
+  `qwen`, `grok`.
 - **`status`** — report the artifact path, whether it exists, the agent
   currently detected in the target, and the last handoff-log line.
 
@@ -286,7 +292,9 @@ The outgoing agent is whatever Prowl detects in the target's pane (see
 the generated excerpt path plus native `session_id` / `transcript_path` only when
 the selected pane already has unambiguous native-session evidence (the same
 identity exposed by `prowl agents`). When no session is resolved, Prowl keeps the
-terminal excerpt and omits native metadata. Full feature guide:
+terminal excerpt and omits native metadata. Unsafe or ambiguous native sessions
+are never resumed: source preparation is skipped and any existing `current.md`
+(or its template) remains the durable artifact. Full feature guide:
 [handoff](handoff.md).
 
 The generated `.prowl/handoff/` directory contains its own `.gitignore`, so its

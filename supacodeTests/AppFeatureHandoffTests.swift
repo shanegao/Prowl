@@ -122,12 +122,48 @@ struct AppFeatureHandoffTests {
       settings: SettingsFeature.State()
     )
     let sent = LockIsolated<[TerminalClient.Command]>([])
+    let resumed = LockIsolated<AgentResumeRequest?>(nil)
     let store = TestStore(initialState: state) {
       AppFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in
         sent.withValue { $0.append(command) }
       }
+      $0.terminalClient.handoffSessionContext = { _ in
+        HandoffStore.SessionContext(
+          agent: "codex",
+          paneID: "pane-0",
+          paneTitle: "codex",
+          source: "terminal-scrollback",
+          confidence: "fallback",
+          excerptText: ""
+        )
+      }
+      $0.terminalClient.handoffLaunchObservation = { _ in
+        AgentLaunchObservation(model: "gpt-5.4", executionMode: .unrestricted)
+      }
+      $0.terminalClient.handoffAgentSession = { _ in
+        AgentSession(
+          id: "9B0E3B0E-67B3-4D45-A3A0-7DD9BC713711",
+          transcriptPath: nil,
+          source: .openFile,
+          confidence: .exact
+        )
+      }
+      $0.agentRuntimeClient = AgentRuntimeClient(
+        makeStartInvocation: { try AgentRuntimeAdapterRegistry.makeStartInvocation($0) },
+        resume: { request, directory in
+          resumed.setValue(request)
+          let handoffURL = directory.appending(path: ".prowl/handoff", directoryHint: .isDirectory)
+          try FileManager.default.createDirectory(at: handoffURL, withIntermediateDirectories: true)
+          try "## Objective\n\nPalette source status.\n".write(
+            to: handoffURL.appending(path: "current.md"),
+            atomically: true,
+            encoding: .utf8
+          )
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+      )
     }
 
     await store.send(.commandPalette(.delegate(.handoffToAgent("claude"))))
@@ -148,7 +184,10 @@ struct AppFeatureHandoffTests {
       Issue.record("Expected createTabWithInput, got \(sent.value)")
       return
     }
-    #expect(input == HandoffCommandHandler.kickoff(for: "claude"))
+    #expect(input.contains("'claude'"))
+    #expect(input.contains("'--dangerously-skip-permissions'"))
+    #expect(!input.contains("gpt-5.4"))
+    #expect(input.contains(HandoffCommandHandler.kickoffPrompt()))
     #expect(runSetup == false)
     #expect(autoClose == false)
     #expect(name == "Hand off → claude")
@@ -161,6 +200,12 @@ struct AppFeatureHandoffTests {
     let log = try String(contentsOf: store2.logURL, encoding: .utf8)
     #expect(log.contains("launch=requested"))
     #expect(!log.contains("agent → claude  (command palette)"))
+    #expect(log.contains("preparation=completed"))
+    #expect(resumed.value?.agent == .codex)
+    #expect(resumed.value?.configuration.model == "gpt-5.4")
+    #expect(resumed.value?.configuration.executionMode == .unrestricted)
+    let current = try String(contentsOf: store2.currentURL, encoding: .utf8)
+    #expect(current.contains("Palette source status."))
   }
 
   @Test(.dependencies) func handoffDelegateDoesNotLaunchWhenArtifactPreparationFails() async throws {

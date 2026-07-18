@@ -10,6 +10,8 @@ struct HandoffResolvedTarget: Sendable, Equatable {
   let rootPath: String
   let paneID: String
   let outgoingAgent: String?
+  let outgoingLaunchObservation: AgentLaunchObservation?
+  let outgoingSession: AgentSession?
   let sessionContext: HandoffStore.SessionContext?
 }
 
@@ -22,25 +24,35 @@ struct HandoffLaunchedPane: Sendable, Equatable {
   let paneTitle: String
 }
 
+enum HandoffPreparationOutcome: String, Equatable, Sendable {
+  case completed
+  case skipped
+  case failed
+}
+
 @MainActor
 final class HandoffCommandHandler: CommandHandler {
   typealias ResolveProvider = @MainActor (TargetSelector) -> Result<HandoffResolvedTarget, TargetResolverError>
-  typealias LaunchProvider = @MainActor (HandoffResolvedTarget, String) -> HandoffLaunchedPane?
+  typealias LaunchProvider = @MainActor (HandoffResolvedTarget, AgentStartRequest) -> HandoffLaunchedPane?
+  typealias PreparationProvider = @Sendable (AgentResumeRequest, URL) async -> HandoffPreparationOutcome
 
   /// Agents this command can launch (it injects an agent-specific kickoff command).
   static let supportedAgents = HandoffAgentSupport.launchableAgents
 
   private let resolveProvider: ResolveProvider
   private let launchProvider: LaunchProvider
+  private let preparationProvider: PreparationProvider
   private let now: @Sendable () -> Date
 
   init(
     resolveProvider: @escaping ResolveProvider,
     launchProvider: @escaping LaunchProvider,
+    preparationProvider: @escaping PreparationProvider,
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.resolveProvider = resolveProvider
     self.launchProvider = launchProvider
+    self.preparationProvider = preparationProvider
     self.now = now
   }
 
@@ -96,6 +108,7 @@ final class HandoffCommandHandler: CommandHandler {
   ) async -> CommandResponse {
     let outgoing = target.outgoingAgent
     let note = input.note
+    let preparation = await prepareOutgoingAgent(for: target)
     do {
       let result = try await Task.detached {
         try store.save(
@@ -104,6 +117,9 @@ final class HandoffCommandHandler: CommandHandler {
           note: note,
           now: timestamp
         )
+      }.value
+      try? await Task.detached {
+        try store.appendLog("handoff save  preparation=\(preparation.rawValue)", now: timestamp)
       }.value
       return success(payload: makePayload(action: .save, save: result))
     } catch {
@@ -127,6 +143,10 @@ final class HandoffCommandHandler: CommandHandler {
     }
     let outgoing = target.outgoingAgent
     let from = outgoing ?? "agent"
+    guard let destinationAgent = DetectedAgent(rawValue: toAgent) else {
+      return errorResponse(code: CLIErrorCode.invalidArgument, message: "Unknown handoff agent: \(toAgent).")
+    }
+    let preparation = await prepareOutgoingAgent(for: target)
 
     let saveResult: HandoffStore.SaveResult
     let archivedPath: String?
@@ -150,15 +170,32 @@ final class HandoffCommandHandler: CommandHandler {
       )
     }
 
+    let configuration: AgentLaunchConfiguration
+    if let sourceAgent = outgoing.flatMap(DetectedAgent.init(rawValue:)) {
+      configuration = AgentRuntimeAdapterRegistry.inheritedConfiguration(
+        from: sourceAgent,
+        observation: target.outgoingLaunchObservation,
+        to: destinationAgent
+      )
+    } else {
+      configuration = .init()
+    }
     var launched: HandoffLaunchedPane?
     if input.launch {
-      launched = launchProvider(target, Self.kickoff(for: toAgent))
+      launched = launchProvider(
+        target,
+        AgentStartRequest(
+          agent: destinationAgent,
+          prompt: Self.kickoffPrompt(),
+          configuration: configuration
+        )
+      )
       if launched == nil {
         let archiveSuffix = archivedPath.map { "  archive=\($0)" } ?? ""
         let noteSuffix = input.note.map { "  note=\"\($0.replacing("\n", with: " "))\"" } ?? ""
         try? await Task.detached {
           try store.appendLog(
-            "\(from) → \(toAgent)  launch=failed\(archiveSuffix)\(noteSuffix)",
+            "\(from) → \(toAgent)  launch=failed  preparation=\(preparation.rawValue)\(archiveSuffix)\(noteSuffix)",
             now: timestamp
           )
         }.value
@@ -170,7 +207,10 @@ final class HandoffCommandHandler: CommandHandler {
     let paneSuffix = launched.map { "  pane=\($0.paneID)" } ?? "  (no launch)"
     let noteSuffix = note.map { "  note=\"\($0.replacing("\n", with: " "))\"" } ?? ""
     try? await Task.detached {
-      try store.appendLog("\(from) → \(toAgent)\(paneSuffix)\(noteSuffix)", now: timestamp)
+      try store.appendLog(
+        "\(from) → \(toAgent)\(paneSuffix)  preparation=\(preparation.rawValue)\(noteSuffix)",
+        now: timestamp
+      )
     }.value
 
     return success(
@@ -181,6 +221,22 @@ final class HandoffCommandHandler: CommandHandler {
         archivedPath: archivedPath,
         launched: launched
       )
+    )
+  }
+
+  private func prepareOutgoingAgent(for target: HandoffResolvedTarget) async -> HandoffPreparationOutcome {
+    guard
+      let request = Self.preparationRequest(
+        outgoingAgent: target.outgoingAgent,
+        session: target.outgoingSession,
+        observation: target.outgoingLaunchObservation
+      )
+    else {
+      return .skipped
+    }
+    return await preparationProvider(
+      request,
+      URL(fileURLWithPath: target.rootPath, isDirectory: true)
     )
   }
 
@@ -214,13 +270,44 @@ final class HandoffCommandHandler: CommandHandler {
 
   // MARK: - Kickoff prompt
 
-  nonisolated static func kickoff(for agent: String) -> String {
-    let instruction =
-      "Take over this Prowl workspace task. Read .prowl/handoff/current.md (agent notes), "
+  nonisolated static func kickoffPrompt() -> String {
+    "Take over this Prowl workspace task. Read .prowl/handoff/current.md (agent notes), "
       + ".prowl/handoff/context.md (generated state), and .prowl/workspace.json (repo layout, if present), "
       + "then continue from Next Steps. If context.md lists a Session Context excerpt, read it before changing code. "
       + "Ask before any commit/push or destructive git."
-    return "\(agent) \"\(instruction)\""
+  }
+
+  nonisolated static func preparationRequest(
+    outgoingAgent: String?,
+    session: AgentSession?,
+    observation: AgentLaunchObservation?
+  ) -> AgentResumeRequest? {
+    guard
+      let outgoingAgent,
+      let agent = DetectedAgent(rawValue: outgoingAgent),
+      let session,
+      session.confidence == .exact || session.confidence == .high,
+      AgentRuntimeAdapterRegistry.canResume(agent)
+    else {
+      return nil
+    }
+    return AgentResumeRequest(
+      agent: agent,
+      session: session,
+      prompt: preparationPrompt(),
+      configuration: AgentRuntimeAdapterRegistry.inheritedConfiguration(
+        from: agent,
+        observation: observation,
+        to: agent
+      )
+    )
+  }
+
+  nonisolated static func preparationPrompt() -> String {
+    "Prepare the Prowl handoff now. Update .prowl/handoff/current.md with the current Objective, "
+      + "Current State, What Has Been Done, Open Questions, Risks / Watch Out, and Next Steps. "
+      + "Preserve useful existing agent notes; do not edit context.md, log.md, or archives. "
+      + "Do not commit, push, or make unrelated code changes. When the handoff is complete, exit."
   }
 
   // MARK: - Payload
