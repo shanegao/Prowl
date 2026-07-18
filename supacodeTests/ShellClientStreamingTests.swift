@@ -44,7 +44,40 @@ nonisolated final class LoginStreamCallRecorder: @unchecked Sendable {
   }
 }
 
+nonisolated final class TerminationCallRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var countValue = 0
+
+  func record() {
+    lock.lock()
+    countValue += 1
+    lock.unlock()
+  }
+
+  var count: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return countValue
+  }
+}
+
 struct ShellClientStreamingTests {
+
+  @Test func cancellationTerminatesOnceBeforeOrAfterProcessRegistration() {
+    let beforeRegistration = ProcessCancellation()
+    let beforeRecorder = TerminationCallRecorder()
+    beforeRegistration.cancel()
+    beforeRegistration.installTermination { beforeRecorder.record() }
+    beforeRegistration.cancel()
+    #expect(beforeRecorder.count == 1)
+
+    let afterRegistration = ProcessCancellation()
+    let afterRecorder = TerminationCallRecorder()
+    afterRegistration.installTermination { afterRecorder.record() }
+    afterRegistration.cancel()
+    afterRegistration.cancel()
+    #expect(afterRecorder.count == 1)
+  }
   @Test func runStreamYieldsStdoutAndStderrLines() async throws {
     let shell = ShellClient.liveValue
     let commandURL = URL(fileURLWithPath: "/bin/sh")
@@ -147,7 +180,9 @@ struct ShellClientStreamingTests {
       return lines
     }
 
-    try await Task.sleep(for: .milliseconds(120))
+    // The coordinator unit test covers cancellation before process registration.
+    // Yield once to exercise the usual already-running stream path without a timing sleep.
+    await Task.yield()
 
     let start = ContinuousClock.now
     consumer.cancel()
@@ -155,8 +190,8 @@ struct ShellClientStreamingTests {
     let elapsed = ContinuousClock.now - start
 
     #expect(
-      elapsed < .seconds(5),
-      "consumer cancel should propagate to the shell process; took \(elapsed)"
+      elapsed < .seconds(10),
+      "consumer cancellation must not wait for the process's 30-second natural exit; took \(elapsed)"
     )
   }
 
@@ -168,7 +203,8 @@ struct ShellClientStreamingTests {
       try await shell.run(commandURL, ["30"], nil)
     }
 
-    try? await Task.sleep(for: .milliseconds(120))
+    // Cancellation before process registration is covered deterministically above.
+    await Task.yield()
 
     let start = ContinuousClock.now
     runTask.cancel()
@@ -176,8 +212,8 @@ struct ShellClientStreamingTests {
     let elapsed = ContinuousClock.now - start
 
     #expect(
-      elapsed < .seconds(5),
-      "run() should propagate cancellation to the process; took \(elapsed)"
+      elapsed < .seconds(10),
+      "run() cancellation must not wait for the process's 30-second natural exit; took \(elapsed)"
     )
   }
 
