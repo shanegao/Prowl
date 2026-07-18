@@ -59,7 +59,9 @@ extension AppFeature {
   ) -> Bool {
     switch delegate {
     case .selectWorktree, .jumpToLatestUnread, .viewArchivedWorktrees,
-      .newWorktree, .toggleCanvas, .renameBranch:
+      .newWorktree, .toggleCanvas, .renameBranch, .handoffToAgent:
+      // `.handoffToAgent` launches and focuses a new agent tab, so focus must
+      // stay there rather than being restored to the previously selected tab.
       return true
     default:
       return false

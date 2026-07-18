@@ -30,6 +30,8 @@ struct AppFeature {
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
     var leftSidebarVisibility: NavigationSplitViewVisibility = .all
+    var handoffAutoSaveDisplayStates: [ActiveAgentEntry.ID: AgentDisplayState] = [:]
+    var handoffAutoSaveLastSavedAt: [ActiveAgentEntry.ID: Date] = [:]
     @Presents var alert: AlertState<Alert>?
 
     init(

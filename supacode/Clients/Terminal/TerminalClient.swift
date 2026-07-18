@@ -9,6 +9,8 @@ struct TerminalClient {
   /// synchronously before an async dispatch races against AppKit focus reshuffle
   /// (e.g. when a palette dismisses and the leftmost pane reclaims first responder).
   var selectedSurfaceID: @MainActor @Sendable (Worktree.ID) -> UUID?
+  var handoffSessionContext: @MainActor @Sendable (Worktree.ID) -> HandoffStore.SessionContext?
+  var handoffSessionContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffStore.SessionContext?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
@@ -19,6 +21,7 @@ struct TerminalClient {
     case createTabWithInput(
       Worktree,
       input: String,
+      workingDirectory: URL? = nil,
       runSetupScriptIfNew: Bool,
       autoCloseOnSuccess: Bool,
       customCommandName: String? = nil,
@@ -83,6 +86,8 @@ extension TerminalClient: DependencyKey {
     events: { fatalError("TerminalClient.events not configured") },
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
+    handoffSessionContext: { _ in nil },
+    handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
@@ -94,6 +99,8 @@ extension TerminalClient: DependencyKey {
     events: { AsyncStream { $0.finish() } },
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
+    handoffSessionContext: { _ in nil },
+    handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },

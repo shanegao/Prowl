@@ -98,3 +98,4 @@ agent-facing manual for that).
 | 044 | [foundation-model-branch-names](044-foundation-model-branch-names/000-plan.md) | 2026-06-27 | On-device FM branch-name suggestions |
 | 045 | [native-agent-session-detection](045-native-agent-session-detection/000-plan.md) | 2026-07-12 | Native agent session identity (successor to 030's heuristics) |
 | 046 | [cli-short-handles](046-cli-short-handles/000-plan.md) | 2026-07-13 | Session-scoped tab and pane handles for CLI targeting |
+| 047 | [cross-agent-handoff](047-cross-agent-handoff/000-plan.md) | 2026-07-17 | Durable artifact-based task handoff across coding agents |

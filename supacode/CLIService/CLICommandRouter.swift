@@ -14,6 +14,7 @@ final class CLICommandRouter {
   private let readHandler: any CommandHandler
   private let tabHandler: any CommandHandler
   private let paneHandler: any CommandHandler
+  private let handoffHandler: any CommandHandler
 
   init(
     openHandler: any CommandHandler = StubCommandHandler(command: "open"),
@@ -24,7 +25,8 @@ final class CLICommandRouter {
     keyHandler: any CommandHandler = StubCommandHandler(command: "key"),
     readHandler: any CommandHandler = StubCommandHandler(command: "read"),
     tabHandler: any CommandHandler = StubCommandHandler(command: "tab"),
-    paneHandler: any CommandHandler = StubCommandHandler(command: "pane")
+    paneHandler: any CommandHandler = StubCommandHandler(command: "pane"),
+    handoffHandler: any CommandHandler = StubCommandHandler(command: "handoff")
   ) {
     self.openHandler = openHandler
     self.listHandler = listHandler
@@ -35,6 +37,7 @@ final class CLICommandRouter {
     self.readHandler = readHandler
     self.tabHandler = tabHandler
     self.paneHandler = paneHandler
+    self.handoffHandler = handoffHandler
   }
 
   func route(_ envelope: CommandEnvelope) async -> CommandResponse {
@@ -49,6 +52,7 @@ final class CLICommandRouter {
     case .read: handler = readHandler
     case .tab: handler = tabHandler
     case .pane: handler = paneHandler
+    case .handoff: handler = handoffHandler
     }
     return await handler.handle(envelope: envelope)
   }

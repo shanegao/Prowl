@@ -333,6 +333,26 @@ struct SupacodeApp: App {
         else { return nil }
         return state.activeSurfaceID(for: tabID)
       },
+      handoffSessionContext: { worktreeID in
+        guard let state = terminalManager.stateIfExists(for: worktreeID),
+          let tabID = state.tabManager.selectedTabId,
+          let surfaceID = state.activeSurfaceID(for: tabID)
+        else { return nil }
+        return makeHandoffSessionContext(
+          worktreeID: worktreeID,
+          paneID: surfaceID,
+          paneTitle: nil,
+          terminalManager: terminalManager
+        )
+      },
+      handoffSessionContextForSurface: { worktreeID, surfaceID in
+        return makeHandoffSessionContext(
+          worktreeID: worktreeID,
+          paneID: surfaceID,
+          paneTitle: nil,
+          terminalManager: terminalManager
+        )
+      },
       latestUnreadNotification: {
         terminalManager.latestUnreadNotificationLocation()
       },
@@ -403,6 +423,35 @@ struct SupacodeApp: App {
       )
     }
     return client
+  }
+
+  private static func makeHandoffSessionContext(
+    worktreeID: Worktree.ID,
+    paneID: UUID,
+    paneTitle: String?,
+    terminalManager: WorktreeTerminalManager
+  ) -> HandoffStore.SessionContext? {
+    guard let state = terminalManager.stateIfExists(for: worktreeID),
+      let surface = state.surfaceView(for: paneID)
+    else {
+      return nil
+    }
+
+    let agentState = state.surfaceAgentStates[paneID]
+    let detectedAgent = agentState?.detectedAgent?.rawValue
+    let nativeSession = agentState?.session
+    let title = paneTitle ?? state.paneTitle(surfaceID: paneID, fallbackTabTitle: "")
+    let screenText = surface.readScreenContentsForCLI() ?? surface.readViewportContentsForCLI()
+    return HandoffStore.SessionContext(
+      agent: detectedAgent,
+      sessionID: nativeSession?.id,
+      paneID: paneID.uuidString,
+      paneTitle: title.isEmpty ? nil : title,
+      source: nativeSession?.source.rawValue ?? (screenText == nil ? "terminal-unavailable" : "terminal-scrollback"),
+      confidence: nativeSession?.confidence.rawValue ?? "fallback",
+      transcriptPath: nativeSession?.transcriptPath?.path(percentEncoded: false),
+      excerptText: screenText
+    )
   }
 
   private static func makeTargetResolver(
@@ -612,6 +661,66 @@ struct SupacodeApp: App {
         )
       }
     )
+    let handoffHandler = HandoffCommandHandler(
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+        return resolver.resolve(selector).map { resolved in
+          let agent = terminalManager.stateIfExists(for: resolved.worktreeID)?
+            .surfaceAgentStates[resolved.paneID]?.detectedAgent?.rawValue
+          return HandoffResolvedTarget(
+            worktreeID: resolved.worktreeID,
+            worktreeName: resolved.worktreeName,
+            rootPath: resolved.worktreePath,
+            paneID: resolved.paneID.uuidString,
+            outgoingAgent: agent,
+            sessionContext: makeHandoffSessionContext(
+              worktreeID: resolved.worktreeID,
+              paneID: resolved.paneID,
+              paneTitle: resolved.paneTitle,
+              terminalManager: terminalManager
+            )
+          )
+        }
+      },
+      launchProvider: { target, kickoff in
+        let repositories = Array(appStore.state.repositories.repositories)
+        guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
+          return nil
+        }
+        selectCLIWorktreeContext(
+          worktreeID: target.worktreeID,
+          appStore: appStore,
+          terminalManager: terminalManager
+        )
+        let state = terminalManager.state(for: worktree)
+        guard
+          let tabID = state.createTab(
+            initialInput: kickoff,
+            workingDirectoryOverride: URL(fileURLWithPath: target.rootPath, isDirectory: true)
+          )
+        else {
+          return nil
+        }
+        let resolver = makeTargetResolver(appStore: appStore, terminalManager: terminalManager)
+        switch resolver.resolve(.tab(tabID.rawValue.uuidString)) {
+        case .success(let resolved):
+          return HandoffLaunchedPane(
+            worktreeID: resolved.worktreeID,
+            worktreeName: resolved.worktreeName,
+            tabID: resolved.tabID.uuidString,
+            paneID: resolved.paneID.uuidString,
+            paneTitle: resolved.paneTitle
+          )
+        case .failure:
+          return nil
+        }
+      }
+    )
     return CLICommandRouter(
       openHandler: openHandler,
       listHandler: listHandler,
@@ -621,7 +730,8 @@ struct SupacodeApp: App {
       keyHandler: keyHandler,
       readHandler: readHandler,
       tabHandler: tabHandler,
-      paneHandler: paneHandler
+      paneHandler: paneHandler,
+      handoffHandler: handoffHandler
     )
   }
 

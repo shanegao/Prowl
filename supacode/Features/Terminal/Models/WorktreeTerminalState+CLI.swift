@@ -20,6 +20,7 @@ struct CLITerminalPaneSnapshot: Sendable {
   let handle: Int?
   let title: String
   let cwd: String?
+  let agent: String?
 }
 
 extension WorktreeTerminalState {
@@ -35,11 +36,13 @@ extension WorktreeTerminalState {
         ).workingDirectory?.path(percentEncoded: false)
 
         let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.displayTitle)
+        let agent = surfaceAgentStates[paneID]?.detectedAgent?.rawValue
         return CLITerminalPaneSnapshot(
           id: paneID,
           handle: registerTargetHandle(for: paneID),
           title: title,
-          cwd: cwd
+          cwd: cwd,
+          agent: agent
         )
       }
 
