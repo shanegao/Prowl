@@ -30,6 +30,7 @@ Everything lives under the target's `.prowl/handoff/` directory:
   context.md            Prowl-generated repository and session state
   log.md                append-only handoff history
   archive/<ts>-<from>-to-<to>.md
+  archive/<ts>-preparation-backup.md
   sessions/<ts>-<pane>.md
 ```
 
@@ -39,8 +40,16 @@ repository's root `.gitignore` is required.
 
 `current.md` contains only agent-authored prose: `Objective`, `Current State`,
 `What Has Been Done`, `Open Questions`, `Risks`, `Next Steps`, and
-`Suggested Prompt For Next Agent`. The outgoing agent maintains these sections;
-Prowl creates the template but never rewrites this file during a save.
+`Suggested Prompt For Next Agent`. When Prowl has an exact or high-confidence
+native session for a supported outgoing agent, `handoff save` and `handoff to`
+first resume that agent in a read-only, non-interactive turn and ask it to
+**reply** with the updated document; Prowl validates the reply (required
+sections present, not the seeded template) and transcribes it into `current.md`.
+Before transcription, the previous edited `current.md` is snapshotted to
+`archive/<ts>-preparation-backup.md`, so a reply that drops sections never
+destroys the only copy of earlier notes. The prose is always the agent's —
+Prowl never authors semantic content, it only seeds the template and
+transcribes validated replies.
 
 `context.md` contains the detected outgoing agent, a pointer to the captured
 session excerpt, each repo's branch and change counts, and the changed files.
@@ -77,18 +86,31 @@ step — the receiving agent then opens in a new tab pointed at the artifact.
 ## The `prowl handoff` command
 
 ```bash
-prowl handoff save       [target] [--note "…"]              # refresh context + session excerpt + log
-prowl handoff to <agent> [target] [--note "…"] [--no-launch]
+prowl handoff save       [target] [--note "…"] [--no-prepare]   # refresh context + session excerpt + log
+prowl handoff to <agent> [target] [--note "…"] [--no-launch] [--no-prepare]
 prowl handoff status     [target]
 ```
 
-- **`save`** refreshes generated context from live git state and logs a line.
-- **`to <agent>`** does `save`, archives the current artifact, then launches the
-  receiving agent in a **new tab** whose kickoff prompt points it at
-  `.prowl/handoff/current.md` and `.prowl/handoff/context.md`. Interactive launch
-  is verified for `claude` and `codex`. `--no-launch` archives + saves only and accepts the full detected-agent
-  token list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`,
-  `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`, `grok`.
+- **`save`** first asks the detected outgoing Claude Code or Codex session to
+  reply with an updated `current.md` when its native session identity is exact
+  or high confidence; Prowl validates and transcribes the reply. The resume is
+  read-only (no permission flags) and bounded to **2 minutes** — a stalled or
+  unusable reply is logged as `preparation=failed` and the existing artifact
+  stays in place. It then refreshes generated context from live git state and
+  logs one `save` line recording whether preparation completed, failed, or was
+  skipped. `--no-prepare` skips the source turn entirely for a fast mechanical
+  refresh (use it when the outgoing agent already maintains `current.md`
+  itself, e.g. from inside its own session).
+- **`to <agent>`** follows the same preparation path, then saves, archives the
+  current artifact, and launches the receiving agent in a **new tab** with a
+  semantic kickoff prompt for `current.md` and `context.md`. Interactive launch
+  is verified for `claude` and `codex`. When Prowl observed the outgoing launch,
+  it preserves an explicit unrestricted execution policy across those adapters
+  for the **destination launch only**; model identifiers stay with the same
+  agent family and are never translated between Codex and Claude Code.
+  `--no-launch` still prepares, archives, and saves; it accepts the full
+  detected-agent token list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`,
+  `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`, `grok`.
 - **`status`** reports the artifact path, whether it exists, the detected current
   agent, and the last log line.
 
@@ -106,8 +128,11 @@ for targets that have never run `prowl handoff save` or `prowl handoff to`.
 
 For any selected workspace, git repository, worktree, or plain folder, the
 Command Palette (`⌘P`) offers **Hand off → Claude Code** and **Hand off → Codex**.
-Selecting one refreshes + archives the handoff artifact and launches the
-receiving agent in a new tab — the GUI equivalent of `prowl handoff to`.
+It runs the same source-session preparation when safe — showing a progress toast
+in the toolbar while the source agent writes its summary — then refreshes +
+archives the artifact and starts the receiving agent in a new tab using the same
+adapter configuration rules as `prowl handoff to`. If preparation fails, a
+warning toast notes the handoff continued with the existing notes.
 
 ## Safety
 
@@ -115,12 +140,23 @@ receiving agent in a new tab — the GUI equivalent of `prowl handoff to`.
   git state (`status` / `diff --stat`).
 - Auto-save uses the same read-only `save` path and only updates targets with an
   existing `.prowl/handoff/current.md`.
-- Save writes generated state only to `context.md`; after scaffolding it never
-  rewrites agent-authored `current.md`.
+- Save writes generated state only to `context.md`; the only time Prowl touches
+  `current.md` after scaffolding is to transcribe a validated preparation reply
+  authored by the source agent itself.
+- The preparation resume is **read-only by construction**: it never passes
+  `--dangerously-*` flags, regardless of how the source session was launched.
+  Unrestricted-mode inheritance applies only to the interactive destination
+  launch of `handoff to`.
 - `to` only **adds** a tab; it never closes the outgoing agent's session, so you
   can still read or roll back from it.
 - It always saves + archives **before** launching, so a fresh artifact exists even
   if the launch is interrupted.
+- Automatic source preparation is skipped when Prowl cannot prove an exact or
+  high-confidence native session, when the agent has no verified resume
+  adapter, or when `--no-prepare` is passed. A reply that fails validation is
+  recorded as `preparation=failed` and never overwrites the existing artifact.
+  A validated reply first snapshots the previous edited `current.md` to
+  `archive/<ts>-preparation-backup.md` before transcription.
 - Keep secrets/tokens out of the handoff file (the protocol asks agents not to
   write them).
 - `.prowl/handoff/` is self-ignoring; session excerpts can contain terminal
@@ -131,7 +167,8 @@ receiving agent in a new tab — the GUI equivalent of `prowl handoff to`.
 - Workspaces aggregate generated context across their child repositories. A
   regular repository or worktree covers just that repo; a plain folder omits git
   branch and diff details.
-- The artifact's prose is only as good as what the outgoing agent wrote — the
-  protocol in `AGENTS.md`/`CLAUDE.md` is what keeps it honest.
-- Launching uses the interactive agent (so you can step in); don't use
+- If no safe native source session is available, Prowl skips automatic
+  preparation rather than guessing which agent conversation to resume. Update
+  `current.md` manually in that case.
+- Launching uses the interactive receiving agent (so you can step in); don't use
   `--capture` against it — read its screen with `prowl read --wait-stable`.

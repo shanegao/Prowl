@@ -132,12 +132,14 @@ extension WorktreeTerminalState {
     // agent state cleaned up while the resolver was doing file inspection;
     // writing below would resurrect a ghost Active Agents entry.
     guard surfaces[surfaceID] != nil else { return false }
+    let launchObservation = resolvedLaunchObservation(identified: identified, previous: previous)
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
     var next = PaneAgentState(
       detectedAgent: agent,
       // Presence holds keep the last known pid so a probe gap does not flap
       // the session to nil and back (the resolver re-binds on the next hit).
       agentProcessID: identified?.process.pid ?? previous.agentProcessID,
+      launchObservation: launchObservation,
       session: session,
       iconLookupToken: iconLookupToken,
       fallbackState: raw,
@@ -169,6 +171,22 @@ extension WorktreeTerminalState {
     updateTabAgentBusyState(for: tabId)
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
     return true
+  }
+
+  private func resolvedLaunchObservation(
+    identified: IdentifiedAgentProcess?,
+    previous: PaneAgentState
+  ) -> AgentLaunchObservation? {
+    let observed = identified.flatMap { identified in
+      identified.process.arguments.map {
+        AgentRuntimeAdapterRegistry.observe(agent: identified.agent, arguments: $0)
+      }
+    }
+    return PaneAgentState.retainedLaunchObservation(
+      observed: observed,
+      previous: previous,
+      identifiedPID: identified?.process.pid
+    )
   }
 
   private func resolveRetainedSession(

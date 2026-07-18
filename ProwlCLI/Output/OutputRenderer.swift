@@ -301,6 +301,7 @@ enum OutputRenderer {
     case .save:
       lines.append("Handoff \("saved".green.bold)  \("changed:".dim) \(payload.changedFileCount) files")
       lines.append("  \("artifact:".dim) \(payload.artifactPath)")
+      lines.append(contentsOf: renderHandoffPreparation(payload.preparation))
       lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
       lines.append(contentsOf: renderHandoffRepos(payload.repos))
     case .toAgent:
@@ -311,6 +312,7 @@ enum OutputRenderer {
       if let archived = payload.archivedPath {
         lines.append("  \("archived:".dim) \(archived)")
       }
+      lines.append(contentsOf: renderHandoffPreparation(payload.preparation))
       lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
       if let pane = payload.launchedPane {
         lines.append("  \("launched:".dim) \(to.green) → \(pane.paneTitle.green)  \(pane.paneID.dim)")
@@ -321,6 +323,17 @@ enum OutputRenderer {
     }
 
     return lines.joined(separator: "\n")
+  }
+
+  private static func renderHandoffPreparation(_ preparation: String?) -> [String] {
+    guard let preparation else { return [] }
+    let label =
+      switch preparation {
+      case "completed": preparation.green
+      case "failed": preparation.yellow
+      default: preparation.dim
+      }
+    return ["  \("source prep:".dim) \(label)"]
   }
 
   private static func renderHandoffRepos(_ repos: [HandoffRepoPayload]) -> [String] {

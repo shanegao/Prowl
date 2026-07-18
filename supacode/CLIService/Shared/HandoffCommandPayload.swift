@@ -13,6 +13,8 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
   public let archivedPath: String?
   /// Auto-captured outgoing session context saved alongside `current.md`.
   public let sessionContext: HandoffSessionPayload?
+  /// Whether source preparation completed, failed, or was skipped (save/to).
+  public let preparation: String?
   /// The pane the receiving agent was launched into (for `to` with launch).
   public let launchedPane: HandoffPanePayload?
   /// Whether `current.md` exists (for `status`).
@@ -29,6 +31,7 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     case changedFileCount = "changed_file_count"
     case archivedPath = "archived_path"
     case sessionContext = "session_context"
+    case preparation
     case launchedPane = "launched_pane"
     case exists
     case lastLog = "last_log"
@@ -43,6 +46,7 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     changedFileCount: Int = 0,
     archivedPath: String? = nil,
     sessionContext: HandoffSessionPayload? = nil,
+    preparation: String? = nil,
     launchedPane: HandoffPanePayload? = nil,
     exists: Bool? = nil,
     lastLog: String? = nil
@@ -55,6 +59,7 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     self.changedFileCount = changedFileCount
     self.archivedPath = archivedPath
     self.sessionContext = sessionContext
+    self.preparation = preparation
     self.launchedPane = launchedPane
     self.exists = exists
     self.lastLog = lastLog

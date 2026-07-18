@@ -345,6 +345,20 @@ struct SupacodeApp: App {
           terminalManager: terminalManager
         )
       },
+      handoffLaunchObservation: { worktreeID in
+        guard let state = terminalManager.stateIfExists(for: worktreeID),
+          let tabID = state.tabManager.selectedTabId,
+          let surfaceID = state.activeSurfaceID(for: tabID)
+        else { return nil }
+        return state.surfaceAgentStates[surfaceID]?.launchObservation
+      },
+      handoffAgentSession: { worktreeID in
+        guard let state = terminalManager.stateIfExists(for: worktreeID),
+          let tabID = state.tabManager.selectedTabId,
+          let surfaceID = state.activeSurfaceID(for: tabID)
+        else { return nil }
+        return state.surfaceAgentStates[surfaceID]?.session
+      },
       handoffSessionContextForSurface: { worktreeID, surfaceID in
         return makeHandoffSessionContext(
           worktreeID: worktreeID,
@@ -670,14 +684,17 @@ struct SupacodeApp: App {
           )
         }
         return resolver.resolve(selector).map { resolved in
-          let agent = terminalManager.stateIfExists(for: resolved.worktreeID)?
-            .surfaceAgentStates[resolved.paneID]?.detectedAgent?.rawValue
+          let agentState = terminalManager.stateIfExists(for: resolved.worktreeID)?
+            .surfaceAgentStates[resolved.paneID]
+          let agent = agentState?.detectedAgent?.rawValue
           return HandoffResolvedTarget(
             worktreeID: resolved.worktreeID,
             worktreeName: resolved.worktreeName,
             rootPath: resolved.worktreePath,
             paneID: resolved.paneID.uuidString,
             outgoingAgent: agent,
+            outgoingLaunchObservation: agentState?.launchObservation,
+            outgoingSession: agentState?.session,
             sessionContext: makeHandoffSessionContext(
               worktreeID: resolved.worktreeID,
               paneID: resolved.paneID,
@@ -687,39 +704,15 @@ struct SupacodeApp: App {
           )
         }
       },
-      launchProvider: { target, kickoff in
-        let repositories = Array(appStore.state.repositories.repositories)
-        guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
-          return nil
-        }
-        selectCLIWorktreeContext(
-          worktreeID: target.worktreeID,
+      launchProvider: { target, request in
+        Self.launchHandoffReceiver(
+          target: target,
+          request: request,
           appStore: appStore,
           terminalManager: terminalManager
         )
-        let state = terminalManager.state(for: worktree)
-        guard
-          let tabID = state.createTab(
-            initialInput: kickoff,
-            workingDirectoryOverride: URL(fileURLWithPath: target.rootPath, isDirectory: true)
-          )
-        else {
-          return nil
-        }
-        let resolver = makeTargetResolver(appStore: appStore, terminalManager: terminalManager)
-        switch resolver.resolve(.tab(tabID.rawValue.uuidString)) {
-        case .success(let resolved):
-          return HandoffLaunchedPane(
-            worktreeID: resolved.worktreeID,
-            worktreeName: resolved.worktreeName,
-            tabID: resolved.tabID.uuidString,
-            paneID: resolved.paneID.uuidString,
-            paneTitle: resolved.paneTitle
-          )
-        case .failure:
-          return nil
-        }
-      }
+      },
+      preparationProvider: Self.prepareHandoffSource
     )
     return CLICommandRouter(
       openHandler: openHandler,
@@ -733,6 +726,55 @@ struct SupacodeApp: App {
       paneHandler: paneHandler,
       handoffHandler: handoffHandler
     )
+  }
+
+  private static func launchHandoffReceiver(
+    target: HandoffResolvedTarget,
+    request: AgentStartRequest,
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) -> HandoffLaunchedPane? {
+    let repositories = Array(appStore.state.repositories.repositories)
+    guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
+      return nil
+    }
+    selectCLIWorktreeContext(
+      worktreeID: target.worktreeID,
+      appStore: appStore,
+      terminalManager: terminalManager
+    )
+    guard let initialInput = try? AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput else {
+      return nil
+    }
+    let state = terminalManager.state(for: worktree)
+    guard
+      let tabID = state.createTab(
+        initialInput: initialInput,
+        workingDirectoryOverride: URL(fileURLWithPath: target.rootPath, isDirectory: true)
+      )
+    else {
+      return nil
+    }
+    let resolver = makeTargetResolver(appStore: appStore, terminalManager: terminalManager)
+    switch resolver.resolve(.tab(tabID.rawValue.uuidString)) {
+    case .success(let resolved):
+      return HandoffLaunchedPane(
+        worktreeID: resolved.worktreeID,
+        worktreeName: resolved.worktreeName,
+        tabID: resolved.tabID.uuidString,
+        paneID: resolved.paneID.uuidString,
+        paneTitle: resolved.paneTitle
+      )
+    case .failure:
+      return nil
+    }
+  }
+
+  nonisolated private static func prepareHandoffSource(
+    request: AgentResumeRequest,
+    directory: URL
+  ) async throws -> String {
+    try await AgentRuntimeClient.liveValue.resume(request, in: directory)
   }
 
   private static func makeCLISocketServer(
