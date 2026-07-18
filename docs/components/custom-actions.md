@@ -69,7 +69,8 @@ shortcuts**; conflicts (with reserved app actions or other custom commands) are
 detected when you record the key, and you choose Replace / Cancel.
 
 **Where they appear:** as buttons in the UI, in the Worktrees menu, and in the
-[Command Palette](command-palette.md). Global toolbar entries carry a globe marker.
+[Command Palette](command-palette.md). Global entries look identical to local ones;
+hovering shows a "Defined as a global command" tooltip note.
 Global commands are stored in `~/.prowl/global.onevcat.json`; local commands remain in
 `~/.prowl/repo/<repo-name>/prowl.onevcat.json`.
 

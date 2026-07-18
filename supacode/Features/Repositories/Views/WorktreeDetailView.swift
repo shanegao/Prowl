@@ -318,7 +318,7 @@ struct WorktreeDetailView: View {
             UserCustomCommandToolbarButton(
               title: command.command.resolvedTitle,
               systemImage: command.command.resolvedSystemImage,
-              sourceSystemImage: command.source.toolbarSystemImage,
+              source: command.source,
               shortcut: store.resolvedKeybindings.display(
                 for: command.keybindingID
               ),
@@ -1018,7 +1018,7 @@ struct WorktreeDetailView: View {
       UserCustomCommandToolbarButton(
         title: command.command.resolvedTitle,
         systemImage: command.command.resolvedSystemImage,
-        sourceSystemImage: command.source.toolbarSystemImage,
+        source: command.source,
         shortcut: customCommandShortcutDisplay(for: command),
         isEnabled: command.command.hasRunnableCommand,
         action: {

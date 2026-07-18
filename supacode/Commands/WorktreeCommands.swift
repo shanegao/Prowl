@@ -261,19 +261,26 @@ struct WorktreeCommands: Commands {
     command: EffectiveCustomCommand,
     hasActiveWorktree: Bool
   ) -> some View {
+    Button(command.command.resolvedTitle, systemImage: command.command.resolvedSystemImage) {
+      store.send(.runCustomCommand(command.id))
+    }
+    .modifier(KeyboardShortcutModifier(shortcut: customCommandShortcut(for: command)))
+    .help(customCommandHelpText(for: command))
+    .disabled(!hasActiveWorktree)
+  }
+
+  private func customCommandHelpText(for command: EffectiveCustomCommand) -> String {
     let title = command.command.resolvedTitle
-    let helpText: String =
+    var helpText: String =
       if let shortcut = customCommandShortcutDisplay(for: command) {
         "\(title) (\(shortcut))"
       } else {
         title
       }
-    Button(title, systemImage: command.command.resolvedSystemImage) {
-      store.send(.runCustomCommand(command.id))
+    if let note = command.source.tooltipNote {
+      helpText += " — \(note)"
     }
-    .modifier(KeyboardShortcutModifier(shortcut: customCommandShortcut(for: command)))
-    .help(helpText)
-    .disabled(!hasActiveWorktree)
+    return helpText
   }
 }
 

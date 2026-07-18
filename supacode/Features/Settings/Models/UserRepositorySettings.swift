@@ -135,10 +135,12 @@ nonisolated enum CustomCommandSource: String, Codable, CaseIterable, Equatable, 
     }
   }
 
-  var toolbarSystemImage: String? {
+  /// Extra sentence appended to hover tooltips; global commands are only
+  /// distinguished there so toolbar buttons stay visually uniform.
+  var tooltipNote: String? {
     switch self {
     case .repository: nil
-    case .global: "globe"
+    case .global: "Defined as a global command"
     }
   }
 }

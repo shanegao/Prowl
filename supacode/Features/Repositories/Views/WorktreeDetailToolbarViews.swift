@@ -122,7 +122,7 @@ struct RunScriptToolbarButton: View {
 struct UserCustomCommandToolbarButton: View {
   let title: String
   let systemImage: String
-  let sourceSystemImage: String?
+  let source: CustomCommandSource
   let shortcut: String?
   let isEnabled: Bool
   let action: () -> Void
@@ -135,12 +135,6 @@ struct UserCustomCommandToolbarButton: View {
       HStack(spacing: 6) {
         Image(systemName: systemImage)
           .accessibilityHidden(true)
-        if let sourceSystemImage {
-          Image(systemName: sourceSystemImage)
-            .imageScale(.small)
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-        }
         Text(title)
         if commandKeyObserver.isPressed, let shortcut {
           Text(shortcut)
@@ -156,12 +150,21 @@ struct UserCustomCommandToolbarButton: View {
 
   private var helpText: String {
     guard isEnabled else {
-      return "\(title) (Set command script in Repository Settings)"
+      switch source {
+      case .repository:
+        return "\(title) (Set command script in Repository Settings)"
+      case .global:
+        return "\(title) (Set command script in Settings → Custom Commands)"
+      }
     }
+    var text = title
     if let shortcut {
-      return "\(title) (\(shortcut))"
+      text = "\(title) (\(shortcut))"
     }
-    return title
+    if let note = source.tooltipNote {
+      text += " — \(note)"
+    }
+    return text
   }
 }
 
@@ -211,6 +214,7 @@ struct CustomCommandOverflowButton: View {
             }
             .buttonStyle(.plain)
             .disabled(!entry.command.hasRunnableCommand)
+            .help(helpText(for: entry))
           }
         }
         .padding(8)
@@ -222,6 +226,17 @@ struct CustomCommandOverflowButton: View {
   private var popoverHeight: CGFloat {
     let visibleRows = min(maxVisibleRows, max(entries.count, 1))
     return CGFloat(visibleRows) * 32 + 16
+  }
+
+  private func helpText(for entry: EffectiveCustomCommand) -> String {
+    var text = entry.command.resolvedTitle
+    if let shortcut = shortcutDisplay(entry) {
+      text = "\(text) (\(shortcut))"
+    }
+    if let note = entry.source.tooltipNote {
+      text += " — \(note)"
+    }
+    return text
   }
 }
 

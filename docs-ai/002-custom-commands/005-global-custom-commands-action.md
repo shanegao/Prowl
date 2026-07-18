@@ -17,8 +17,9 @@
   source-qualified command identity. Local bindings retain `custom_command.<uuid>` and
   global bindings use `custom_command.global.<uuid>`; a local shortcut collision disables
   the global binding.
-- Settings → Custom Commands edits the global list. The toolbar marks global entries and
-  the overflow menu receives the source-qualified commands.
+- Settings → Custom Commands edits the global list. Toolbar, overflow, and menu entries
+  render identically for both sources; the global origin is only surfaced in hover
+  tooltips ("Defined as a global command") after onevcat rejected a visible globe marker.
 - Both settings surfaces embed `CustomCommandsEditor`
   (`supacode/Features/Settings/Views/CustomCommandsEditor.swift`), parameterized by
   `CustomCommandSource` so shortcut resolution targets the right binding namespace. The
