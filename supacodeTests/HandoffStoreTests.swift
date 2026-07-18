@@ -131,14 +131,80 @@ struct HandoffStoreTests {
       ## Next Steps
       1. Review.
       """
-    #expect(store.applyPreparationReply(reply))
+    #expect(store.applyPreparationReply(reply, now: fixedDate))
     let content = try String(contentsOf: store.currentURL, encoding: .utf8)
     #expect(content == reply + "\n")
 
     // An unusable reply leaves the transcribed artifact untouched.
-    #expect(store.applyPreparationReply("nope") == false)
+    #expect(store.applyPreparationReply("nope", now: fixedDate) == false)
     let unchanged = try String(contentsOf: store.currentURL, encoding: .utf8)
     #expect(unchanged == reply + "\n")
+  }
+
+  @Test func applyPreparationReplyArchivesPreviousArtifact() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+    let previous = "# Handoff\n\n## Objective\nEarlier notes worth keeping.\n"
+    try FileManager.default.createDirectory(at: store.handoffDirectory, withIntermediateDirectories: true)
+    try previous.write(to: store.currentURL, atomically: true, encoding: .utf8)
+
+    let reply = """
+      # Handoff
+
+      ## Objective
+      Ship it.
+
+      ## Current State
+      Green.
+
+      ## Next Steps
+      1. Review.
+      """
+    #expect(store.applyPreparationReply(reply, now: fixedDate))
+
+    let archived = try FileManager.default.contentsOfDirectory(
+      at: store.archiveDirectory,
+      includingPropertiesForKeys: nil
+    )
+    let backup = try #require(archived.first { $0.lastPathComponent.hasSuffix("-preparation-backup.md") })
+    #expect(archived.count == 1)
+    #expect(try String(contentsOf: backup, encoding: .utf8) == previous)
+    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == reply + "\n")
+  }
+
+  @Test func applyPreparationReplySkipsArchiveForTemplateOrMissingArtifact() throws {
+    let reply = """
+      # Handoff
+
+      ## Objective
+      Ship it.
+
+      ## Current State
+      Green.
+
+      ## Next Steps
+      1. Review.
+      """
+
+    // First-ever preparation: no current.md to snapshot.
+    let freshRoot = try makeTempRoot()
+    defer { remove(freshRoot) }
+    let freshStore = HandoffStore(rootURL: freshRoot)
+    #expect(freshStore.applyPreparationReply(reply, now: fixedDate))
+    #expect(!FileManager.default.fileExists(atPath: freshStore.archiveDirectory.path(percentEncoded: false)))
+
+    // A never-edited seeded template carries no prose worth archiving.
+    let seededRoot = try makeTempRoot()
+    defer { remove(seededRoot) }
+    let seededStore = HandoffStore(rootURL: seededRoot)
+    try seededStore.ensureScaffold()
+    #expect(seededStore.applyPreparationReply(reply, now: fixedDate))
+    let archived = try FileManager.default.contentsOfDirectory(
+      at: seededStore.archiveDirectory,
+      includingPropertiesForKeys: nil
+    )
+    #expect(archived.isEmpty)
   }
 
   // MARK: - save (filesystem; non-git root)

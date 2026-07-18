@@ -221,15 +221,40 @@ nonisolated struct HandoffStore: Sendable {
   /// source agent's, this method only checks shape and writes it verbatim.
   /// Returns false (leaving the existing artifact in place) when the reply is
   /// empty, still the seeded template, or missing the core semantic sections.
-  func applyPreparationReply(_ reply: String) -> Bool {
+  /// The previous artifact is snapshotted into `archive/` first, so a reply
+  /// that drops sections never destroys the only copy of earlier notes.
+  func applyPreparationReply(_ reply: String, now: Date) -> Bool {
     guard let artifact = Self.preparedArtifact(fromAgentReply: reply) else { return false }
     do {
       try FileManager.default.createDirectory(at: handoffDirectory, withIntermediateDirectories: true)
+      try snapshotCurrentBeforePreparation(now: now)
       try artifact.write(to: currentURL, atomically: true, encoding: .utf8)
       return true
     } catch {
       return false
     }
+  }
+
+  /// Copy the existing `current.md` into `archive/<ts>-preparation-backup.md`
+  /// before a preparation reply overwrites it. The seeded template carries no
+  /// prose and is not worth archiving; a missing artifact means a first-ever
+  /// preparation. An unreadable artifact throws, failing the preparation and
+  /// leaving `current.md` untouched.
+  private func snapshotCurrentBeforePreparation(now: Date) throws {
+    guard FileManager.default.fileExists(atPath: currentURL.path(percentEncoded: false)) else { return }
+    let existing = try String(contentsOf: currentURL, encoding: .utf8)
+    guard existing != Self.template else { return }
+    try FileManager.default.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
+    let stem = "\(Self.fileStamp(now))-preparation-backup"
+    let destination = try Self.reserveFileURL(in: archiveDirectory, stem: stem, fileExtension: "md")
+    var didWrite = false
+    defer {
+      if !didWrite {
+        try? FileManager.default.removeItem(at: destination)
+      }
+    }
+    try existing.write(to: destination, atomically: true, encoding: .utf8)
+    didWrite = true
   }
 
   /// Normalizes a preparation reply into artifact content, or nil when unusable.

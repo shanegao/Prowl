@@ -28,7 +28,9 @@
   transcribes the reply into `current.md` via `HandoffStore`. One resume turn is bounded by a
   2-minute timeout with child termination; `--no-prepare` skips the turn; `save` records the
   outcome on a single log line; Codex's `--yolo` alias counts as observed unrestricted; the
-  Command Palette shows progress/warning toasts during preparation.
+  Command Palette shows progress/warning toasts during preparation. A validated reply first
+  snapshots the previous edited `current.md` to `archive/<ts>-preparation-backup.md`, so a reply
+  that drops sections never destroys the only copy of earlier notes.
 - Updated the handoff, CLI, and Command Palette documentation with the safety boundary and
   configuration inheritance rules.
 

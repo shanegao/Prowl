@@ -104,7 +104,7 @@ final class HandoffCommandHandler: CommandHandler {
   ) async -> CommandResponse {
     let outgoing = target.outgoingAgent
     let note = input.note
-    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store)
+    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store, timestamp: timestamp)
     do {
       let result = try await Task.detached {
         try store.save(
@@ -140,7 +140,7 @@ final class HandoffCommandHandler: CommandHandler {
     guard let destinationAgent = DetectedAgent(rawValue: toAgent) else {
       return errorResponse(code: CLIErrorCode.invalidArgument, message: "Unknown handoff agent: \(toAgent).")
     }
-    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store)
+    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store, timestamp: timestamp)
 
     let saveResult: HandoffStore.SaveResult
     let archivedPath: String?
@@ -222,7 +222,8 @@ final class HandoffCommandHandler: CommandHandler {
   private func prepareOutgoingAgent(
     input: HandoffInput,
     target: HandoffResolvedTarget,
-    store: HandoffStore
+    store: HandoffStore,
+    timestamp: Date
   ) async -> HandoffPreparationOutcome {
     guard
       input.prepare,
@@ -240,7 +241,7 @@ final class HandoffCommandHandler: CommandHandler {
         URL(fileURLWithPath: target.rootPath, isDirectory: true)
       )
       return await Task.detached {
-        store.applyPreparationReply(reply) ? HandoffPreparationOutcome.completed : .failed
+        store.applyPreparationReply(reply, now: timestamp) ? HandoffPreparationOutcome.completed : .failed
       }.value
     } catch {
       return .failed

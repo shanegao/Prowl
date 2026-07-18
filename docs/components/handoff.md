@@ -30,6 +30,7 @@ Everything lives under the target's `.prowl/handoff/` directory:
   context.md            Prowl-generated repository and session state
   log.md                append-only handoff history
   archive/<ts>-<from>-to-<to>.md
+  archive/<ts>-preparation-backup.md
   sessions/<ts>-<pane>.md
 ```
 
@@ -44,8 +45,11 @@ native session for a supported outgoing agent, `handoff save` and `handoff to`
 first resume that agent in a read-only, non-interactive turn and ask it to
 **reply** with the updated document; Prowl validates the reply (required
 sections present, not the seeded template) and transcribes it into `current.md`.
-The prose is always the agent's — Prowl never authors semantic content, it only
-seeds the template and transcribes validated replies.
+Before transcription, the previous edited `current.md` is snapshotted to
+`archive/<ts>-preparation-backup.md`, so a reply that drops sections never
+destroys the only copy of earlier notes. The prose is always the agent's —
+Prowl never authors semantic content, it only seeds the template and
+transcribes validated replies.
 
 `context.md` contains the detected outgoing agent, a pointer to the captured
 session excerpt, each repo's branch and change counts, and the changed files.
@@ -151,6 +155,8 @@ warning toast notes the handoff continued with the existing notes.
   high-confidence native session, when the agent has no verified resume
   adapter, or when `--no-prepare` is passed. A reply that fails validation is
   recorded as `preparation=failed` and never overwrites the existing artifact.
+  A validated reply first snapshots the previous edited `current.md` to
+  `archive/<ts>-preparation-backup.md` before transcription.
 - Keep secrets/tokens out of the handoff file (the protocol asks agents not to
   write them).
 - `.prowl/handoff/` is self-ignoring; session excerpts can contain terminal

@@ -327,7 +327,8 @@ extension AppFeature {
           request: preparationRequest,
           store: store,
           rootURL: rootURL,
-          runtimeClient: agentRuntimeClient
+          runtimeClient: agentRuntimeClient,
+          now: now
         )
       } else {
         preparation = .skipped
@@ -383,12 +384,13 @@ extension AppFeature {
     request: AgentResumeRequest,
     store: HandoffStore,
     rootURL: URL,
-    runtimeClient: AgentRuntimeClient
+    runtimeClient: AgentRuntimeClient,
+    now: Date
   ) async -> HandoffPreparationOutcome {
     do {
       let reply = try await runtimeClient.resume(request, in: rootURL)
       return await Task.detached {
-        store.applyPreparationReply(reply) ? HandoffPreparationOutcome.completed : .failed
+        store.applyPreparationReply(reply, now: now) ? HandoffPreparationOutcome.completed : .failed
       }.value
     } catch {
       return .failed
