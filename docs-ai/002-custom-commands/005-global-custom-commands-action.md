@@ -5,8 +5,9 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-07-13 | Added global command storage, resolution, settings UI, source-qualified routing, tests, and manual documentation. | `f481db26` |
+| 2026-07-19 | Extracted the repository command table into the shared `CustomCommandsEditor` and adopted it for the global list (icon picker, inline editing, shortcut recording with Replace/Cancel conflicts, explicit +/− removal). Restored the unqualified palette ID for repository commands. | PR #582 review follow-up |
 
-## Outcome & current state (as of 2026-07-13)
+## Outcome & current state (as of 2026-07-19)
 
 - `UserGlobalSettings` persists `customCommands` in `~/.prowl/global.onevcat.json` through
   `UserGlobalSettingsKey`.
@@ -18,12 +19,19 @@
   the global binding.
 - Settings → Custom Commands edits the global list. The toolbar marks global entries and
   the overflow menu receives the source-qualified commands.
+- Both settings surfaces embed `CustomCommandsEditor`
+  (`supacode/Features/Settings/Views/CustomCommandsEditor.swift`), parameterized by
+  `CustomCommandSource` so shortcut resolution targets the right binding namespace. The
+  editor owns its transient selection/popover/recording state; persistence stays with the
+  host reducers (`RepositorySettingsFeature.binding`, `GlobalCustomCommandsFeature.binding`).
+- Palette IDs: repository commands keep the pre-global `custom-command.<uuid>` form so
+  persisted palette recency survives; global commands use `custom-command.global.<uuid>`,
+  mirroring the keybinding scheme.
 
 ## Deviations from plan
 
-The global editor is intentionally compact rather than extracting the existing
-repository editor into a shared view. It supports the same persisted command fields while
-keeping the repository editor unchanged.
+None. An initial compact global editor shipped first; the follow-up replaced it with the
+shared editor extraction the plan originally called for.
 
 ## Open questions
 

@@ -241,11 +241,11 @@ struct CommandPaletteFeatureTests {
       ]
     )
     let ids = Set(items.map(\.id))
-    #expect(ids.contains("custom-command.repository.cmd-build"))
+    #expect(ids.contains("custom-command.cmd-build"))
     // Commands with empty body are filtered out.
-    #expect(!ids.contains("custom-command.repository.cmd-empty"))
+    #expect(!ids.contains("custom-command.cmd-empty"))
 
-    let buildItem = items.first { $0.id == "custom-command.repository.cmd-build" }
+    let buildItem = items.first { $0.id == "custom-command.cmd-build" }
     #expect(buildItem?.title == "Build")
     #expect(buildItem?.subtitle == "Local custom command · Opens in a new tab")
     #expect(buildItem?.defaultSuggestion == false)
@@ -325,15 +325,15 @@ struct CommandPaletteFeatureTests {
     )
 
     #expect(
-      items.first { $0.id == "custom-command.repository.cmd-shell" }?.subtitle
+      items.first { $0.id == "custom-command.cmd-shell" }?.subtitle
         == "Local custom command · Opens in a new tab"
     )
     #expect(
-      items.first { $0.id == "custom-command.repository.cmd-inline" }?.subtitle
+      items.first { $0.id == "custom-command.cmd-inline" }?.subtitle
         == "Local custom command · Runs in the focused terminal"
     )
     #expect(
-      items.first { $0.id == "custom-command.repository.cmd-split" }?.subtitle
+      items.first { $0.id == "custom-command.cmd-split" }?.subtitle
         == "Local custom command · Opens in a new split (down)"
     )
   }

@@ -29,7 +29,7 @@ struct EffectiveCustomCommandTests {
     #expect(local.id != global.id)
     #expect(local.keybindingID == "custom_command.same")
     #expect(global.keybindingID == "custom_command.global.same")
-    #expect(local.paletteID == "custom-command.repository.same")
+    #expect(local.paletteID == "custom-command.same")
     #expect(global.paletteID == "custom-command.global.same")
   }
 

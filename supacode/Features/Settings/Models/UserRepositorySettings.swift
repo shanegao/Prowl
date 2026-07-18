@@ -158,8 +158,14 @@ nonisolated struct EffectiveCustomCommand: Equatable, Sendable, Identifiable {
     LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id, source: source)
   }
 
+  /// Repository commands keep the pre-global `custom-command.<id>` form so
+  /// persisted palette recency survives; globals get their own namespace,
+  /// mirroring the keybinding ID scheme.
   var paletteID: String {
-    "custom-command.\(source.rawValue).\(command.id)"
+    switch source {
+    case .repository: "custom-command.\(command.id)"
+    case .global: "custom-command.global.\(command.id)"
+    }
   }
 
   static func resolve(

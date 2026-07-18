@@ -1,7 +1,6 @@
 import ComposableArchitecture
 import Foundation
 import Sharing
-import SwiftUI
 
 @Reducer
 struct GlobalCustomCommandsFeature {
@@ -14,8 +13,6 @@ struct GlobalCustomCommandsFeature {
   enum Action: BindableAction {
     case task
     case settingsLoaded(UserGlobalSettings, KeybindingUserOverrideStore)
-    case addCommand
-    case removeCommands(IndexSet)
     case binding(BindingAction<State>)
     case delegate(Delegate)
   }
@@ -40,14 +37,6 @@ struct GlobalCustomCommandsFeature {
         state.settings = settings.normalized()
         state.keybindingUserOverrides = overrides
         return .none
-
-      case .addCommand:
-        state.settings.customCommands.append(.default(index: state.settings.customCommands.count))
-        return persist(state.settings)
-
-      case .removeCommands(let offsets):
-        state.settings.customCommands.remove(atOffsets: offsets)
-        return persist(state.settings)
 
       case .binding:
         state.settings = state.settings.normalized()

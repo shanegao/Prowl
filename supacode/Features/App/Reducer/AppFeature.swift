@@ -687,11 +687,11 @@ struct AppFeature {
           await terminalClient.send(.runScript(worktree, script: script))
         }
 
-      case .runCustomCommand(let index):
+      case .runCustomCommand(let commandID):
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        guard let effectiveCommand = state.selectedCustomCommands.first(where: { $0.id == index }) else {
+        guard let effectiveCommand = state.selectedCustomCommands.first(where: { $0.id == commandID }) else {
           return .none
         }
         let customCommand = effectiveCommand.command
