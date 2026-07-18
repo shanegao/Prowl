@@ -24,6 +24,7 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "amp") == .amp)
     #expect(identifyAgent(processName: "amp-local") == .amp)
     #expect(identifyAgent(processName: "qwen") == .qwen)
+    #expect(identifyAgent(processName: "qodercli")?.rawValue == "qodercli")
     #expect(identifyAgent(processName: "grok") == .grok)
     #expect(identifyAgent(processName: "grok-0.2.101-macos-aarch64") == .grok)
     // Model ids must not be treated as the install binary.
@@ -226,6 +227,24 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .codex)
     #expect(result.name == "codex")
+  }
+
+  @Test func identifiesQoderCLIWrappedByNode() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "node",
+          argv0: "node",
+          cmdline: "node /opt/homebrew/lib/node_modules/@qoder-ai/qodercli/bundle/qodercli.js"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent.rawValue == "qodercli")
+    #expect(result.name == "qodercli")
   }
 
   @Test func identifiesOmxAsCodexWrapper() throws {

@@ -541,6 +541,61 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.qwen.detectState(in: "> Type your message") == .idle)
   }
 
+  @Test func qoderCLIDetection() throws {
+    let qoder = try #require(DetectedAgent(rawValue: "qodercli"))
+
+    #expect(
+      qoder.detectState(
+        in: """
+          Bash(git status) needs permission
+          > Allow once
+            Allow for this session
+            Reject and type something
+            No
+          """
+      ) == .blocked
+    )
+    #expect(
+      qoder.detectState(
+        in: "⠋ Thinking... (esc to cancel, 12s)"
+      ) == .working
+    )
+    #expect(qoder.detectState(in: "Allow once\nNo") == .idle)
+    #expect(
+      qoder.detectState(
+        in: """
+          > Allow once
+            Allow for this session
+            Reject and type something
+            No
+          Permission resolved.
+          Current prompt is ready.
+          Use /help for commands.
+          Workspace: Prowl
+          Mode: default
+          Model: Qoder
+          ? for shortcuts
+          ❯
+          """
+      ) == .idle
+    )
+    #expect(
+      qoder.detectState(
+        in: """
+          ⠋ Thinking... (esc to cancel, 12s)
+          Previous task completed.
+          Current prompt is ready.
+          Use /help for commands.
+          Workspace: Prowl
+          Mode: default
+          Model: Qoder
+          ? for shortcuts
+          ❯
+          """
+      ) == .idle
+    )
+  }
+
   @Test func grokDetection() {
     // Permission chrome (labels verified against Grok Build 0.2.101 binary).
     #expect(
