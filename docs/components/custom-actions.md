@@ -72,7 +72,7 @@ Command Palette, and hotkey dispatch until re-enabled.
 globally and enabled for that repository. New Global commands are enabled in every
 repository by default; Repo Settings can turn an individual Global command off without
 changing its definition. Global command fields and order are edited only in
-Settings → Global Commands.
+Settings → Commands.
 
 **Shortcut precedence:** a repo command wins a collision with a Global command's
 shortcut. Custom Command hotkeys take **precedence over app shortcuts**; conflicts
@@ -96,7 +96,7 @@ menu, and the [Command Palette](command-palette.md). Global commands are stored 
 
 - Per repo (Repo Settings): `runScript`, `setupScript`, `archiveScript`, local Custom
   Commands, and per-repository visibility of Global Commands.
-- Global (Settings → Global Commands): Global Custom Commands and their order.
+- Global (Settings → Commands): Global Custom Commands and their order.
 - Global: `showRunButtonInToolbar`, `showDefaultEditorInToolbar`.
 
 ## Gotchas for agents

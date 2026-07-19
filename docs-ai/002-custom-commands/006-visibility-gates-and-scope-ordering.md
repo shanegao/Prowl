@@ -65,7 +65,8 @@ repository settings cannot show the effective command list that drives the toolb
   enabled for a repository.
 - `EffectiveCustomCommand.resolve` now filters disabled commands, preserves source-qualified IDs,
   retains duplicate titles, and orders repository commands before Global commands.
-- The shared editor presents enable toggles and drag handles. Repository settings append read-only
+- The shared editor presents compact standard checkboxes and drag handles. It accepts only known
+  local-command drag payloads, supports an unconditional append drop target, and appends read-only
   Global rows with a Global marker and This Repo gate; a globally disabled row stays configurable.
 - The manual documents visibility, ordering, duplicate titles, gates, shortcut behavior, and the
   updated settings entry points.
@@ -73,4 +74,14 @@ repository settings cannot show the effective command list that drives the toolb
 
 ## Amendments
 
-(append follow-up notes here)
+### 2026-07-19 — Review follow-up
+
+- **No same-title migration**: the clean cutover remains intentional. A one-time opt-out would
+  incorrectly keep a Global command hidden after its matching local command is later deleted; the
+  release note instead calls out that both commands now appear.
+- **No eager dead-ID cleanup**: repository settings cannot validate Global IDs in isolation.
+  Deleting a Global command therefore leaves harmless historical opt-outs rather than triggering
+  cross-repository writes.
+- **Settings refinements**: the trailing reorder target is always available, drop destinations
+  reject unknown IDs, enable controls use compact standard checkboxes, and Global opt-outs encode
+  in sorted order to avoid configuration churn.

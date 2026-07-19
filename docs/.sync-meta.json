@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "c876fe33fe7e8f2940e5e05320d79565c8b34165",
+  "last_synced_commit": "9611a12d1437e6c44bb9c6f393bf2352b487373d",
   "last_synced_date": "2026-07-19",
-  "note": "Custom Command visibility gates: verified enabled ordering, Global per-repository opt-outs, source-aware settings controls, command surfaces, and shortcut registration."
+  "note": "Custom Command follow-up: verified compact checkbox controls, valid drag targets, append reorder target, and deterministic Global opt-out encoding."
 }
