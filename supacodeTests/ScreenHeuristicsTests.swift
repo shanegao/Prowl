@@ -16,6 +16,25 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.pi.detectState(in: "Done") == .idle)
   }
 
+  @Test func piAskPromptIsBlocked() {
+    #expect(
+      DetectedAgent.pi.detectState(
+        in: """
+          ⠏ Clarifying combined list order ⟨esc⟩
+
+          ╭─ Ask ─────────────────────────────────────────────────────────────────────╮
+          │ Which order should the combined list use?                                  │
+          ├────────────────────────────────────────────────────────────────────────────┤
+          │   Repo first                                                             │
+          │    Global first                                                           │
+          ├────────────────────────────────────────────────────────────────────────────┤
+          │ Enter select · n note · ↑/↓ move · Esc cancel                              │
+          ╰────────────────────────────────────────────────────────────────────────────╯
+          """
+      ) == .blocked
+    )
+  }
+
   @Test func piIgnoresStaleWorkingMentionInCompletedOutput() {
     #expect(
       DetectedAgent.pi.detectState(
