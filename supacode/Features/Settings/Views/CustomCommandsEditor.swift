@@ -386,10 +386,7 @@ struct CustomCommandsEditor: View {
   private var customCommandsHeaderRow: some View {
     HStack(spacing: 8) {
       customCommandHeaderCell("", width: customCommandsDragColumnWidth, alignment: .center)
-      Image(systemName: "checkmark")
-        .frame(width: customCommandsEnabledColumnWidth, alignment: .center)
-        .accessibilityLabel("Enabled")
-        .help("Enabled")
+      customCommandHeaderCell("", width: customCommandsEnabledColumnWidth, alignment: .center)
       customCommandHeaderCell("", width: customCommandsIconColumnWidth, alignment: .center)
       customCommandHeaderCell("Name", width: customCommandsNameColumnWidth)
       customCommandHeaderCell("Command")
