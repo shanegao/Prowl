@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-07-19 |
-| **Primary PRs** | Pending |
+| **Primary PRs** | #600 |
 | **Related** | [002 Custom Commands](000-plan.md), [012 Keybinding System](../012-keybinding-system/000-plan.md), `docs/components/custom-actions.md` |
 
 ## Background
