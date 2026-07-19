@@ -172,9 +172,26 @@ private func runGit(_ arguments: [String], in directory: URL) throws {
   process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
   process.arguments = arguments
   process.currentDirectoryURL = directory
-  process.standardOutput = Pipe()
-  process.standardError = Pipe()
+  var environment = ProcessInfo.processInfo.environment
+  environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
+  environment["GIT_CONFIG_NOSYSTEM"] = "1"
+  process.environment = environment
+  let stdout = Pipe()
+  let stderr = Pipe()
+  process.standardOutput = stdout
+  process.standardError = stderr
   try process.run()
   process.waitUntilExit()
-  #expect(process.terminationStatus == 0)
+  let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+  let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+  guard process.terminationStatus == 0 else {
+    let command = arguments.joined(separator: " ")
+    let path = directory.path(percentEncoded: false)
+    let message = "git \(command) failed in \(path)\nstdout: \(stdoutText)\nstderr: \(stderrText)"
+    throw NSError(
+      domain: "ExternalDiffToolTests.runGit",
+      code: Int(process.terminationStatus),
+      userInfo: [NSLocalizedDescriptionKey: message]
+    )
+  }
 }

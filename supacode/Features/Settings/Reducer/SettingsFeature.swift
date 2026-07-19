@@ -21,7 +21,7 @@ struct SettingsFeature {
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
-    var deleteBranchOnDeleteWorktree: Bool
+    var deleteBranchOnAutomaticCleanup: Bool
     var mergedWorktreeAction: MergedWorktreeAction?
     var archivedAutoDeletePeriod: AutoDeletePeriod?
     var promptForWorktreeCreation: Bool
@@ -80,7 +80,7 @@ struct SettingsFeature {
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
-      deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
+      deleteBranchOnAutomaticCleanup = settings.deleteBranchOnAutomaticCleanup
       mergedWorktreeAction = settings.mergedWorktreeAction
       archivedAutoDeletePeriod = settings.archivedAutoDeletePeriod
       promptForWorktreeCreation = settings.promptForWorktreeCreation
@@ -128,7 +128,7 @@ struct SettingsFeature {
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
-        deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
+        deleteBranchOnAutomaticCleanup: deleteBranchOnAutomaticCleanup,
         mergedWorktreeAction: mergedWorktreeAction,
         promptForWorktreeCreation: promptForWorktreeCreation,
         fetchOriginBeforeWorktreeCreation: fetchRemoteBeforeWorktreeCreation,
@@ -250,7 +250,7 @@ struct SettingsFeature {
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
-        state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
+        state.deleteBranchOnAutomaticCleanup = normalizedSettings.deleteBranchOnAutomaticCleanup
         state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
         state.archivedAutoDeletePeriod = normalizedSettings.archivedAutoDeletePeriod
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation

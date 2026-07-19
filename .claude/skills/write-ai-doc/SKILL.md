@@ -1,27 +1,30 @@
 ---
 name: write-ai-doc
-description: Create and maintain spec-driven work records under docs-ai/ (numbered entries with 000-plan.md before implementation and 001-action.md after). Use when starting a medium/large feature, a complex or decision-shaping fix, or a non-trivial investigation — write the plan entry BEFORE coding; use also when amending an existing entry after follow-up work on the same topic.
+description: Create and maintain curated docs-ai/ records for substantial features and non-trivial, decision-shaping fixes (numbered entries with 000-plan.md before implementation and 001-action.md after). Do not use for reviews, audits, routine investigations, working notes, or status reports unless onevcat explicitly asks for a docs-ai/ record.
 ---
 
 # Write AI Doc
 
-`docs-ai/` is Prowl's durable record of how the app evolved: one numbered folder per
-feature or decision-shaping fix, each holding an RFC-like plan and an action log. Future
-humans and agents use it to answer "why is it built this way?" — so entries must stay
-accurate against the code. Read `docs-ai/README.md` for the index and intent.
+`docs-ai/` is Prowl's curated product/design record, not a working-note log. A numbered
+folder is reserved for a substantial feature or a non-trivial, decision-shaping fix, each
+holding an RFC-like plan and an action log. Future humans and agents use it to answer "why
+is it built this way?" — so entries must be selected deliberately and stay accurate against
+the code. Read `docs-ai/README.md` for the index and intent.
 
 ## When to write one
 
-Create a new entry when the work is any of:
+Create a new entry only when the work is either:
 
-- a feature that needs planning (multiple files/reducers, new UI surface, new subsystem);
-- a fix whose investigation or decision matters later (root-cause hunts, perf hunts,
-  behavior-defining choices, upstream-divergence decisions);
-- an investigation worth keeping even if no code changes.
+- a substantial feature with an enduring product or architecture decision (for example, a
+  new UI surface, subsystem, or multi-reducer behavior);
+- a non-trivial fix whose root cause, design decision, or resulting behavior must guide
+  future implementation.
 
-Skip it for: trivial/small fixes, pure formatting or dependency bumps, routine upstream
-ports already recorded in the upstream ledger (`docs-ai/017-upstream-sync-process/upstream-ledger.md`), and docs-only changes. When in
-doubt, a short entry beats a missing one.
+Do **not** create an entry merely because the work is detailed, takes time, or produces useful
+findings. Skip reviews, code or post-release audits, routine research/investigations and
+debugging, status reports, test runs, pure formatting or dependency bumps, routine upstream
+ports already recorded in the upstream ledger (`docs-ai/017-upstream-sync-process/upstream-ledger.md`), and docs-only changes. A user may explicitly request a record for an otherwise
+non-qualifying task. When in doubt, do not write one.
 
 ## Workflow
 
@@ -65,7 +68,7 @@ entry, cross-link both directions, and mark the old plan `Status: Superseded by
 | **Related** | [NNN-other](../NNN-other/000-plan.md), `docs/...` |
 
 ## Background
-The problem/pain and its context; for investigations, the observed symptom.
+The product problem/pain and its context; for a fix, the observed symptom.
 
 ## Goals
 Bullets. Add a **Non-goals** subsection when scope exclusion is a real decision.
@@ -119,7 +122,8 @@ What was done. | ## Refs: PR #x | ## Current state (optional)
   writing). Facts you can't verify belong under **Open questions**, not in prose.
 - Reference fork PRs as `#123`, upstream PRs as `upstream #123`, files as inline code.
   Cross-link sibling entries with relative links.
-- `docs-ai/` is the single home for fork history AND fork-internal operational docs.
+- `docs-ai/` is the curated home for fork history plus fork-internal product, design, and
+  operational docs. It is not a task journal.
   Numbered files are immutable history; **non-numbered** files inside an entry folder
   (e.g. `001-.../release-runbook.md`, `017-.../upstream-ledger.md`,
   `013-prowl-cli/contracts/`, `020-observability/runbook.md`) are living documents —

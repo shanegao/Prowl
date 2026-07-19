@@ -81,8 +81,13 @@ Path-like first arg (v1):
 
 - `-t <value>` / `--target <value>` — auto-resolve: try pane UUID → tab UUID → worktree id/name/path.
 - `--worktree <id|name|path>` — explicit worktree selector.
-- `--tab <id>` — explicit tab UUID selector.
-- `--pane <id>` — explicit pane UUID selector.
+- `--tab <id>` — explicit tab UUID or current short handle (`tN` or bare `N`).
+- `--pane <id>` — explicit pane UUID or current short handle (`pN` or bare `N`).
+
+Short handles are process-scoped, globally monotonic, and never reused after a
+target closes. They are intentionally unsupported for `--target` and positional
+auto-targeting, where a bare number can be a worktree name. JSON `id` fields
+remain canonical UUIDs.
 
 ### 3.2 Positional target shorthand
 
@@ -317,6 +322,8 @@ prowl .
 prowl open ~/Projects/Prowl
 prowl focus 6E1A2A10-D99F-4E3F-920C-D93AA3C05764          # auto-resolve pane UUID
 prowl focus --pane 6E1A2A10-D99F-4E3F-920C-D93AA3C05764    # explicit pane
+prowl read --pane p3 --last 200                             # explicit pane handle
+prowl tab close --tab t4 --force                            # explicit tab handle
 prowl focus main                                            # auto-resolve worktree name
 prowl send "echo hello"                                     # text to current pane
 prowl send 6E1A2A10-D99F-4E3F-920C-D93AA3C05764 "echo hi"  # target + text

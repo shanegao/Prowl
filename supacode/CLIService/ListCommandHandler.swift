@@ -13,16 +13,41 @@ struct ListRuntimeSnapshot: Sendable {
 
   struct Tab: Sendable {
     let id: UUID
+    let handle: Int?
     let title: String
     let selected: Bool
     let focusedPaneID: UUID?
     let panes: [Pane]
+
+    init(
+      id: UUID,
+      handle: Int? = nil,
+      title: String,
+      selected: Bool,
+      focusedPaneID: UUID?,
+      panes: [Pane]
+    ) {
+      self.id = id
+      self.handle = handle
+      self.title = title
+      self.selected = selected
+      self.focusedPaneID = focusedPaneID
+      self.panes = panes
+    }
   }
 
   struct Pane: Sendable {
     let id: UUID
+    let handle: Int?
     let title: String
     let cwd: String?
+
+    init(id: UUID, handle: Int? = nil, title: String, cwd: String?) {
+      self.id = id
+      self.handle = handle
+      self.title = title
+      self.cwd = cwd
+    }
   }
 
   let worktrees: [Worktree]
@@ -39,10 +64,10 @@ final class ListCommandHandler: CommandHandler {
   }
 
   // swiftlint:disable:next async_without_await
-  func handle(envelope _: CommandEnvelope) async -> CommandResponse {
+  func handle(envelope: CommandEnvelope) async -> CommandResponse {
     do {
       let snapshot = try snapshotProvider()
-      let payload = makePayload(from: snapshot)
+      let payload = makePayload(from: snapshot, includeHandles: envelope.output == .text)
       return try CommandResponse(
         ok: true,
         command: "list",
@@ -62,7 +87,10 @@ final class ListCommandHandler: CommandHandler {
     }
   }
 
-  private func makePayload(from snapshot: ListRuntimeSnapshot) -> ListCommandPayload {
+  private func makePayload(
+    from snapshot: ListRuntimeSnapshot,
+    includeHandles: Bool
+  ) -> ListCommandPayload {
     var items: [ListCommandItem] = []
     var didAssignFocusedPane = false
 
@@ -90,11 +118,13 @@ final class ListCommandHandler: CommandHandler {
               ),
               tab: ListCommandTab(
                 id: tab.id.uuidString,
+                handle: includeHandles ? tab.handle : nil,
                 title: tab.title,
                 selected: tab.selected
               ),
               pane: ListCommandPane(
                 id: pane.id.uuidString,
+                handle: includeHandles ? pane.handle : nil,
                 title: pane.title,
                 cwd: pane.cwd,
                 focused: isFocused

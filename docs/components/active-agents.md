@@ -70,9 +70,10 @@ When nothing is running: "New agents will appear here".
 
 - **Agent detection** ([agent-detection](agent-detection.md)) feeds this panel.
 - **CLI** ([cli](cli.md)) exposes the same roster through `prowl agents` and
-  `prowl agents --json`. The command is read-only; use the returned
-  `pane.id` with `prowl focus --pane`, `prowl read --pane`, or
-  `prowl send --pane` for follow-up actions.
+  `prowl agents --json`. The command is read-only; text output shows a current
+  `pN` pane handle, while JSON keeps the canonical `pane.id`. Use either with
+  `prowl focus --pane`, `prowl read --pane`, or `prowl send --pane` for
+  follow-up actions.
 - **Notifications** ([notifications](notifications.md)) are driven by a separate
   signal — terminal bell / OSC desktop notifications and command-finished
   events — which usually coincides with, but is not the same as, a detected finish.

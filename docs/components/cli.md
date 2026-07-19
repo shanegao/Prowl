@@ -42,8 +42,10 @@ check the exit code before piping to `jq`.
 
 Most commands accept one selector (mutually exclusive):
 
-- `--pane <uuid>` — a specific pane (safest for automation).
-- `--tab <uuid>` — a specific tab (its focused/first pane).
+- `--pane <uuid|pN|N>` — a specific pane. `pN` is the short handle shown in
+  text output; bare `N` is accepted too.
+- `--tab <uuid|tN|N>` — a specific tab (its focused/first pane). `tN` is the
+  short handle shown in text output; bare `N` is accepted too.
 - `--worktree <id|name|path>` — a worktree (its selected/first tab → focused/first
   pane).
 - `-t, --target <value>` — auto-resolve: tries pane UUID, then tab UUID, then
@@ -54,8 +56,16 @@ Most commands accept one selector (mutually exclusive):
 **Rules:** at most one selector (else `INVALID_ARGUMENT`); prefer explicit
 `--pane`. The focused pane is not stable — `open` and `focus` change it.
 
-> **Never target by tab title.** Titles are free-form and can lie. Resolve a
-> concrete `pane.id` from `prowl list --json` first.
+Text `list` and `agents` output exposes short, type-prefixed handles such as
+`p7` and `t6`. They are valid only for the current app process, are globally
+monotonic, and are never reused after a tab or pane closes. Use them with an
+explicit `--pane` or `--tab`; `--target` and positional targets deliberately do
+not resolve handles because a bare number can be a worktree name. JSON always
+keeps the canonical UUID in `id`; do not cache either form across an app restart.
+
+> **Never target by tab title.** Titles are free-form and can lie. For scripts,
+> resolve a concrete UUID `pane.id` from `prowl list --json`; for an interactive
+> same-session handoff, copy the `pN` handle from text `prowl list`.
 
 ## Commands
 
@@ -70,6 +80,16 @@ Each item contains:
 - `tab`: `id`, `title`, `selected`
 - `pane`: `id`, `title`, `cwd`, `focused`
 - `task`: `status` (`running` | `idle` | null)
+
+These are JSON fields, so `tab.id` and `pane.id` remain UUIDs. Plain `prowl list`
+instead shows `tN` for each tab and `pN` for each pane; pass either handle back
+with the corresponding explicit selector:
+
+```bash
+prowl list
+prowl read --pane p7 --last 120 --wait-stable
+prowl tab close --tab t6 --force
+```
 
 `task.status` is **running** when any pane in the worktree is busy — a terminal
 command reporting progress, or a detected agent that is Working/Blocked (including
@@ -119,7 +139,9 @@ prowl read --pane "$pane" --last 120 --wait-stable
 ```
 
 Text output is sorted for triage: `Blocked`, `Working`, `Done`, then `Idle`.
-Empty output prints `No agents found.`.
+It prints a pane handle such as `p7` for each agent; use it as
+`prowl read --pane p7`, not as an `agents` subcommand. Empty output prints
+`No agents found.`.
 
 ### `prowl read [target]`
 Read a pane's content.
@@ -239,7 +261,7 @@ inside-root / new-root), `app_launched`, `brought_to_front`, `created_tab`, and 
 |------|--------------------|
 | `APP_NOT_RUNNING` | Prowl is not reachable, or the socket is missing/stale. Start or restart Prowl, then retry. |
 | `SOCKET_PERMISSION_DENIED` | The socket exists but the client cannot connect, usually because a sandbox blocked the Unix socket. Allowlist the socket path, run outside the sandbox, or use matching `PROWL_CLI_SOCKET` values for both app and CLI. |
-| `TARGET_NOT_FOUND` | Selector matched nothing — re-run `list` and pick a UUID. |
+| `TARGET_NOT_FOUND` | Selector matched nothing — re-run `list` and pick a UUID or current short handle. |
 | `TARGET_NOT_UNIQUE` | Selector matched several — be more specific (use `--pane`). |
 | `NO_ACTIVE_PANE` | No pane for focused-target; pass an explicit `--pane`. |
 | `EMPTY_INPUT` | `send` got neither argv nor stdin (or both). |
@@ -273,8 +295,8 @@ prowl pane close --pane "$pane" --json
 
 ## Gotchas for agents (quick list)
 
-- Resolve a `pane.id` before `read`/`send`/`key`/`focus`/close — never trust tab
-  titles.
+- Resolve a UUID `pane.id` or current text `pN` before `read`/`send`/`key`/
+  `focus`/close — never trust tab titles.
 - Use `prowl agents --json` when you need agent status; use `prowl list --json`
   when you need all panes, including ordinary shells.
 - `--capture` needs shell integration; otherwise `read --wait-stable` or file

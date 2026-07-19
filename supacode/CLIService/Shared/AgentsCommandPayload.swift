@@ -135,13 +135,15 @@ public struct AgentsCommandTab: Codable, Equatable {
 
 public struct AgentsCommandPane: Codable, Equatable {
   public let id: String
+  public let handle: Int?
   public let index: Int
   public let title: String
   public let cwd: String?
   public let focused: Bool
 
-  public init(id: String, index: Int, title: String, cwd: String?, focused: Bool) {
+  public init(id: String, handle: Int? = nil, index: Int, title: String, cwd: String?, focused: Bool) {
     self.id = id
+    self.handle = handle
     self.index = index
     self.title = title
     self.cwd = cwd
