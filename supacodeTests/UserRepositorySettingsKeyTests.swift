@@ -161,4 +161,26 @@ struct UserRepositorySettingsKeyTests {
     )
     #expect(persisted == settings)
   }
+
+  @Test func globalCommandOptOutsEncodeInStableOrder() throws {
+    let disabledIDs: Set<UserCustomCommand.ID> = [
+      "zulu",
+      "alpha",
+      "middle",
+      "bravo",
+      "tango",
+      "delta",
+      "uniform",
+      "echo",
+      "charlie",
+      "foxtrot",
+    ]
+    let settings = UserRepositorySettings(customCommands: [], disabledGlobalCommandIDs: disabledIDs)
+
+    let encoded = try JSONEncoder().encode(settings)
+    let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    let optOutIDs = try #require(object["disabledGlobalCommandIDs"] as? [String])
+
+    #expect(optOutIDs == disabledIDs.sorted())
+  }
 }

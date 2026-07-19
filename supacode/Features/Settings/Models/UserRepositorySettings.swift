@@ -27,6 +27,12 @@ nonisolated struct UserRepositorySettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Set<UserCustomCommand.ID>.self, forKey: .disabledGlobalCommandIDs) ?? []
   }
 
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(customCommands, forKey: .customCommands)
+    try container.encode(disabledGlobalCommandIDs.sorted(), forKey: .disabledGlobalCommandIDs)
+  }
+
   func normalized() -> UserRepositorySettings {
     UserRepositorySettings(
       customCommands: customCommands,

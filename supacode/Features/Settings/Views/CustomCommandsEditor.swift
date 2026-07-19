@@ -85,8 +85,8 @@ struct CustomCommandsEditor: View {
               customCommandRow(command)
                 .id(command.id)
             }
+            localCommandDropTarget
             if showsGlobalCommands {
-              localCommandDropTarget
               ForEach(globalCommands) { command in
                 globalCustomCommandRow(command)
                   .id("global-\(command.id)")
@@ -380,7 +380,10 @@ struct CustomCommandsEditor: View {
   private var customCommandsHeaderRow: some View {
     HStack(spacing: 8) {
       customCommandHeaderCell("", width: customCommandsDragColumnWidth, alignment: .center)
-      customCommandHeaderCell("Enabled", width: customCommandsEnabledColumnWidth, alignment: .center)
+      Image(systemName: "checkmark")
+        .frame(width: customCommandsEnabledColumnWidth, alignment: .center)
+        .accessibilityLabel("Enabled")
+        .help("Enabled")
       customCommandHeaderCell("", width: customCommandsIconColumnWidth, alignment: .center)
       customCommandHeaderCell("Name", width: customCommandsNameColumnWidth)
       customCommandHeaderCell("Command")
@@ -427,7 +430,10 @@ struct CustomCommandsEditor: View {
       selectCustomCommand(command.id)
     }
     .dropDestination(for: String.self) { commandIDs, _ in
-      guard let commandID = commandIDs.first else {
+      guard
+        let commandID = commandIDs.first,
+        commands.contains(where: { $0.id == commandID })
+      else {
         return false
       }
       moveCustomCommand(commandID, before: command.id)
@@ -510,7 +516,7 @@ struct CustomCommandsEditor: View {
     if let binding = bindingForCustomCommand(id: command.id) {
       Toggle("Enable \(command.resolvedTitle)", isOn: binding.isEnabled)
         .labelsHidden()
-        .toggleStyle(.switch)
+        .toggleStyle(.checkbox)
         .controlSize(.small)
         .help("Enable \(command.resolvedTitle)")
     }
@@ -521,7 +527,7 @@ struct CustomCommandsEditor: View {
     if let binding = globalCommandEnabled?(command.id) {
       Toggle("Enable \(command.resolvedTitle) in this repository", isOn: binding)
         .labelsHidden()
-        .toggleStyle(.switch)
+        .toggleStyle(.checkbox)
         .controlSize(.small)
         .help("Enable \(command.resolvedTitle) in this repository")
     }
@@ -1177,7 +1183,10 @@ struct CustomCommandsEditor: View {
       .frame(height: 8)
       .contentShape(Rectangle())
       .dropDestination(for: String.self) { commandIDs, _ in
-        guard let commandID = commandIDs.first else {
+        guard
+          let commandID = commandIDs.first,
+          commands.contains(where: { $0.id == commandID })
+        else {
           return false
         }
         moveCustomCommand(commandID)
@@ -1187,7 +1196,7 @@ struct CustomCommandsEditor: View {
 
   private var customCommandsDragColumnWidth: CGFloat { 24 }
 
-  private var customCommandsEnabledColumnWidth: CGFloat { 56 }
+  private var customCommandsEnabledColumnWidth: CGFloat { 24 }
 
   private var customCommandsIconColumnWidth: CGFloat { 32 }
 
