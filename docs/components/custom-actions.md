@@ -16,7 +16,7 @@ Prowl has four distinct mechanisms for "run my command":
 | **Run Script** | one per repo | on demand (`⌘R`) | Repo Settings → Run Script |
 | **Setup Script** | one per repo | automatically after a worktree is created | Repo Settings → Setup Script |
 | **Archive Script** | one per repo | automatically before a worktree is archived | Repo Settings → Archive Script |
-| **Custom Commands** | many, global or per repo | on demand (button / hotkey / palette) | Settings → Custom Commands or Repo Settings → Custom Commands |
+| **Custom Commands** | many, global or per repo | on demand (button / hotkey / palette) | Settings → Commands or Repo Settings → Custom Commands |
 
 All scripts run with these **environment variables** injected:
 - `PROWL_WORKTREE_PATH` — the active worktree's directory.
@@ -86,7 +86,7 @@ Global commands are stored in `~/.prowl/global.onevcat.json`; local commands rem
 
 - Per repo (Repo Settings): `runScript`, `setupScript`, `archiveScript`, and local
   Custom Commands.
-- Global (Settings → Custom Commands): global Custom Commands shared by every repo.
+- Global (Settings → Commands): global Custom Commands shared by every repo.
 - Global: `showRunButtonInToolbar`, `showDefaultEditorInToolbar`.
 
 ## Gotchas for agents

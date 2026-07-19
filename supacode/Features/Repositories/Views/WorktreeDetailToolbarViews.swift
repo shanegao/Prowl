@@ -154,7 +154,7 @@ struct UserCustomCommandToolbarButton: View {
       case .repository:
         return "\(title) (Set command script in Repository Settings)"
       case .global:
-        return "\(title) (Set command script in Settings → Custom Commands)"
+        return "\(title) (Set command script in Settings → Commands)"
       }
     }
     var text = title

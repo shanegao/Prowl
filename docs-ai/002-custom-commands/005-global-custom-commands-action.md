@@ -17,7 +17,7 @@
   source-qualified command identity. Local bindings retain `custom_command.<uuid>` and
   global bindings use `custom_command.global.<uuid>`; a local shortcut collision disables
   the global binding.
-- Settings → Custom Commands edits the global list. Toolbar, overflow, and menu entries
+- Settings → Commands edits the global list. Toolbar, overflow, and menu entries
   render identically for both sources; the global origin is only surfaced in hover
   tooltips ("Defined as a global command") after onevcat rejected a visible globe marker.
 - Both settings surfaces embed `CustomCommandsEditor`

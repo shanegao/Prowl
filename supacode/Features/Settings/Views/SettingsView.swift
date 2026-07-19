@@ -44,7 +44,7 @@ struct SettingsView: View {
             .tag(SettingsSection.advanced)
           Label("GitHub", systemImage: "arrow.triangle.branch")
             .tag(SettingsSection.github)
-          Label("Custom Commands", systemImage: "globe")
+          Label("Commands", systemImage: "globe")
             .tag(SettingsSection.customCommands)
 
           Section("Repositories") {
@@ -113,7 +113,7 @@ struct SettingsView: View {
             action: \.globalCustomCommands
           ) {
             GlobalCustomCommandsView(store: globalCustomCommandsStore)
-              .navigationTitle("Custom Commands")
+              .navigationTitle("Commands")
               .navigationSubtitle("Global terminal actions")
           } else {
             ProgressView()
