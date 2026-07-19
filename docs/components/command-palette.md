@@ -43,8 +43,8 @@ selected worktree has a pull request).
   the Ghostty-bridged commands; search-only).
 - **App:** Check for Updates, Open Settings, Open Repository, **Install Command
   Line Tool**, Repo Settings.
-- **Custom commands:** local and global Custom Commands appear here with their source;
-  local title matches hide the corresponding global command.
+- **Custom commands:** enabled local and Global Custom Commands appear here with their
+  source. Same-titled commands can coexist; disabled commands do not appear.
 - **Debug** (Debug builds only): toast/update/dock simulations.
 
 ## Behavior notes

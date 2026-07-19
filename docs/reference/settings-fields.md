@@ -89,14 +89,16 @@ Stored at `~/.prowl/repo/<repo-name>/prowl.json` (schema v2). For the tri-state
 | `observeLineDiffsAutomatically` | Bool? | `nil` (= on) | Keep worktree line-change badges updated; set `false` for large repos. |
 | `fetchPullRequestState` | Bool? | `nil` (= on) | Background-fetch PR state; set `false` to save GitHub rate limit. |
 
-**Custom Commands** (per-repo buttons/hotkeys) live separately in
-`prowl.onevcat.json`. See [`components/custom-actions.md`](../components/custom-actions.md)
-for their structure (title, icon, command, execution mode, close-on-success,
-shortcut).
+**Custom Commands** live separately in `prowl.onevcat.json`. Each command has an
+`isEnabled` Boolean that defaults to `true`; turning it off preserves its structure
+(title, icon, command, execution mode, close-on-success, shortcut, and order) but
+removes it from every command surface and hotkey dispatch.
 
 **Global Custom Commands** use the same command structure in
-`~/.prowl/global.onevcat.json`. A trimmed, case-insensitive title match in a
-repository's local list hides the corresponding global command.
+`~/.prowl/global.onevcat.json`. Repository `prowl.onevcat.json` files additionally
+store `disabledGlobalCommandIDs`: an absent ID means enabled for that repository, while
+an included ID hides that Global command there. Local commands are ordered before Global
+commands; matching titles do not hide either command.
 
 ## Notes for agents
 

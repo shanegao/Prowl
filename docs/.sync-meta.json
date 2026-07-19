@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "5defd27da02d1e77fa97237226ec47dcc97c3a17",
-  "last_synced_date": "2026-07-17",
-  "note": "Release prep. User-facing changes in range (Grok Build detection #590, branch deletion settings split #592) were doc-synced in their own PRs; verified deleteBranchOnAutomaticCleanup / deleteBranchOnManualWorktreeDelete and Grok coverage still match source."
+  "last_synced_commit": "c876fe33fe7e8f2940e5e05320d79565c8b34165",
+  "last_synced_date": "2026-07-19",
+  "note": "Custom Command visibility gates: verified enabled ordering, Global per-repository opt-outs, source-aware settings controls, command surfaces, and shortcut registration."
 }
