@@ -520,35 +520,37 @@ nonisolated private func detectQwen(_ content: String) -> AgentRawState {
   return .idle
 }
 
-// Qoder CLI 1.0.48 renders a permission menu with the three option labels
-// below, while an active turn uses a braille spinner footer ending in
-// "(esc to cancel, <elapsed>)". Restrict both checks to the active tail so
-// completed transcript text does not keep a pane blocked or working.
+// Qoder CLI (verified 1.0.48, live session): blocked dialogs are ephemeral
+// overlays that vanish once answered, so full-window matching is safe.
+// Permission menus always pair "Allow once" with "Reject and type something"
+// (the second row varies by tool: "Allow for this session" for edits,
+// "Always allow \"<cmd>\" for future sessions" for exec/MCP). Ask-user
+// questions render an "Asking User" header with a fixed "Type Something"
+// row; the plan-ready dialog pairs "Yes, start executing" with "Reject
+// plan". An active turn shows a braille spinner footer ending in
+// "(esc to cancel, <elapsed>)". Multi-token matches only — single labels
+// like "Allow once" or "No" can appear in transcript text.
 nonisolated private func detectQoder(_ content: String) -> AgentRawState {
-  let currentInteraction = qoderCurrentInteractionRegion(content)
-  if hasQoderPermissionPrompt(currentInteraction) {
+  let lower = content.lowercased()
+  if hasQoderPermissionMenu(lower) || hasQoderQuestionPrompt(lower) || hasQoderPlanReadyPrompt(lower) {
     return .blocked
   }
-  if hasQoderWorkingFooter(currentInteraction) {
+  if hasQoderWorkingFooter(content) {
     return .working
   }
   return .idle
 }
 
-nonisolated private func qoderCurrentInteractionRegion(_ content: String) -> String {
-  content
-    .split(separator: "\n", omittingEmptySubsequences: false)
-    .map { $0.trimmingCharacters(in: .whitespaces) }
-    .filter { !$0.isEmpty }
-    .suffix(8)
-    .joined(separator: "\n")
+nonisolated private func hasQoderPermissionMenu(_ lower: String) -> Bool {
+  lower.contains("allow once") && lower.contains("reject and type something")
 }
 
-nonisolated private func hasQoderPermissionPrompt(_ content: String) -> Bool {
-  let lower = content.lowercased()
-  return lower.contains("allow once")
-    && lower.contains("allow for this session")
-    && lower.contains("reject and type something")
+nonisolated private func hasQoderQuestionPrompt(_ lower: String) -> Bool {
+  lower.contains("asking user") && lower.contains("type something")
+}
+
+nonisolated private func hasQoderPlanReadyPrompt(_ lower: String) -> Bool {
+  lower.contains("yes, start executing") && lower.contains("reject plan")
 }
 
 nonisolated private func hasQoderWorkingFooter(_ content: String) -> Bool {

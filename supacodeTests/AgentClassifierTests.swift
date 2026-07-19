@@ -24,7 +24,7 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "amp") == .amp)
     #expect(identifyAgent(processName: "amp-local") == .amp)
     #expect(identifyAgent(processName: "qwen") == .qwen)
-    #expect(identifyAgent(processName: "qodercli")?.rawValue == "qodercli")
+    #expect(identifyAgent(processName: "qodercli") == .qoder)
     #expect(identifyAgent(processName: "grok") == .grok)
     #expect(identifyAgent(processName: "grok-0.2.101-macos-aarch64") == .grok)
     // Model ids must not be treated as the install binary.
@@ -243,7 +243,7 @@ struct AgentClassifierTests {
     )
 
     let result = try #require(identifyAgentInJob(job))
-    #expect(result.agent.rawValue == "qodercli")
+    #expect(result.agent == .qoder)
     #expect(result.name == "qodercli")
   }
 
