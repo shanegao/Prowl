@@ -113,8 +113,8 @@ struct SettingsView: View {
             action: \.globalCustomCommands
           ) {
             GlobalCustomCommandsView(store: globalCustomCommandsStore)
-              .navigationTitle("Commands")
-              .navigationSubtitle("Global terminal actions")
+              .navigationTitle("Global Commands")
+              .navigationSubtitle("Global terminal actions and toolbar buttons")
           } else {
             ProgressView()
               .frame(maxWidth: .infinity, maxHeight: .infinity)

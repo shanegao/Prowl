@@ -9,6 +9,27 @@ struct CustomCommandsEditor: View {
   @Binding var commands: [UserCustomCommand]
   let source: CustomCommandSource
   let keybindingUserOverrides: KeybindingUserOverrideStore
+  let globalCommands: [UserCustomCommand]
+  let globalCommandEnabled: ((UserCustomCommand.ID) -> Binding<Bool>)?
+
+  init(
+    commands: Binding<[UserCustomCommand]>,
+    source: CustomCommandSource,
+    keybindingUserOverrides: KeybindingUserOverrideStore,
+    globalCommands: [UserCustomCommand] = [],
+    globalCommandEnabled: ((UserCustomCommand.ID) -> Binding<Bool>)? = nil
+  ) {
+    _commands = commands
+    self.source = source
+    self.keybindingUserOverrides = keybindingUserOverrides
+    self.globalCommands = globalCommands
+    self.globalCommandEnabled = globalCommandEnabled
+  }
+
+  private enum ReorderDestination: Equatable {
+    case before(UserCustomCommand.ID)
+    case append
+  }
 
   @State private var selectedCustomCommandID: UserCustomCommand.ID?
   @State private var recordingCustomCommandID: UserCustomCommand.ID?
@@ -22,6 +43,7 @@ struct CustomCommandsEditor: View {
   @State private var commandEditorCommandID: UserCustomCommand.ID?
   @State private var editingNameCommandID: UserCustomCommand.ID?
   @FocusState private var focusedNameEditorCommandID: UserCustomCommand.ID?
+  @State private var reorderDestination: ReorderDestination?
 
   private let keyTokenResolver = ShortcutKeyTokenResolver()
 
@@ -69,6 +91,13 @@ struct CustomCommandsEditor: View {
               customCommandRow(command)
                 .id(command.id)
             }
+            localCommandDropTarget
+            if showsGlobalCommands {
+              ForEach(globalCommands) { command in
+                globalCustomCommandRow(command)
+                  .id("global-\(command.id)")
+              }
+            }
           }
           .padding(.horizontal, 6)
           .padding(.vertical, 6)
@@ -109,7 +138,7 @@ struct CustomCommandsEditor: View {
 
         Spacer(minLength: 0)
 
-        Text("\(commands.count) commands")
+        Text("\(displayedCommandCount) commands")
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -118,9 +147,13 @@ struct CustomCommandsEditor: View {
           .font(.caption)
           .foregroundStyle(.red)
       } else {
-        Text("Click cells to edit icon, name, command, and shortcut inline.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        Text(
+          showsGlobalCommands
+            ? "Global commands are managed in Settings → Commands."
+            : "Click cells to edit icon, name, command, and shortcut inline."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
     }
     .background {
@@ -352,6 +385,8 @@ struct CustomCommandsEditor: View {
 
   private var customCommandsHeaderRow: some View {
     HStack(spacing: 8) {
+      customCommandHeaderCell("", width: customCommandsDragColumnWidth, alignment: .center)
+      customCommandHeaderCell("", width: customCommandsEnabledColumnWidth, alignment: .center)
       customCommandHeaderCell("", width: customCommandsIconColumnWidth, alignment: .center)
       customCommandHeaderCell("Name", width: customCommandsNameColumnWidth)
       customCommandHeaderCell("Command")
@@ -367,6 +402,12 @@ struct CustomCommandsEditor: View {
   private func customCommandRow(_ command: UserCustomCommand) -> some View {
     let isSelected = selectedCustomCommandID == command.id
     HStack(spacing: 8) {
+      customCommandRowCell(width: customCommandsDragColumnWidth, alignment: .center) {
+        customCommandReorderHandle(command)
+      }
+      customCommandRowCell(width: customCommandsEnabledColumnWidth, alignment: .center) {
+        customCommandEnabledCell(command)
+      }
       customCommandRowCell(width: customCommandsIconColumnWidth, alignment: .center) {
         customCommandIconCell(command)
       }
@@ -386,10 +427,124 @@ struct CustomCommandsEditor: View {
       RoundedRectangle(cornerRadius: 8)
         .fill(isSelected ? Color.accentColor.opacity(0.35) : .clear)
     }
+    .overlay(alignment: .top) {
+      if reorderDestination == .before(command.id) {
+        reorderInsertionIndicator
+      }
+    }
     .contentShape(RoundedRectangle(cornerRadius: 8))
     .accessibilityAddTraits(.isButton)
     .onTapGesture {
       selectCustomCommand(command.id)
+    }
+    .dropDestination(
+      for: String.self,
+      action: { commandIDs, _ in
+        guard
+          let commandID = commandIDs.first,
+          commands.contains(where: { $0.id == commandID })
+        else {
+          return false
+        }
+        moveCustomCommand(commandID, before: command.id)
+        reorderDestination = nil
+        return true
+      },
+      isTargeted: { isTargeted in
+        updateReorderDestination(isTargeted, destination: .before(command.id))
+      }
+    )
+  }
+
+  @ViewBuilder
+  private func globalCustomCommandRow(_ command: UserCustomCommand) -> some View {
+    HStack(spacing: 8) {
+      customCommandRowCell(width: customCommandsDragColumnWidth, alignment: .center) {
+        Image(systemName: "lock.fill")
+          .font(.caption2)
+          .foregroundStyle(.tertiary)
+          .accessibilityHidden(true)
+      }
+      customCommandRowCell(width: customCommandsEnabledColumnWidth, alignment: .center) {
+        globalCommandEnabledCell(command)
+      }
+      customCommandRowCell(width: customCommandsIconColumnWidth, alignment: .center) {
+        Image(systemName: command.resolvedSystemImage)
+          .foregroundStyle(.secondary)
+          .frame(width: 16, alignment: .center)
+          .accessibilityHidden(true)
+      }
+      customCommandRowCell(width: customCommandsNameColumnWidth) {
+        VStack(alignment: .leading, spacing: 2) {
+          HStack(spacing: 4) {
+            Text(command.resolvedTitle)
+              .lineLimit(1)
+            Text("Global")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+          }
+          if !command.isEnabled {
+            Text("Disabled globally")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+      customCommandRowCell {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(inlineCommandTitle(for: command.execution))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          Text(inlineCommandScriptPreview(for: command.command))
+            .lineLimit(1)
+        }
+      }
+      customCommandRowCell(width: customCommandsShortcutColumnWidth) {
+        let binding = resolvedCustomCommandBindings.keybinding(
+          for: customCommandBindingID(for: command.id, source: .global)
+        )
+        Text(binding?.display ?? "Unassigned")
+          .font(.body.monospaced())
+          .foregroundStyle(binding == nil ? .secondary : .primary)
+          .lineLimit(1)
+      }
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 2)
+    .opacity(command.isEnabled ? 1 : 0.6)
+    .help("Global command. Edit it in Settings → Commands.")
+  }
+
+  @ViewBuilder
+  private func customCommandReorderHandle(_ command: UserCustomCommand) -> some View {
+    Image(systemName: "line.3.horizontal")
+      .foregroundStyle(.tertiary)
+      .frame(width: 16, height: 16)
+      .contentShape(Rectangle())
+      .accessibilityLabel("Drag \(command.resolvedTitle) to reorder")
+      .help("Drag to reorder command")
+      .draggable(command.id)
+  }
+
+  @ViewBuilder
+  private func customCommandEnabledCell(_ command: UserCustomCommand) -> some View {
+    if let binding = bindingForCustomCommand(id: command.id) {
+      Toggle("Enable \(command.resolvedTitle)", isOn: binding.isEnabled)
+        .labelsHidden()
+        .toggleStyle(.checkbox)
+        .controlSize(.small)
+        .help("Enable \(command.resolvedTitle)")
+    }
+  }
+
+  @ViewBuilder
+  private func globalCommandEnabledCell(_ command: UserCustomCommand) -> some View {
+    if let binding = globalCommandEnabled?(command.id) {
+      Toggle("Enable \(command.resolvedTitle) in this repository", isOn: binding)
+        .labelsHidden()
+        .toggleStyle(.checkbox)
+        .controlSize(.small)
+        .help("Enable \(command.resolvedTitle) in this repository")
     }
   }
 
@@ -688,7 +843,9 @@ struct CustomCommandsEditor: View {
   }
 
   private var resolvedCustomCommandBindings: ResolvedKeybindingMap {
-    let effectiveCommands = commands.map { EffectiveCustomCommand(source: source, command: $0) }
+    let effectiveCommands =
+      commands.map { EffectiveCustomCommand(source: source, command: $0) }
+      + globalCommands.map { EffectiveCustomCommand(source: .global, command: $0) }
     let migration = LegacyCustomCommandShortcutMigration.migrate(commands: effectiveCommands)
     return KeybindingResolver.resolve(
       schema: .appResolverSchema(effectiveCustomCommands: effectiveCommands),
@@ -697,8 +854,11 @@ struct CustomCommandsEditor: View {
     )
   }
 
-  private func customCommandBindingID(for commandID: String) -> String {
-    LegacyCustomCommandShortcutMigration.customCommandBindingID(for: commandID, source: source)
+  private func customCommandBindingID(
+    for commandID: String,
+    source: CustomCommandSource? = nil
+  ) -> String {
+    LegacyCustomCommandShortcutMigration.customCommandBindingID(for: commandID, source: source ?? self.source)
   }
 
   private func bindingForCustomCommand(id commandID: UserCustomCommand.ID) -> Binding<UserCustomCommand>? {
@@ -727,6 +887,7 @@ struct CustomCommandsEditor: View {
           command.splitDirection = updatedCommand.splitDirection
           command.closeOnSuccess = updatedCommand.closeOnSuccess
           command.shortcut = updatedCommand.shortcut
+          command.isEnabled = updatedCommand.isEnabled
         }
       }
     )
@@ -855,6 +1016,27 @@ struct CustomCommandsEditor: View {
 
     update(&updatedCommands[index])
     commands = UserCustomCommand.normalizedCommands(updatedCommands)
+  }
+
+  private func moveCustomCommand(
+    _ commandID: UserCustomCommand.ID,
+    before destinationID: UserCustomCommand.ID? = nil
+  ) {
+    guard commandID != destinationID else {
+      return
+    }
+    var updatedCommands = commands
+    guard let sourceIndex = updatedCommands.firstIndex(where: { $0.id == commandID }) else {
+      return
+    }
+    let command = updatedCommands.remove(at: sourceIndex)
+    let destinationIndex =
+      destinationID.flatMap { destinationID in
+        updatedCommands.firstIndex(where: { $0.id == destinationID })
+      } ?? updatedCommands.endIndex
+    updatedCommands.insert(command, at: destinationIndex)
+    commands = UserCustomCommand.normalizedCommands(updatedCommands)
+    selectCustomCommand(commandID)
   }
 
   private func toggleRecording(for commandID: UserCustomCommand.ID) {
@@ -1003,7 +1185,63 @@ struct CustomCommandsEditor: View {
     )
   }
 
-  private var customCommandsIconColumnWidth: CGFloat { 48 }
+  private var showsGlobalCommands: Bool {
+    source == .repository && !globalCommands.isEmpty
+  }
+
+  private var displayedCommandCount: Int {
+    commands.count + (showsGlobalCommands ? globalCommands.count : 0)
+  }
+
+  private var localCommandDropTarget: some View {
+    Color.clear
+      .frame(height: 12)
+      .overlay {
+        if reorderDestination == .append {
+          reorderInsertionIndicator
+        }
+      }
+      .contentShape(Rectangle())
+      .dropDestination(
+        for: String.self,
+        action: { commandIDs, _ in
+          guard
+            let commandID = commandIDs.first,
+            commands.contains(where: { $0.id == commandID })
+          else {
+            return false
+          }
+          moveCustomCommand(commandID)
+          reorderDestination = nil
+          return true
+        },
+        isTargeted: { isTargeted in
+          updateReorderDestination(isTargeted, destination: .append)
+        }
+      )
+  }
+
+  private var reorderInsertionIndicator: some View {
+    Rectangle()
+      .fill(Color.accentColor)
+      .frame(height: 2)
+      .padding(.horizontal, 4)
+      .accessibilityHidden(true)
+  }
+
+  private func updateReorderDestination(_ isTargeted: Bool, destination: ReorderDestination) {
+    if isTargeted {
+      reorderDestination = destination
+    } else if reorderDestination == destination {
+      reorderDestination = nil
+    }
+  }
+
+  private var customCommandsDragColumnWidth: CGFloat { 24 }
+
+  private var customCommandsEnabledColumnWidth: CGFloat { 24 }
+
+  private var customCommandsIconColumnWidth: CGFloat { 32 }
 
   private var customCommandsNameColumnWidth: CGFloat { 130 }
 

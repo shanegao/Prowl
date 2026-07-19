@@ -1,5 +1,6 @@
 import AppKit
 import ComposableArchitecture
+import Sharing
 import SwiftUI
 
 struct RepositorySettingsView: View {
@@ -7,6 +8,7 @@ struct RepositorySettingsView: View {
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
+  @Shared(.userGlobalSettings) private var globalSettings
 
   var body: some View {
     let baseRefOptions =
@@ -325,13 +327,23 @@ struct RepositorySettingsView: View {
           CustomCommandsEditor(
             commands: $store.userSettings.customCommands,
             source: .repository,
-            keybindingUserOverrides: store.keybindingUserOverrides
+            keybindingUserOverrides: store.keybindingUserOverrides,
+            globalCommands: globalSettings.customCommands,
+            globalCommandEnabled: { commandID in
+              Binding(
+                get: { store.userSettings.isGlobalCommandEnabled(commandID) },
+                set: { isEnabled in
+                  store.send(.setGlobalCommandEnabled(commandID, isEnabled))
+                }
+              )
+            }
           )
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Custom Commands")
             Text(
-              "Repository-local terminal actions. Custom command shortcuts take precedence in this repository."
+              "Repository and global terminal actions. Enabled commands appear in repository order, "
+                + "then global order. Edit global commands in Settings → Commands."
             )
             .foregroundStyle(.secondary)
           }

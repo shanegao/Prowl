@@ -62,16 +62,26 @@ success**, and optional **keyboard shortcut**.
 **Close on success** auto-closes the tab/split shortly after the command exits 0
 (a brief delay lets you see the final output).
 
-**Precedence:** a local command whose title matches a global command after trimming
-and case-folding hides the global command. Local commands also win a collision with a
-global command's shortcut. Custom Command hotkeys take **precedence over app
-shortcuts**; conflicts (with reserved app actions or other custom commands) are
-detected when you record the key, and you choose Replace / Cancel.
+**Visibility and order:** local and Global commands both appear, even when their
+titles match. Enabled local commands appear first in their repository order, followed
+by enabled Global commands in their Global order. Turning a command off preserves its
+configuration, position, and hotkey, but removes it from the toolbar, Worktrees menu,
+Command Palette, and hotkey dispatch until re-enabled.
 
-**Where they appear:** as buttons in the UI, in the Worktrees menu, and in the
-[Command Palette](command-palette.md). Global entries look identical to local ones;
-hovering shows a "Defined as a global command" tooltip note.
-Global commands are stored in `~/.prowl/global.onevcat.json`; local commands remain in
+**Global gates:** a Global command appears in a repository only when it is enabled
+globally and enabled for that repository. New Global commands are enabled in every
+repository by default; Repo Settings can turn an individual Global command off without
+changing its definition. Global command fields and order are edited only in
+Settings → Commands.
+
+**Shortcut precedence:** a repo command wins a collision with a Global command's
+shortcut. Custom Command hotkeys take **precedence over app shortcuts**; conflicts
+(with reserved app actions or other custom commands) are detected when you record the
+key, and you choose Replace / Cancel.
+
+**Where they appear:** enabled commands appear in the window toolbar, the Worktrees
+menu, and the [Command Palette](command-palette.md). Global commands are stored in
+`~/.prowl/global.onevcat.json`; local commands remain in
 `~/.prowl/repo/<repo-name>/prowl.onevcat.json`.
 
 ## Example uses
@@ -84,9 +94,9 @@ Global commands are stored in `~/.prowl/global.onevcat.json`; local commands rem
 
 ## Settings recap
 
-- Per repo (Repo Settings): `runScript`, `setupScript`, `archiveScript`, and local
-  Custom Commands.
-- Global (Settings → Commands): global Custom Commands shared by every repo.
+- Per repo (Repo Settings): `runScript`, `setupScript`, `archiveScript`, local Custom
+  Commands, and per-repository visibility of Global Commands.
+- Global (Settings → Commands): Global Custom Commands and their order.
 - Global: `showRunButtonInToolbar`, `showDefaultEditorInToolbar`.
 
 ## Gotchas for agents

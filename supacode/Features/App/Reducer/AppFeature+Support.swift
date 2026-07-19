@@ -193,7 +193,8 @@ extension AppFeature {
   ) -> Effect<Action> {
     state.selectedCustomCommands = EffectiveCustomCommand.resolve(
       repositoryCommands: settings.customCommands,
-      globalCommands: globalSettings.customCommands
+      globalCommands: globalSettings.customCommands,
+      disabledGlobalCommandIDs: settings.disabledGlobalCommandIDs
     )
     state.resolvedKeybindings = resolvedKeybindings(
       settings: state.settings,

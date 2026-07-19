@@ -14,10 +14,10 @@ struct GlobalCustomCommandsView: View {
         )
       } header: {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Custom Commands")
+          Text("Global Custom Commands")
           Text(
             "Global terminal actions available in every repository. "
-              + "A local command with the same title takes precedence."
+              + "Enabled commands appear in the top-right of the window toolbar."
           )
           .foregroundStyle(.secondary)
         }

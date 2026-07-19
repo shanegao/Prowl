@@ -205,6 +205,7 @@ struct AppFeatureCustomCommandTests {
     #expect(decoded.splitDirection == .right)
     #expect(decoded.closeOnSuccess == false)
     #expect(decoded.execution == .shellScript)
+    #expect(decoded.isEnabled)
   }
 
   @Test(.dependencies) func invalidCommandIndexDoesNothing() async {
@@ -471,6 +472,89 @@ struct AppFeatureCustomCommandTests {
           .overrides
       )
     }
+  }
+
+  @Test(.dependencies) func loadingUserSettingsExcludesDisabledCommandsFromDispatch() async {
+    let worktree = makeWorktree()
+    let localEnabled = UserCustomCommand(
+      id: "local-enabled",
+      title: "Build",
+      systemImage: "hammer",
+      command: "make build",
+      execution: .shellScript,
+      shortcut: nil
+    )
+    let localDisabled = UserCustomCommand(
+      id: "local-disabled",
+      title: "Test",
+      systemImage: "checkmark",
+      command: "make test",
+      execution: .shellScript,
+      shortcut: nil,
+      isEnabled: false
+    )
+    let globalEnabled = UserCustomCommand(
+      id: "global-enabled",
+      title: "Lint",
+      systemImage: "checkmark.circle",
+      command: "make lint",
+      execution: .shellScript,
+      shortcut: nil
+    )
+    let globalDisabled = UserCustomCommand(
+      id: "global-disabled",
+      title: "Format",
+      systemImage: "paintbrush",
+      command: "make format",
+      execution: .shellScript,
+      shortcut: nil,
+      isEnabled: false
+    )
+    let globalOptedOut = UserCustomCommand(
+      id: "global-opted-out",
+      title: "Deploy",
+      systemImage: "paperplane",
+      command: "make deploy",
+      execution: .shellScript,
+      shortcut: nil
+    )
+    let settings = UserRepositorySettings(
+      customCommands: [localEnabled, localDisabled],
+      disabledGlobalCommandIDs: ["global-opted-out"]
+    )
+    let expectedCommands = [
+      EffectiveCustomCommand(source: .repository, command: localEnabled),
+      EffectiveCustomCommand(source: .global, command: globalEnabled),
+    ]
+    let store = withDependencies {
+      $0.defaultFileStorage = .inMemory
+    } operation: {
+      @Shared(.userGlobalSettings) var globalSettings
+      $globalSettings.withLock {
+        $0 = UserGlobalSettings(customCommands: [globalEnabled, globalDisabled, globalOptedOut])
+      }
+      return TestStore(
+        initialState: AppFeature.State(
+          repositories: makeRepositoriesState(worktree: worktree),
+          settings: SettingsFeature.State()
+        )
+      ) {
+        AppFeature()
+      }
+    }
+
+    await store.send(.worktreeUserSettingsLoaded(settings, worktreeID: worktree.id)) {
+      $0.selectedCustomCommands = expectedCommands
+      $0.resolvedKeybindings = KeybindingResolver.resolve(
+        schema: .appResolverSchema(effectiveCustomCommands: expectedCommands),
+        migratedOverrides: LegacyCustomCommandShortcutMigration.migrate(commands: expectedCommands).overrides
+      )
+    }
+
+    await store.send(.runCustomCommand(.init(source: .repository, commandID: "local-disabled")))
+    await store.send(.runCustomCommand(.init(source: .global, commandID: "global-disabled")))
+    await store.send(.runCustomCommand(.init(source: .global, commandID: "global-opted-out")))
+    await store.finish()
   }
 
   @Test(.dependencies) func customCommandUsesCanvasFocusedWorktree() async {
