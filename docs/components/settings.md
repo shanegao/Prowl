@@ -23,11 +23,13 @@ window is a sidebar of tabs plus a detail pane.
 | **Updates** | Auto-check toggle, "Check for Updates Now". → [updates](updates.md) |
 | **Advanced** | Analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout, and the **Install Command Line Tool** (`prowl` CLI) action. |
 | **GitHub** | Enable GitHub integration (uses the `gh` CLI). → [github-pull-requests](github-pull-requests.md) |
+| **Commands** | Global Custom Commands available in every repository. Local commands with the same title take precedence. → [custom-actions](custom-actions.md) |
 | **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md) |
 
 ## Where settings live on disk
 
 - **Global:** `~/.prowl/settings.json`
+- **Global custom commands:** `~/.prowl/global.onevcat.json`
 - **Per-repo:** `~/.prowl/repo/<repo-name>/prowl.json`
 - **Per-repo custom commands:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 
