@@ -128,4 +128,37 @@ struct UserRepositorySettingsKeyTests {
     #expect(decoded.customCommands.count == 5)
     #expect(decoded == customSettings)
   }
+
+  @Test func globalCommandOptOutPersistsAndLegacyCommandsDefaultToEnabled() throws {
+    let legacyData = Data(
+      #"""
+      {
+        "customCommands": [
+          {
+            "id": "legacy-build",
+            "title": "Build",
+            "systemImage": "hammer",
+            "command": "make build",
+            "execution": "shellScript"
+          }
+        ]
+      }
+      """#.utf8
+    )
+    let legacy = try JSONDecoder().decode(UserRepositorySettings.self, from: legacyData)
+    #expect(legacy.customCommands[0].isEnabled)
+
+    let settings = UserRepositorySettings(
+      customCommands: legacy.customCommands,
+      disabledGlobalCommandIDs: ["global-build"]
+    )
+    #expect(!settings.isGlobalCommandEnabled("global-build"))
+    #expect(settings.isGlobalCommandEnabled("global-test"))
+
+    let persisted = try JSONDecoder().decode(
+      UserRepositorySettings.self,
+      from: JSONEncoder().encode(settings)
+    )
+    #expect(persisted == settings)
+  }
 }

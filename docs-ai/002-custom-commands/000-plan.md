@@ -77,3 +77,5 @@ integration — all of these arrived in later waves (see Amendments and the acti
 - Updated 2026-07-13: Global commands extend the repository-scoped model with local-title
   precedence, source-qualified identities, and shared settings storage — see
   [004-global-custom-commands.md](004-global-custom-commands.md)
+- Updated 2026-07-19: Visibility gates, source ordering, and per-repository Global command
+  controls — see [006-visibility-gates-and-scope-ordering.md](006-visibility-gates-and-scope-ordering.md)

@@ -2,29 +2,52 @@ import Foundation
 
 nonisolated struct UserRepositorySettings: Codable, Equatable, Sendable {
   var customCommands: [UserCustomCommand]
+  var disabledGlobalCommandIDs: Set<UserCustomCommand.ID>
 
   static let `default` = UserRepositorySettings(customCommands: [])
 
   private enum CodingKeys: String, CodingKey {
     case customCommands
+    case disabledGlobalCommandIDs
   }
 
-  init(customCommands: [UserCustomCommand]) {
+  init(
+    customCommands: [UserCustomCommand],
+    disabledGlobalCommandIDs: Set<UserCustomCommand.ID> = []
+  ) {
     self.customCommands = Self.normalizedCommands(customCommands)
+    self.disabledGlobalCommandIDs = disabledGlobalCommandIDs
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let commands = try container.decodeIfPresent([UserCustomCommand].self, forKey: .customCommands) ?? []
     customCommands = Self.normalizedCommands(commands)
+    disabledGlobalCommandIDs =
+      try container.decodeIfPresent(Set<UserCustomCommand.ID>.self, forKey: .disabledGlobalCommandIDs) ?? []
   }
 
   func normalized() -> UserRepositorySettings {
-    UserRepositorySettings(customCommands: customCommands)
+    UserRepositorySettings(
+      customCommands: customCommands,
+      disabledGlobalCommandIDs: disabledGlobalCommandIDs
+    )
   }
 
   static func normalizedCommands(_ commands: [UserCustomCommand]) -> [UserCustomCommand] {
     UserCustomCommand.normalizedCommands(commands)
+  }
+
+  func isGlobalCommandEnabled(_ id: UserCustomCommand.ID) -> Bool {
+    !disabledGlobalCommandIDs.contains(id)
+  }
+
+  mutating func setGlobalCommandEnabled(_ isEnabled: Bool, id: UserCustomCommand.ID) {
+    if isEnabled {
+      disabledGlobalCommandIDs.remove(id)
+    } else {
+      disabledGlobalCommandIDs.insert(id)
+    }
   }
 }
 
@@ -37,6 +60,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
   var splitDirection: UserCustomSplitDirection
   var closeOnSuccess: Bool
   var shortcut: UserCustomShortcut?
+  var isEnabled: Bool
 
   init(
     id: String = UUID().uuidString,
@@ -46,7 +70,8 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     execution: UserCustomCommandExecution,
     splitDirection: UserCustomSplitDirection = .right,
     closeOnSuccess: Bool = false,
-    shortcut: UserCustomShortcut?
+    shortcut: UserCustomShortcut?,
+    isEnabled: Bool = true
   ) {
     self.id = id
     self.title = title
@@ -56,12 +81,11 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     self.splitDirection = splitDirection
     self.closeOnSuccess = closeOnSuccess
     self.shortcut = shortcut?.normalized()
+    self.isEnabled = isEnabled
   }
-
   private enum CodingKeys: String, CodingKey {
-    case id, title, systemImage, command, execution, splitDirection, closeOnSuccess, shortcut
+    case id, title, systemImage, command, execution, splitDirection, closeOnSuccess, shortcut, isEnabled
   }
-
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     self.id = try container.decode(String.self, forKey: .id)
@@ -74,6 +98,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     self.closeOnSuccess = try container.decodeIfPresent(Bool.self, forKey: .closeOnSuccess) ?? false
     // Preserves raw shortcut so downstream migration/validation can inspect the original key.
     self.shortcut = try container.decodeIfPresent(UserCustomShortcut.self, forKey: .shortcut)
+    self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
   }
 
   static func `default`(index: Int) -> UserCustomCommand {
@@ -95,10 +120,10 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
       execution: execution,
       splitDirection: splitDirection,
       closeOnSuccess: closeOnSuccess,
-      shortcut: shortcut?.normalized()
+      shortcut: shortcut?.normalized(),
+      isEnabled: isEnabled
     )
   }
-
   static func normalizedCommands(_ commands: [UserCustomCommand]) -> [UserCustomCommand] {
     commands.map { $0.normalized() }
   }
@@ -172,20 +197,15 @@ nonisolated struct EffectiveCustomCommand: Equatable, Sendable, Identifiable {
 
   static func resolve(
     repositoryCommands: [UserCustomCommand],
-    globalCommands: [UserCustomCommand]
+    globalCommands: [UserCustomCommand],
+    disabledGlobalCommandIDs: Set<UserCustomCommand.ID> = []
   ) -> [EffectiveCustomCommand] {
-    let local = UserCustomCommand.normalizedCommands(repositoryCommands)
-    let localTitles = Set(local.map { $0.titleComparisonKey })
-    return local.map { .init(source: .repository, command: $0) }
+    UserCustomCommand.normalizedCommands(repositoryCommands)
+      .filter(\.isEnabled)
+      .map { .init(source: .repository, command: $0) }
       + UserCustomCommand.normalizedCommands(globalCommands)
-      .filter { !localTitles.contains($0.titleComparisonKey) }
+      .filter { $0.isEnabled && !disabledGlobalCommandIDs.contains($0.id) }
       .map { .init(source: .global, command: $0) }
-  }
-}
-
-nonisolated extension UserCustomCommand {
-  fileprivate var titleComparisonKey: String {
-    title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
   }
 }
 
