@@ -56,7 +56,18 @@ nonisolated private func recentLines(_ content: String, limit: Int) -> String {
 }
 
 nonisolated private func detectPi(_ content: String) -> AgentRawState {
-  hasPiWorkingLine(content) ? .working : .idle
+  if hasPiAskPrompt(content) {
+    return .blocked
+  }
+  return hasPiWorkingLine(content) ? .working : .idle
+}
+
+nonisolated private func hasPiAskPrompt(_ content: String) -> Bool {
+  let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+  return lines.contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return trimmed.contains("Enter select") && trimmed.contains("Esc cancel")
+  }
 }
 
 nonisolated private func hasPiWorkingLine(_ content: String) -> Bool {

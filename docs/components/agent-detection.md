@@ -32,10 +32,11 @@ points at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor)
    process names / argv against known agent executables, scoring argv[0] highest,
    then process name, then command-line tokens.
 2. **Screen heuristics.** It scans the last ~24 non-blank lines of the pane for
-   agent-specific UI cues — e.g. "Esc to interrupt", Oh My Pi's `Working… ⟦esc⟧`
-   loader or braille spinner status line (working), confirmation/permission prompts
-   (blocked), idle prompts. Each agent family has its own patterns (including spinner glyphs:
-   braille frames, symbol cycles, Cursor's hexagons, Kimi's moon phases, etc.).
+   agent-specific UI cues — e.g. "Esc to interrupt", Oh My Pi's
+   `Working… ⟦esc⟧` loader or braille spinner status line (working), its
+   interactive `Ask` choice prompt (blocked), confirmation/permission prompts
+   (blocked), idle prompts. Each agent family has its own patterns (including spinner
+   glyphs: braille frames, symbol cycles, Cursor's hexagons, Kimi's moon phases, etc.).
    For Claude, a running **background workflow** keeps a status line *below* the
    input box (e.g. `3/5 agents done · 7m 29s · ↓ 288.5k tokens`) after the turn has
    ended; Prowl reads that footer as **Working**, so a churning workflow isn't
