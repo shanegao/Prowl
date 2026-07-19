@@ -26,6 +26,11 @@ struct CustomCommandsEditor: View {
     self.globalCommandEnabled = globalCommandEnabled
   }
 
+  private enum ReorderDestination: Equatable {
+    case before(UserCustomCommand.ID)
+    case append
+  }
+
   @State private var selectedCustomCommandID: UserCustomCommand.ID?
   @State private var recordingCustomCommandID: UserCustomCommand.ID?
   @State private var recorderMonitor: Any?
@@ -38,6 +43,7 @@ struct CustomCommandsEditor: View {
   @State private var commandEditorCommandID: UserCustomCommand.ID?
   @State private var editingNameCommandID: UserCustomCommand.ID?
   @FocusState private var focusedNameEditorCommandID: UserCustomCommand.ID?
+  @State private var reorderDestination: ReorderDestination?
 
   private let keyTokenResolver = ShortcutKeyTokenResolver()
 
@@ -424,21 +430,33 @@ struct CustomCommandsEditor: View {
       RoundedRectangle(cornerRadius: 8)
         .fill(isSelected ? Color.accentColor.opacity(0.35) : .clear)
     }
+    .overlay(alignment: .top) {
+      if reorderDestination == .before(command.id) {
+        reorderInsertionIndicator
+      }
+    }
     .contentShape(RoundedRectangle(cornerRadius: 8))
     .accessibilityAddTraits(.isButton)
     .onTapGesture {
       selectCustomCommand(command.id)
     }
-    .dropDestination(for: String.self) { commandIDs, _ in
-      guard
-        let commandID = commandIDs.first,
-        commands.contains(where: { $0.id == commandID })
-      else {
-        return false
+    .dropDestination(
+      for: String.self,
+      action: { commandIDs, _ in
+        guard
+          let commandID = commandIDs.first,
+          commands.contains(where: { $0.id == commandID })
+        else {
+          return false
+        }
+        moveCustomCommand(commandID, before: command.id)
+        reorderDestination = nil
+        return true
+      },
+      isTargeted: { isTargeted in
+        updateReorderDestination(isTargeted, destination: .before(command.id))
       }
-      moveCustomCommand(commandID, before: command.id)
-      return true
-    }
+    )
   }
 
   @ViewBuilder
@@ -1180,18 +1198,46 @@ struct CustomCommandsEditor: View {
 
   private var localCommandDropTarget: some View {
     Color.clear
-      .frame(height: 8)
-      .contentShape(Rectangle())
-      .dropDestination(for: String.self) { commandIDs, _ in
-        guard
-          let commandID = commandIDs.first,
-          commands.contains(where: { $0.id == commandID })
-        else {
-          return false
+      .frame(height: 12)
+      .overlay {
+        if reorderDestination == .append {
+          reorderInsertionIndicator
         }
-        moveCustomCommand(commandID)
-        return true
       }
+      .contentShape(Rectangle())
+      .dropDestination(
+        for: String.self,
+        action: { commandIDs, _ in
+          guard
+            let commandID = commandIDs.first,
+            commands.contains(where: { $0.id == commandID })
+          else {
+            return false
+          }
+          moveCustomCommand(commandID)
+          reorderDestination = nil
+          return true
+        },
+        isTargeted: { isTargeted in
+          updateReorderDestination(isTargeted, destination: .append)
+        }
+      )
+  }
+
+  private var reorderInsertionIndicator: some View {
+    Rectangle()
+      .fill(Color.accentColor)
+      .frame(height: 2)
+      .padding(.horizontal, 4)
+      .accessibilityHidden(true)
+  }
+
+  private func updateReorderDestination(_ isTargeted: Bool, destination: ReorderDestination) {
+    if isTargeted {
+      reorderDestination = destination
+    } else if reorderDestination == destination {
+      reorderDestination = nil
+    }
   }
 
   private var customCommandsDragColumnWidth: CGFloat { 24 }
