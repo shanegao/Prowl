@@ -44,6 +44,7 @@ enum CommandIconMap {
     "gemini": TabIconSource(systemSymbol: "sparkle", assetName: "Gemini"),
     "kimi": TabIconSource(systemSymbol: "sparkle", assetName: "Kimi"),
     "opencode": TabIconSource(systemSymbol: "sparkle", assetName: "OpenCode"),
+    "qodercli": TabIconSource(systemSymbol: "sparkle"),
     "qwen": TabIconSource(systemSymbol: "sparkle", assetName: "Qwen"),
     "grok": TabIconSource(systemSymbol: "sparkle", assetName: "Grok"),
     "omp": TabIconSource(systemSymbol: "sparkle", assetName: "OMP"),

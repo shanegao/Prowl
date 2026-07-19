@@ -28,6 +28,8 @@ extension DetectedAgent {
       return detectDroid(screen)
     case .amp:
       return detectAmp(screen)
+    case .qoder:
+      return detectQoder(screen)
     case .qwen:
       return detectQwen(screen)
     case .grok:
@@ -527,6 +529,48 @@ nonisolated private func detectQwen(_ content: String) -> AgentRawState {
     return .working
   }
   return .idle
+}
+
+// Qoder CLI (verified 1.0.48, live session): blocked dialogs are ephemeral
+// overlays that vanish once answered, so full-window matching is safe.
+// Permission menus always pair "Allow once" with "Reject and type something"
+// (the second row varies by tool: "Allow for this session" for edits,
+// "Always allow \"<cmd>\" for future sessions" for exec/MCP). Ask-user
+// questions render an "Asking User" header with a fixed "Type Something"
+// row; the plan-ready dialog pairs "Yes, start executing" with "Reject
+// plan". An active turn shows a braille spinner footer ending in
+// "(esc to cancel, <elapsed>)". Multi-token matches only — single labels
+// like "Allow once" or "No" can appear in transcript text.
+nonisolated private func detectQoder(_ content: String) -> AgentRawState {
+  let lower = content.lowercased()
+  if hasQoderPermissionMenu(lower) || hasQoderQuestionPrompt(lower) || hasQoderPlanReadyPrompt(lower) {
+    return .blocked
+  }
+  if hasQoderWorkingFooter(content) {
+    return .working
+  }
+  return .idle
+}
+
+nonisolated private func hasQoderPermissionMenu(_ lower: String) -> Bool {
+  lower.contains("allow once") && lower.contains("reject and type something")
+}
+
+nonisolated private func hasQoderQuestionPrompt(_ lower: String) -> Bool {
+  lower.contains("asking user") && lower.contains("type something")
+}
+
+nonisolated private func hasQoderPlanReadyPrompt(_ lower: String) -> Bool {
+  lower.contains("yes, start executing") && lower.contains("reject plan")
+}
+
+nonisolated private func hasQoderWorkingFooter(_ content: String) -> Bool {
+  content.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    guard let first = trimmed.unicodeScalars.first else { return false }
+    return (0x2800...0x28FF).contains(Int(first.value))
+      && trimmed.lowercased().contains("(esc to cancel,")
+  }
 }
 
 // Grok Build (verified 0.2.101): cancel mid-turn is Ctrl+C (Esc is a no-op).

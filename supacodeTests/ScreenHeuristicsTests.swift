@@ -560,6 +560,99 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.qwen.detectState(in: "> Type your message") == .idle)
   }
 
+  @Test func qoderCLIDetection() {
+    // Exec permission menu captured from a live Qoder CLI 1.0.48 session; the
+    // second row is dynamic ("Always allow \"<cmd>\" for future sessions"),
+    // so detection must not require "Allow for this session".
+    #expect(
+      DetectedAgent.qoder.detectState(
+        in: """
+           Permission Required
+           Tool: Bash
+           Command: echo hello > /tmp/qoder_perm_test.txt
+           Allow this command to run? Redirection detected.
+            ❯ 1. Allow once
+              2. Always allow "echo" for future sessions [local]
+              3. Reject and type something
+              4. No
+          """
+      ) == .blocked
+    )
+    // Edit-style menu keeps the session-scoped row.
+    #expect(
+      DetectedAgent.qoder.detectState(
+        in: """
+           ❯ 1. Allow once
+             2. Allow for this session
+             3. Reject and type something
+             4. No
+          """
+      ) == .blocked
+    )
+    // Ask-user question dialog (live capture): dynamic options plus the fixed
+    // "Type Something" row under an "Asking User" header.
+    #expect(
+      DetectedAgent.qoder.detectState(
+        in: """
+           Asking User
+           Which color do you prefer?
+            ❯ 1. Red
+              2. Blue
+              3. Type Something
+           ↑↓ navigate · Enter select · Esc back
+          """
+      ) == .blocked
+    )
+    // Plan-ready dialog (live capture).
+    #expect(
+      DetectedAgent.qoder.detectState(
+        in: """
+          Qoder has written up a plan and is ready to execute. Would you like to proceed?
+           ❯ 1. Yes, start executing
+             2. Yes, execute as Goal (auto)
+             3. Refuse and say something
+             4. Reject plan
+          Ctrl+X to edit plan
+          """
+      ) == .blocked
+    )
+    // Working footer stays detected with the full input-box chrome below it
+    // (live capture: 6 persistent footer lines under the spinner).
+    #expect(
+      DetectedAgent.qoder.detectState(
+        in: """
+           ⠹ Thinking... (esc to cancel, 2s)
+          ─────────────────────────────
+           Shift+Tab to Accept Edits
+          ─────────────────────────────
+           >   Type your message or @path/to/file
+          ─────────────────────────────
+           Ultimate Model · ctx ░░░░░░░░░░ 0% · ~/Sync/github/Prowl
+          """
+      ) == .working
+    )
+    // Resolved dialogs vanish entirely (ephemeral overlays); the transcript
+    // only keeps the tool row, so a finished screen is idle.
+    #expect(
+      DetectedAgent.qoder.detectState(
+        in: """
+           x Bash(echo hello > /tmp/qoder_perm_test.txt)
+             └ User cancelled.
+          ─────────────────────────────
+           Shift+Tab to Accept Edits
+          ─────────────────────────────
+           >   Type your message or @path/to/file
+          ─────────────────────────────
+           Ultimate Model · ctx ▓▓░░░░░░░░ 17% · ~/Sync/github/Prowl
+          """
+      ) == .idle
+    )
+    // Single labels in prose must not block; a quoted footer without the
+    // braille spinner must not read as working.
+    #expect(DetectedAgent.qoder.detectState(in: "Allow once\nNo") == .idle)
+    #expect(DetectedAgent.qoder.detectState(in: "Thinking... (esc to cancel, 12s)") == .idle)
+  }
+
   @Test func grokDetection() {
     // Permission chrome (labels verified against Grok Build 0.2.101 binary).
     #expect(

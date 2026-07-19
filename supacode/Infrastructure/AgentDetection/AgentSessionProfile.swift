@@ -48,6 +48,7 @@ nonisolated struct AgentSessionProfile: Sendable {
     case .droid: .droid
     case .opencode: .opencode
     case .amp: .amp
+    case .qoder: .qoder
     case .qwen: .qwen
     case .grok: .grok
     }
@@ -197,6 +198,17 @@ nonisolated extension AgentSessionProfile {
     candidateRoots: { home, cwd, _, _ in
       guard let cwd else { return [] }
       return [home.appending(path: ".factory/sessions/\(slashDashed(cwd.path))")]
+    }
+  )
+
+  /// Qoder CLI ≥ 1.0.48: `~/.qoder/projects/<sanitized cwd>/<uuid>.jsonl`,
+  /// Claude Code's layout under a different root — every non-alphanumeric cwd
+  /// character becomes `-`. Verified against a local 1.0.48 install.
+  fileprivate static let qoder = AgentSessionProfile(
+    parsePath: { uuidJSONL(path: $0, marker: "/.qoder/projects/") },
+    candidateRoots: { home, cwd, _, _ in
+      guard let cwd else { return [] }
+      return [home.appending(path: ".qoder/projects/\(alphanumericDashed(cwd.path))")]
     }
   )
 

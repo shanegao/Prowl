@@ -17,8 +17,8 @@ running and what state it's in. That signal drives the
 ## Agents it recognizes
 
 Claude (Claude Code), Codex, Gemini, Cursor, Cline, OpenCode, GitHub Copilot,
-Kimi, Droid, Amp, Pi (`pi`), Oh My Pi (`omp`, `oh-my-pi`), Qwen Code (`qwen`),
-and Grok Build (`grok`).
+Kimi, Droid, Amp, Pi (`pi`), Oh My Pi (`omp`, `oh-my-pi`), Qoder CLI (`qodercli`),
+Qwen Code (`qwen`), and Grok Build (`grok`).
 Detection covers
 common wrappers (node, python, bun, bash, etc.) so agents launched indirectly are
 still found. Oh My Pi reuses Pi-derived screen heuristics but uses its own command

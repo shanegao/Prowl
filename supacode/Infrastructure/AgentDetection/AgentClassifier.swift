@@ -1,43 +1,36 @@
 import Foundation
 
+/// Known agent install/launcher binary names (lowercased). Aliases map to the
+/// same agent; extend this table when onboarding a new CLI.
+private let knownAgentBinaries: [String: DetectedAgent] = [
+  "pi": .pi, "omp": .pi, "oh-my-pi": .pi,
+  "claude": .claude, "claude-code": .claude,
+  "codex": .codex, "omx": .codex, "oh-my-codex": .codex,
+  "gemini": .gemini,
+  "cursor": .cursor, "cursor-agent": .cursor,
+  "cline": .cline,
+  "opencode": .opencode, "open-code": .opencode,
+  "copilot": .copilot, "github-copilot": .copilot, "ghcs": .copilot,
+  "kimi": .kimi, "kimi code": .kimi,
+  "droid": .droid,
+  "amp": .amp, "amp-local": .amp,
+  "qodercli": .qoder,
+  "qwen": .qwen,
+  "grok": .grok,
+]
+
 func identifyAgent(processName: String) -> DetectedAgent? {
   let lower = processName.lowercased()
-  switch lower {
-  case "pi", "omp", "oh-my-pi":
-    return .pi
-  case "claude", "claude-code":
-    return .claude
-  case "codex", "omx", "oh-my-codex":
-    return .codex
-  case "gemini":
-    return .gemini
-  case "cursor", "cursor-agent":
-    return .cursor
-  case "cline":
-    return .cline
-  case "opencode", "open-code":
-    return .opencode
-  case "copilot", "github-copilot", "ghcs":
-    return .copilot
-  case "kimi", "kimi code":
-    return .kimi
-  case "droid":
-    return .droid
-  case "amp", "amp-local":
-    return .amp
-  case "qwen":
-    return .qwen
-  case "grok":
-    return .grok
-  default:
-    // Versioned install binary only, e.g. `grok-0.2.101-macos-aarch64`.
-    // Must not match model-id tokens like `grok-4` / `grok-4.5` that show up
-    // as argv fragments of other agents (score-40 wrapped-runtime candidates).
-    if isGrokVersionedBinaryName(lower) {
-      return .grok
-    }
-    return nil
+  if let agent = knownAgentBinaries[lower] {
+    return agent
   }
+  // Versioned install binary only, e.g. `grok-0.2.101-macos-aarch64`.
+  // Must not match model-id tokens like `grok-4` / `grok-4.5` that show up
+  // as argv fragments of other agents (score-40 wrapped-runtime candidates).
+  if isGrokVersionedBinaryName(lower) {
+    return .grok
+  }
+  return nil
 }
 
 /// Install packages are named `grok-<semver>-<platform>-<arch>` (verified

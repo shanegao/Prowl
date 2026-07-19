@@ -34,6 +34,25 @@ struct AgentSessionProfileTests {
     #expect(roots.map(\.path) == ["/Users/me/.claude/projects/-private-tmp-prowl556-review----caf-"])
   }
 
+  @Test func qoderReusesClaudeLayoutUnderQoderRoot() {
+    // Verified against Qoder CLI 1.0.48: ~/.qoder/projects/<sanitized cwd>/<uuid>.jsonl.
+    let profile = AgentSessionProfile.profile(for: .qoder)
+    let cwd = URL(fileURLWithPath: "/Users/me/Sync/github/Prowl", isDirectory: true)
+    #expect(
+      profile.candidateRoots(home, cwd, now, now).map(\.path)
+        == ["/Users/me/.qoder/projects/-Users-me-Sync-github-Prowl"]
+    )
+    #expect(profile.candidateRoots(home, nil, now, now).isEmpty)
+    let id = "40e2d9c9-dca4-4969-a9a0-56fb423e58e6"
+    let path = "/Users/me/.qoder/projects/-Users-me-Sync-github-Prowl/\(id).jsonl"
+    let parsed = profile.parsePath(path)
+    #expect(parsed?.id == id)
+    #expect(parsed?.transcriptPath?.path == path)
+    // Sibling checkpoint directories and foreign roots must not parse.
+    #expect(profile.parsePath("/Users/me/.qoder/projects/-Users-me-Sync-github-Prowl/\(id)") == nil)
+    #expect(profile.parsePath("/Users/me/.claude/projects/-Users-me-Sync-github-Prowl/\(id).jsonl") == nil)
+  }
+
   @Test func piAndDroidRootsKeepDotsAndSpaces() {
     let cwd = URL(fileURLWithPath: "/Users/me/.prowl/repos/My App", isDirectory: true)
     let piRoots = AgentSessionProfile.profile(for: .pi).candidateRoots(home, cwd, now, now)
