@@ -160,6 +160,73 @@ struct HandoffCommandHandlerTests {
     #expect(entries.first?.contains("preparation=completed") == true)
   }
 
+  /// The preparation prompt, the seeded template, and the reply validator
+  /// must agree on the section names — drift in any one silently breaks
+  /// carry-forward or validation.
+  @Test func preparationPromptTemplateAndValidatorAgreeOnSections() {
+    let sections = [
+      "## Objective",
+      "## Current State",
+      "## What Has Been Done",
+      "## Open Questions",
+      "## Risks / Watch Out",
+      "## Next Steps",
+      "## Suggested Prompt For Next Agent",
+    ]
+    let prompt = HandoffCommandHandler.preparationPrompt()
+    for section in sections {
+      #expect(prompt.contains("\"\(section)\""))
+      #expect(HandoffStore.template.contains(section))
+    }
+    // A document with exactly the advertised sections passes validation.
+    let document = "# Handoff\n\n" + sections.map { "\($0)\ncontent\n" }.joined(separator: "\n")
+    #expect(HandoffStore.preparedArtifact(fromAgentReply: document) != nil)
+  }
+
+  @Test func saveEmbedsExistingArtifactIntoThePreparationPrompt() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+    try store.ensureScaffold()
+    try "# Handoff\n\n## Objective\nEarlier notes worth carrying forward.\n"
+      .write(to: store.currentURL, atomically: true, encoding: .utf8)
+    let resumed = LockIsolated<AgentResumeRequest?>(nil)
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      preparationSpy: { request, _ in
+        resumed.setValue(request)
+        return "unusable"
+      }
+    )
+
+    _ = await handler.handle(envelope: envelope(HandoffInput(action: .save)))
+
+    let prompt = try #require(resumed.value?.prompt)
+    #expect(prompt.contains("Earlier notes worth carrying forward."))
+    #expect(prompt.contains("Current contents of .prowl/handoff/current.md"))
+  }
+
+  @Test func saveDoesNotEmbedTheSeededTemplate() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    try HandoffStore(rootURL: root).ensureScaffold()
+    let resumed = LockIsolated<AgentResumeRequest?>(nil)
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      preparationSpy: { request, _ in
+        resumed.setValue(request)
+        return "unusable"
+      }
+    )
+
+    _ = await handler.handle(envelope: envelope(HandoffInput(action: .save)))
+
+    let prompt = try #require(resumed.value?.prompt)
+    #expect(!prompt.contains("Current contents of .prowl/handoff/current.md"))
+  }
+
   @Test func saveMarksPreparationFailedForUnusableReply() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }

@@ -260,9 +260,10 @@ nonisolated struct HandoffStore: Sendable {
   /// Normalizes a preparation reply into artifact content, or nil when unusable.
   static func preparedArtifact(fromAgentReply reply: String) -> String? {
     var text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+    let hadOpeningFence = text.hasPrefix("```")
     text = droppingOpeningFence(text)
     text = droppingPreamble(text)
-    text = droppingClosingFence(text)
+    text = droppingClosingFence(text, truncatingTrailer: hadOpeningFence)
     let requiredSections = ["## Objective", "## Current State", "## Next Steps"]
     guard !text.isEmpty, requiredSections.allSatisfy(text.contains) else { return nil }
     guard text != template.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
@@ -287,11 +288,21 @@ nonisolated struct HandoffStore: Sendable {
   }
 
   /// Drops a trailing code-fence line left over after preamble removal.
-  private static func droppingClosingFence(_ text: String) -> String {
+  /// When the reply opened with a fence, the *last* fence line is that
+  /// wrapper's closer, so any chatter after it ("Let me know if…") is also
+  /// discarded — embedded code blocks inside the document close in pairs
+  /// before it. Without an opening fence only an exact trailing fence line
+  /// is removed, so a fence inside a document body is never a cut point.
+  private static func droppingClosingFence(_ text: String, truncatingTrailer: Bool) -> String {
     var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-    guard let last = lines.last, last.trimmingCharacters(in: .whitespaces) == "```" else { return text }
-    lines.removeLast()
-    return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let lastFence = lines.lastIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "```" })
+    else { return text }
+    if lastFence == lines.indices.last {
+      lines.removeLast()
+      return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    guard truncatingTrailer else { return text }
+    return lines[..<lastFence].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   // MARK: - Archive

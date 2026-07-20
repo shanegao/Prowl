@@ -260,7 +260,8 @@ final class HandoffCommandHandler: CommandHandler {
   nonisolated static func kickoffPrompt() -> String {
     "Take over this Prowl workspace task. Read .prowl/handoff/current.md (agent notes), "
       + ".prowl/handoff/context.md (generated state), and .prowl/workspace.json (repo layout, if present), "
-      + "then continue from Next Steps. If context.md lists a Session Context excerpt, read it before changing code. "
+      + "then continue from Next Steps. Do not redo work already listed under What Has Been Done. "
+      + "If context.md lists a Session Context excerpt, read it before changing code. "
       + "Ask before any commit/push or destructive git."
   }
 
@@ -287,13 +288,16 @@ final class HandoffCommandHandler: CommandHandler {
   }
 
   nonisolated static func preparationPrompt() -> String {
-    "Prowl handoff preparation. Reply with the complete updated contents of .prowl/handoff/current.md "
-      + "and nothing else: a markdown document titled \"# Handoff\" with the sections \"## Objective\", "
-      + "\"## Current State\", \"## What Has Been Done\", \"## Open Questions\", \"## Risks / Watch Out\", "
-      + "\"## Next Steps\", and \"## Suggested Prompt For Next Agent\". Carry forward still-relevant notes "
-      + "from the existing file. Base the update on what you already know from this session; do not run "
-      + "commands, read extra files, or edit anything — Prowl writes the file from your reply. "
-      + "Be concise and answer in a single reply."
+    "Prowl handoff preparation: another agent with none of your context will take over this task, "
+      + "starting only from the document you write now. Reply with the complete updated contents of "
+      + ".prowl/handoff/current.md and nothing else — a markdown document titled \"# Handoff\" with the "
+      + "sections \"## Objective\", \"## Current State\", \"## What Has Been Done\", \"## Open Questions\", "
+      + "\"## Risks / Watch Out\", \"## Next Steps\", and \"## Suggested Prompt For Next Agent\". "
+      + "Keep Next Steps ordered and concrete — the next agent starts there — and make "
+      + "Suggested Prompt For Next Agent a ready-to-paste instruction. When the current document is "
+      + "included below, carry forward whatever is still relevant. Base the update on what you already "
+      + "know from this session; do not run commands, read files, or edit anything — Prowl writes the "
+      + "file from your reply. Be concise and answer in a single reply."
   }
 
   // MARK: - Payload

@@ -137,3 +137,28 @@ plumbing from 047.003; no new pipeline work is expected.
   6 changes with it: PR2's background-run progress uses the central toolbar
   status toast (existing `StatusToast` infrastructure), not a capsule
   progress form.
+- 2026-07-20 (PR1 review, resolved): the accessibility-tree concern is
+  **closed as not a bug**. An `AXUIElementCreateApplication` dump shows the
+  capsule as a proper `AXButton` with its accessibility label and disabled
+  state exposed; the earlier "missing" observation was an artifact of
+  System Events enumeration against ambiguous same-named processes.
+- 2026-07-20 (PR1 review): the popover action row explains itself in plain
+  language under its title ("Pass this task to another agent in a new tab",
+  plus "codex will summarize its progress first" when resumable); the
+  "brief" vocabulary was replaced by "progress summary" throughout the HUD.
+- 2026-07-20 (PR1 review): preparation-prompt hardening. The prompt now
+  frames the reader ("another agent with none of your context"), gives
+  per-section guidance, and `HandoffCoordinator.prepare` embeds the current
+  `current.md` into the prompt (the resume is read-only, so this is the only
+  way earlier notes can actually carry forward — the previous prompt asked
+  for carry-forward while barring file reads). The kickoff prompt tells the
+  receiver not to redo work listed under What Has Been Done. The reply
+  normalizer additionally discards chatter after a wrapping fence's closer.
+  Guarded by a prompt/template/validator section-contract test, embedding
+  tests, and fence-handling fixtures.
+- 2026-07-20: **PR2 is deferred indefinitely.** Skip already covers the
+  waiting pain (an impatient user hands off immediately with existing
+  notes), hand-off is a low-frequency action, and the modal wait is bounded
+  by the 2-minute resume timeout. The hard prerequisite — reducer-owned
+  execution state with the HUD as a projection — shipped in PR1, so a future
+  wave starts with zero rework if real usage surfaces the pain.

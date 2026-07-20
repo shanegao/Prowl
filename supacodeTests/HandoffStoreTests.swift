@@ -105,6 +105,77 @@ struct HandoffStoreTests {
     #expect(artifact?.contains("Sure!") == false)
   }
 
+  @Test func preparedArtifactDropsChatterAfterTheClosingFence() {
+    let reply = """
+      ```markdown
+      # Handoff
+
+      ## Objective
+      Ship the HUD.
+
+      ## Current State
+      Done, pending review.
+
+      ## Next Steps
+      1. Address review feedback.
+      ```
+
+      Let me know if you need anything else!
+      """
+    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    #expect(artifact?.hasSuffix("1. Address review feedback.\n") == true)
+    #expect(artifact?.contains("Let me know") == false)
+  }
+
+  @Test func preparedArtifactKeepsEmbeddedCodeBlocksIntact() {
+    // A fence-wrapped reply whose document embeds its own code block: the
+    // embedded pair closes before the wrapper's closing fence, so the last
+    // fence line is the correct cut point and the block survives.
+    let reply = """
+      ```markdown
+      # Handoff
+
+      ## Objective
+      Ship the HUD.
+
+      ## Current State
+      Done.
+
+      ## Next Steps
+      1. Run:
+      ```
+      make test
+      ```
+      ```
+      """
+    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    #expect(artifact?.contains("make test") == true)
+  }
+
+  @Test func preparedArtifactNeverCutsAtAFenceInsideAnUnwrappedDocument() {
+    // No wrapper fence: an embedded code block's fence lines are body
+    // content, never a truncation point.
+    let reply = """
+      # Handoff
+
+      ## Objective
+      Ship the HUD.
+
+      ## Current State
+      Done.
+
+      ## Next Steps
+      1. Run:
+      ```
+      make test
+      ```
+      2. Push the branch.
+      """
+    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    #expect(artifact?.contains("make test") == true)
+    #expect(artifact?.contains("2. Push the branch.") == true)
+  }
+
   @Test func preparedArtifactRejectsUnusableReplies() {
     #expect(HandoffStore.preparedArtifact(fromAgentReply: "") == nil)
     #expect(HandoffStore.preparedArtifact(fromAgentReply: "I could not update the file.") == nil)
