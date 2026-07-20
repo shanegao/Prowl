@@ -2,7 +2,8 @@
 
 > How to hand a task off between coding agents inside a Prowl runnable target: a durable
 > artifact agents read and write, an auto-captured session excerpt, the
-> `prowl handoff` command, and a command-palette action.
+> `prowl handoff` command, and the in-app Agents entry (toolbar capsule,
+> Hand Off HUD, command palette).
 
 **Keywords:** handoff, hand off, codex, claude, switch agent, takeover, `.prowl/handoff`, current.md, prowl handoff, cross-agent, workspace
 
@@ -125,15 +126,33 @@ refreshes it when a detected agent moves from **working** to **done** or
 **blocked**. Auto-save is throttled per pane and does not create handoff files
 for targets that have never run `prowl handoff save` or `prowl handoff to`.
 
-## From the command palette
+## In the app: the Agents capsule and the Hand Off HUD
 
-For any selected workspace, git repository, worktree, or plain folder, the
-Command Palette (`⌘P`) offers **Hand off → Claude Code** and **Hand off → Codex**.
-It runs the same source-session preparation when safe — showing a progress toast
-in the toolbar while the source agent writes its summary — then refreshes +
-archives the artifact and starts the receiving agent in a new tab using the same
-adapter configuration rules as `prowl handoff to`. If preparation fails, a
-warning toast notes the handoff continued with the existing notes.
+A capsule button left of the branch title shows the selected pane's detected
+agent (badge, name, and a working/blocked/done/idle status dot). Its menu
+previews what a hand-off will do — "codex will brief the incoming agent
+first" when the native session is resumable — and carries **Hand Off…**,
+which opens a centered HUD. The capsule is disabled when no agent is
+detected in the selected pane.
+
+The HUD runs in two steps:
+
+1. **Choose** — pick the receiving agent (the current agent stays listed as a
+   fresh-session restart) or **Only brief, don't hand off**, which updates the
+   artifact without launching anything. Rows state read-only launch facts,
+   e.g. when an explicitly observed unrestricted mode carries over. There are
+   no other options; launch configuration follows the same adapter rules as
+   `prowl handoff to`.
+2. **Run** — staged progress: collect the brief from the source agent, save
+   context, archive, launch. While the source agent writes its brief you can
+   **Skip** (continue immediately with the existing notes and fresh repo
+   state, `preparation=skipped`) or **Cancel** (abort entirely — the artifact
+   is untouched and nothing is logged, like Ctrl-C on the CLI). After the
+   brief the remaining steps are sub-second and cannot be interrupted.
+
+The Command Palette (`⌘P`) offers the same flow as a single **Hand Off…**
+row for any selected workspace, git repository, worktree, or plain folder;
+it opens the same HUD.
 
 ## Safety
 

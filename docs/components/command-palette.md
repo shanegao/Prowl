@@ -46,13 +46,10 @@ selected worktree has a pull request).
 - **Custom commands:** enabled local and Global Custom Commands appear here with their
   source. Same-titled commands can coexist; disabled commands do not appear.
 - **Handoff** (every runnable workspace, repository/worktree, or plain folder):
-  **Hand off → Claude Code** / **Hand off → Codex** safely resumes the outgoing
-  native session read-only to collect updated agent-authored notes when
-  available — a toolbar progress toast shows while the source agent writes its
-  summary — then refreshes, archives, and launches the receiving agent in a new
-  tab. An observed unrestricted execution policy carries across the verified
-  adapters for the destination launch; cross-agent model identifiers do not.
-  See [handoff](handoff.md).
+  a single **Hand Off…** row opens the staged Hand Off HUD, where you choose
+  the receiving agent (or update the brief only) and watch the run with Skip
+  and Cancel available during the source agent's briefing turn. Same flow as
+  the toolbar Agents capsule. See [handoff](handoff.md).
 - **Debug** (Debug builds only): toast/update/dock simulations.
 
 ## Behavior notes

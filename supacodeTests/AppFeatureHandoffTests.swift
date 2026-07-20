@@ -249,29 +249,7 @@ struct AppFeatureHandoffTests {
     #expect(name == "Claude Code")
 
     #expect(sent.value.count == 1)
-    guard
-      case .createTabWithInput(
-        _,
-        input: let input,
-        workingDirectory: let workingDirectory,
-        runSetupScriptIfNew: let runSetup,
-        autoCloseOnSuccess: let autoClose,
-        customCommandName: let commandName,
-        customCommandIcon: let icon
-      )? = sent.value.first
-    else {
-      Issue.record("Expected createTabWithInput, got \(sent.value)")
-      return
-    }
-    #expect(input.contains("'claude'"))
-    #expect(input.contains("'--dangerously-skip-permissions'"))
-    #expect(!input.contains("gpt-5.4"))
-    #expect(input.contains(HandoffCommandHandler.kickoffPrompt()))
-    #expect(runSetup == false)
-    #expect(autoClose == false)
-    #expect(commandName == "Hand off → Claude Code")
-    #expect(icon == nil)
-    #expect(workingDirectory == root)
+    expectClaudeLaunchCommand(sent.value.first, root: root)
 
     // The handoff artifact was materialized in the workspace root.
     let store2 = HandoffStore(rootURL: root)
@@ -286,6 +264,32 @@ struct AppFeatureHandoffTests {
     let current = try String(contentsOf: store2.currentURL, encoding: .utf8)
     #expect(current.hasPrefix("# Handoff"))
     #expect(current.contains("Palette source status."))
+  }
+
+  private func expectClaudeLaunchCommand(_ command: TerminalClient.Command?, root: URL) {
+    guard
+      case .createTabWithInput(
+        _,
+        input: let input,
+        workingDirectory: let workingDirectory,
+        runSetupScriptIfNew: let runSetup,
+        autoCloseOnSuccess: let autoClose,
+        customCommandName: let commandName,
+        customCommandIcon: let icon
+      )? = command
+    else {
+      Issue.record("Expected createTabWithInput, got \(String(describing: command))")
+      return
+    }
+    #expect(input.contains("'claude'"))
+    #expect(input.contains("'--dangerously-skip-permissions'"))
+    #expect(!input.contains("gpt-5.4"))
+    #expect(input.contains(HandoffCommandHandler.kickoffPrompt()))
+    #expect(runSetup == false)
+    #expect(autoClose == false)
+    #expect(commandName == "Hand off → Claude Code")
+    #expect(icon == nil)
+    #expect(workingDirectory == root)
   }
 
   @Test(.dependencies) func paletteHandOffAttributesFocusedAgent() async throws {
