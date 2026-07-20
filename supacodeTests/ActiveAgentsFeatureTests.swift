@@ -100,6 +100,24 @@ struct ActiveAgentsFeatureTests {
     #expect(cursorEntry.displayName == "cursor")
   }
 
+  @Test func sharedDisplayNamePolicyDrivesCapsuleNaming() {
+    // The toolbar Agents capsule feeds `paneState.iconLookupToken ?? agent.iconLookupToken`
+    // through this policy, so it must agree with the panel rows for every alias.
+    // Launch aliases with their own icon token keep their name…
+    #expect(ActiveAgentEntry.displayName(iconLookupToken: "omp", agent: .pi) == "omp")
+    #expect(ActiveAgentEntry.displayName(iconLookupToken: "oh-my-pi", agent: .pi) == "oh-my-pi")
+    #expect(ActiveAgentEntry.displayName(iconLookupToken: "cursor-agent", agent: .cursor) == "cursor-agent")
+    // …tokens without an icon entry and the generic `agent` entrypoint fall
+    // back to the semantic agent name.
+    #expect(ActiveAgentEntry.displayName(iconLookupToken: "omx", agent: .codex) == "codex")
+    #expect(ActiveAgentEntry.displayName(iconLookupToken: "agent", agent: .cursor) == "cursor")
+    #expect(ActiveAgentEntry.displayName(iconLookupToken: "", agent: .claude) == "claude")
+    // No pane token at all: the agent names itself.
+    #expect(
+      ActiveAgentEntry.displayName(iconLookupToken: DetectedAgent.pi.iconLookupToken, agent: .pi) == "pi"
+    )
+  }
+
   @Test func navigationReturnsNilForEmptyList() {
     let entries: IdentifiedArrayOf<ActiveAgentEntry> = []
     #expect(ActiveAgentsFeature.entryID(navigatingFrom: nil, direction: .next, in: entries) == nil)

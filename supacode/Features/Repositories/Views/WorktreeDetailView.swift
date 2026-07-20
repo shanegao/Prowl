@@ -399,12 +399,18 @@ struct WorktreeDetailView: View {
     let iconSource =
       paneState.iconLookupToken.flatMap(CommandIconMap.iconForFirstToken)
       ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken)
+    // Same naming rule as the Active Agents rows: launch aliases such as
+    // `omp` show their own name, not the semantic agent's (`pi`).
+    let displayName = ActiveAgentEntry.displayName(
+      iconLookupToken: paneState.iconLookupToken ?? agent.iconLookupToken,
+      agent: agent
+    )
     return AgentsCapsuleState(
-      displayName: agent.displayName,
+      displayName: displayName,
       iconSource: iconSource,
       infoLine: resumable
         ? "Pass this task to another agent in a new tab. "
-          + "\(agent.displayName) will summarize its progress first."
+          + "\(displayName) will summarize its progress first."
         : "Pass this task to another agent in a new tab."
     )
   }

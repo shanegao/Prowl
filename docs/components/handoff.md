@@ -138,12 +138,14 @@ create handoff files for targets that have never run `prowl handoff save` or
 
 A capsule button left of the branch title identifies the selected pane's
 detected agent (badge and name — live status stays with the terminal and
-the Active Agents panel). Clicking it opens a popover whose hand-off row
-explains the action in place — "Pass this task to another agent in a new
-tab", plus "codex will summarize its progress first" when the native session
-is resumable — and opens a centered HUD. Future agent actions land in the
-same popover. The capsule is disabled when no agent is detected in the
-selected pane.
+the Active Agents panel). The name follows the same rule as the Active
+Agents rows: launch aliases with their own icon (e.g. `omp`) show the alias,
+not the semantic agent name (`pi`). Clicking it opens a popover whose
+hand-off row explains the action in place — "Pass this task to another agent
+in a new tab", plus "codex will summarize its progress first" when the
+native session is resumable — and opens a centered HUD. Future agent actions
+land in the same popover. The capsule is disabled when no agent is detected
+in the selected pane.
 
 The HUD runs in two steps:
 
