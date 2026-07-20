@@ -396,9 +396,12 @@ struct WorktreeDetailView: View {
         session: paneState.session,
         observation: paneState.launchObservation
       ) != nil
+    let iconSource =
+      paneState.iconLookupToken.flatMap(CommandIconMap.iconForFirstToken)
+      ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken)
     return AgentsCapsuleState(
       displayName: agent.displayName,
-      iconToken: paneState.iconLookupToken ?? agent.iconLookupToken,
+      iconSource: iconSource,
       displayState: paneState.displayState,
       infoLine: resumable
         ? "\(agent.displayName) will brief the incoming agent first"
@@ -866,12 +869,18 @@ struct WorktreeDetailView: View {
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
+      // `.sharedBackgroundVisibility(.hidden)` keeps the capsule out of the
+      // navigation group's shared glass background — adjacent items in the
+      // same placement would otherwise merge with the branch title into one
+      // capsule-shaped control (a fixed ToolbarSpacer does not split the
+      // navigation group).
       ToolbarItem(placement: .navigation) {
         AgentsToolbarButton(
           capsule: toolbarState.agentsCapsule,
           onHandOff: onHandOff
         )
       }
+      .sharedBackgroundVisibility(.hidden)
 
       ToolbarItem(placement: .navigation) {
         WorktreeDetailTitleView(

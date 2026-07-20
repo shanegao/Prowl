@@ -129,10 +129,11 @@ for targets that have never run `prowl handoff save` or `prowl handoff to`.
 ## In the app: the Agents capsule and the Hand Off HUD
 
 A capsule button left of the branch title shows the selected pane's detected
-agent (badge, name, and a working/blocked/done/idle status dot). Its menu
-previews what a hand-off will do — "codex will brief the incoming agent
-first" when the native session is resumable — and carries **Hand Off…**,
-which opens a centered HUD. The capsule is disabled when no agent is
+agent (badge, name, and a working/blocked/done/idle status dot). Clicking it
+opens a popover that previews what a hand-off will do — "codex will brief
+the incoming agent first" when the native session is resumable — and carries
+**Hand Off…**, which opens a centered HUD. Future agent actions land in the
+same popover. The capsule is disabled when no agent is
 detected in the selected pane.
 
 The HUD runs in two steps:

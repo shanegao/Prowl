@@ -113,3 +113,19 @@ plumbing from 047.003; no new pipeline work is expected.
   has none today — flat items + fuzzy query only). Revisit if more features
   want nesting; the HUD covers the need for now.
 - Retention for `archive/` and `sessions/` remains open (047.003).
+
+## Amendments
+
+- 2026-07-20 (PR1 review): the capsule's pull-down is a **popover**, not a
+  system `Menu`. macOS toolbars flatten custom `Menu` labels to their text,
+  which dropped the agent badge and status dot (the capsule's core value);
+  toolbar `Button` labels render rich views correctly. The popover also fits
+  the roadmap better — future agent actions (quick launcher entries, cross
+  review) land in the same panel as additional rows. Structure is unchanged:
+  info line + `Hand Off…`. Two review fixes in the same pass: the badge
+  resolves with the Active Agents panel's two-step token fallback
+  (`iconForFirstToken(paneToken) ?? iconForFirstToken(canonicalToken)`), and
+  the capsule opts out of the navigation group's shared glass background via
+  `sharedBackgroundVisibility(.hidden)` (a fixed `ToolbarSpacer` does not
+  split the navigation group). Known issue for verification: the capsule may
+  be missing from the accessibility tree; audit before PR2.

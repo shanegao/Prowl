@@ -250,7 +250,7 @@ private struct WorktreeToolbarPreview: View {
       title: DetailToolbarTitle(kind: .branch(name: "feature/toolbar-preview")),
       agentsCapsule: AgentsCapsuleState(
         displayName: "codex",
-        iconToken: "codex",
+        iconSource: CommandIconMap.iconForFirstToken("codex"),
         displayState: .working,
         infoLine: "codex will brief the incoming agent first"
       ),
