@@ -76,6 +76,12 @@ final class WorktreeTerminalState {
   var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
   var lastWorkingAtBySurface: [UUID: Date] = [:]
   var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
+  /// Last `ActiveAgentEntry` emitted per surface. `detectAgentState` re-emits
+  /// whenever any `PaneAgentState` field changes, including internal
+  /// bookkeeping (raw-state oscillation, session miss streaks, presence
+  /// holds); comparing against the consumer-visible entry here keeps that
+  /// churn out of the terminal event stream and the TCA action log.
+  var lastEmittedAgentEntriesBySurface: [UUID: ActiveAgentEntry] = [:]
   var tabIsRunningById: [TerminalTabID: Bool] = [:]
   /// Per-tab aggregate of agent busy-state: `true` when at least one surface in
   /// the tab has a detected agent whose stabilized `displayState` is `.working`

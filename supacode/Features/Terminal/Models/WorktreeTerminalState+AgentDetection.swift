@@ -224,6 +224,7 @@ extension WorktreeTerminalState {
     guard surfaceAgentStates[surfaceID]?.detectedAgent != nil else { return }
     surfaceAgentStates[surfaceID] = PaneAgentState(lastChangedAt: Date())
     lastWorkingAtBySurface.removeValue(forKey: surfaceID)
+    lastEmittedAgentEntriesBySurface.removeValue(forKey: surfaceID)
     onAgentEntryRemoved?(surfaceID)
     if let tabId = tabId(containing: surfaceID) {
       updateTabAgentBusyState(for: tabId)
@@ -268,9 +269,12 @@ extension WorktreeTerminalState {
 
   func emitAgentEntry(surfaceID: UUID, tabId: TerminalTabID, state: PaneAgentState) {
     guard let entry = activeAgentEntry(surfaceID: surfaceID, tabId: tabId, state: state) else {
+      lastEmittedAgentEntriesBySurface.removeValue(forKey: surfaceID)
       onAgentEntryRemoved?(surfaceID)
       return
     }
+    guard entry != lastEmittedAgentEntriesBySurface[surfaceID] else { return }
+    lastEmittedAgentEntriesBySurface[surfaceID] = entry
     onAgentEntryChanged?(entry)
   }
 
@@ -318,6 +322,7 @@ extension WorktreeTerminalState {
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceId)
     lastWorkingAtBySurface.removeValue(forKey: surfaceId)
     lastAgentDetectionDiagnosticsBySurface.removeValue(forKey: surfaceId)
+    lastEmittedAgentEntriesBySurface.removeValue(forKey: surfaceId)
     onAgentEntryRemoved?(surfaceId)
   }
 
@@ -332,6 +337,7 @@ extension WorktreeTerminalState {
     agentDetectionPresenceBySurface.removeAll()
     lastWorkingAtBySurface.removeAll()
     lastAgentDetectionDiagnosticsBySurface.removeAll()
+    lastEmittedAgentEntriesBySurface.removeAll()
     for id in removedIDs {
       onAgentEntryRemoved?(id)
     }
