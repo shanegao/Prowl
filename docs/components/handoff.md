@@ -155,11 +155,11 @@ The HUD runs in two steps:
    adapter rules as `prowl handoff to`.
 2. **Run** — staged progress: collect a progress summary from the source
    agent, save context, archive, launch. While the source agent writes its
-   summary you can **Skip** (continue immediately with the existing notes and
-   fresh repo state, `preparation=skipped`) or **Cancel** (abort entirely —
-   the artifact is untouched and nothing is logged, like Ctrl-C on the CLI).
-   After the summary the remaining steps are sub-second and cannot be
-   interrupted.
+   summary you can **Skip** with **S** (continue immediately with the existing
+   notes and fresh repo state, `preparation=skipped`) or **Cancel** (abort
+   entirely — the artifact is untouched and nothing is logged, like Ctrl-C on
+   the CLI). After the summary the remaining steps are sub-second and cannot
+   be interrupted.
 
 The Command Palette (`⌘P`) offers the same flow as a single **Hand Off…**
 row for any selected workspace, git repository, worktree, or plain folder;

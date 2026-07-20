@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | PR1 implemented on `feature/hand-off` (awaiting review); PR2 pending |
 | **Anchor date** | 2026-07-20 |
-| **Primary PRs** | Unassigned (feature/hand-off branch) |
+| **Primary PRs** | #603 |
 | **Related** | [047 cross-agent-handoff](../047-cross-agent-handoff/000-plan.md), [047.003 plan calibration](../047-cross-agent-handoff/003-plan-calibration.md), [048 agent-runtime-adapters](../048-agent-runtime-adapters/000-plan.md), [031 command-palette-architecture](../031-command-palette-architecture/000-plan.md) |
 
 ## Background
@@ -59,10 +59,10 @@ plumbing from 047.003; no new pipeline work is expected.
    - otherwise: `Hands this task to another agent in a new tab`
 4. **HUD choose step = target list + one secondary row, zero options.**
    Targets from `AgentRuntimeAdapterRegistry.launchableAgents` (same-agent row
-   stays, labeled as a fresh-session restart). Last row: "Only brief, don't
-   hand off" (the former save action; its only UI home). The prepare checkbox
-   from the prototype is dropped — timing decisions move to the execution
-   step's Skip. Config transparency: target rows state launch facts
+   stays, labeled as a fresh-session restart). Last row: "Only save progress,
+   don't hand off" (the former save action; its only UI home). The prepare
+   checkbox from the prototype is dropped — timing decisions move to the
+   execution step's Skip. Config transparency: target rows state launch facts
    (`Launches with its default setup` / `Will bypass permissions (carried over
    from codex)`), read-only.
 5. **Execution step semantics.** Four stages; only briefing is long (≤2 min).
@@ -171,3 +171,4 @@ plumbing from 047.003; no new pipeline work is expected.
   by the 2-minute resume timeout. The hard prerequisite — reducer-owned
   execution state with the HUD as a projection — shipped in PR1, so a future
   wave starts with zero rework if real usage surfaces the pain.
+- Updated 2026-07-20: cancel/Skip now make reducer acceptance the boundary for transcribing a preparation reply, and Skip gains a keyboard path — see [002-briefing-cancellation.md](002-briefing-cancellation.md).

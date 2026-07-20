@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-07-18 |
-| **Primary PRs** | Follow-up PR unassigned |
+| **Primary PRs** | #603 |
 | **Related** | [045 native-agent-session-detection](../045-native-agent-session-detection/000-plan.md), [047 cross-agent-handoff](../047-cross-agent-handoff/000-plan.md), #473 |
 
 ## Background

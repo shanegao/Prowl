@@ -162,6 +162,7 @@ struct HandoffHudFeature {
     case skipBriefingTapped
     case cancelTapped
     case closeTapped
+    case briefingReplyReceived(HandoffPreparationReply)
     case briefingFinished(HandoffPreparationOutcome)
     case savingFinished
     case archivingFinished
@@ -201,11 +202,33 @@ struct HandoffHudFeature {
         guard state.isChoosing, state.targets.indices.contains(state.selectedIndex) else { return .none }
         return startRun(&state, target: state.targets[state.selectedIndex])
 
-      case .briefingFinished(let outcome):
+      case .briefingReplyReceived(let reply):
         guard var run = state.run, run.stage == .briefing else { return .none }
-        run.preparation = outcome
+        switch reply {
+        case .reply:
+          // Leaving briefing is the reducer's commit decision. A late reply
+          // after Skip or Cancel is ignored before it reaches the filesystem.
+          run.stage = .saving
+          state.phase = .running(run)
+          let coordinator = makeCoordinator(state)
+          let timestamp = run.startedAt
+          return .run { send in
+            let outcome = coordinator.applyPreparation(reply, now: timestamp)
+            await send(.briefingFinished(outcome))
+          }
+          .cancellable(id: BriefingCancelID(worktreeID: state.worktree.id), cancelInFlight: true)
+
+        case .skipped:
+          run.preparation = .skipped
+        case .failed:
+          run.preparation = .failed
+        }
         return advance(&state, run: run, to: .saving)
 
+      case .briefingFinished(let outcome):
+        guard var run = state.run, run.stage == .saving else { return .none }
+        run.preparation = outcome
+        return advance(&state, run: run, to: .saving)
       case .savingFinished:
         guard let run = state.run, run.stage == .saving else { return .none }
         if run.target.kind == .briefOnly {
@@ -290,10 +313,9 @@ struct HandoffHudFeature {
     }
     state.phase = .running(run)
     let coordinator = makeCoordinator(state)
-    let timestamp = run.startedAt
     return .run { send in
-      let outcome = await coordinator.prepare(request, now: timestamp)
-      await send(.briefingFinished(outcome))
+      let reply = await coordinator.collectPreparation(request)
+      await send(.briefingReplyReceived(reply))
     }
     .cancellable(id: BriefingCancelID(worktreeID: state.worktree.id), cancelInFlight: true)
   }

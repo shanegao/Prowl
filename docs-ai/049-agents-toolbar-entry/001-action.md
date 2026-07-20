@@ -30,8 +30,13 @@
   and log lines as the CLI). Skip cancels the briefing child process and
   continues mechanically; Cancel during briefing aborts with zero artifact
   and log changes; stage guards drop racing briefing results; a key-capture
-  NSView keeps arrows/Return/Escape out of the live terminal. Execution
+  NSView keeps arrows/Return/Escape/**S** out of the live terminal. Execution
   state is reducer-owned — the HUD is a projection.
+- **Briefing cancellation integrity**: source replies remain transient until
+  `HandoffHudFeature` accepts them while still briefing; late replies after
+  Skip or Cancel cannot write `current.md`. Skip is also available through
+  the HUD's `S` shortcut, which the key-capture view consumes before input can
+  reach the live terminal. See [002-briefing-cancellation.md](002-briefing-cancellation.md).
 - **Palette convergence**: one `Hand Off…` row opening the HUD; the two
   direct-execution rows are gone, and the post-palette focus restore skips
   hand-off so the HUD keeps first responder.

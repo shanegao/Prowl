@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented (audit items marked open remain open) |
 | **Anchor date** | 2026-07-20 |
-| **Primary PRs** | Follow-up PR unassigned (feature/hand-off branch) |
+| **Primary PRs** | #603 |
 | **Related** | [047 plan](000-plan.md), [047.002 resume-authored handoff](002-resume-authored-handoff.md), [048 runtime adapters](../048-agent-runtime-adapters/000-plan.md) |
 
 ## Context

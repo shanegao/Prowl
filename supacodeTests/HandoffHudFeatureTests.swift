@@ -178,7 +178,6 @@ struct HandoffHudFeatureTests {
     initial.selectedIndex = claudeIndex
 
     let sent = LockIsolated<[TerminalClient.Command]>([])
-    let resumed = LockIsolated<AgentResumeRequest?>(nil)
     let startedAt = Date(timeIntervalSince1970: 1_760_000_000)
 
     let store = TestStore(initialState: initial) {
@@ -188,12 +187,7 @@ struct HandoffHudFeatureTests {
       $0[TerminalClient.self].send = { command in
         sent.withValue { $0.append(command) }
       }
-      $0[AgentRuntimeClient.self] = AgentRuntimeClient(
-        resume: { request, _ in
-          resumed.setValue(request)
-          return Self.usableReply
-        }
-      )
+      $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in Self.usableReply })
     }
 
     let claudeTarget = initial.targets[claudeIndex]
@@ -204,6 +198,16 @@ struct HandoffHudFeatureTests {
           startedAt: startedAt,
           stages: [.briefing, .saving, .archiving, .launching],
           stage: .briefing
+        )
+      )
+    }
+    await store.receive(\.briefingReplyReceived) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: claudeTarget,
+          startedAt: startedAt,
+          stages: [.briefing, .saving, .archiving, .launching],
+          stage: .saving
         )
       )
     }
@@ -244,8 +248,6 @@ struct HandoffHudFeatureTests {
       $0.phase = .finished(.handedOff(agentDisplayName: "Claude Code"))
     }
 
-    // Source session was resumed for the brief and transcribed.
-    #expect(resumed.value?.agent == .codex)
     let handoffStore = HandoffStore(rootURL: root)
     let current = try String(contentsOf: handoffStore.currentURL, encoding: .utf8)
     #expect(current.contains("Finish the HUD."))
@@ -295,6 +297,7 @@ struct HandoffHudFeatureTests {
     store.exhaustivity = .off
 
     await store.send(.confirmSelection)
+    await store.receive(\.briefingReplyReceived)
     await store.receive(\.briefingFinished)
     await store.receive(\.savingFinished) {
       $0.phase = .finished(.briefSaved)
@@ -423,6 +426,50 @@ struct HandoffHudFeatureTests {
     #expect(!FileManager.default.fileExists(atPath: handoffDirectory.path(percentEncoded: false)))
   }
 
+  @Test(.dependencies) func lateCancellationInsensitiveReplyAfterCancelDoesNotWriteArtifact() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: makeWorktree(root: root), source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.selectedIndex = claudeIndex
+    let replyContinuation = LockIsolated<CheckedContinuation<String, Never>?>(nil)
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0[TerminalClient.self].send = { _ in }
+      $0[AgentRuntimeClient.self] = AgentRuntimeClient(
+        resume: { _, _ in
+          await withCheckedContinuation { continuation in
+            replyContinuation.setValue(continuation)
+          }
+        }
+      )
+    }
+    store.exhaustivity = .off
+
+    await store.send(.confirmSelection)
+    while replyContinuation.value == nil {
+      await Task.yield()
+    }
+    await store.send(.cancelTapped)
+    await store.receive(\.delegate.dismiss)
+
+    replyContinuation.withValue { continuation in
+      continuation?.resume(returning: Self.usableReply)
+      continuation = nil
+    }
+    for _ in 0..<10 {
+      await Task.yield()
+    }
+
+    let handoffDirectory = HandoffStore(rootURL: root).handoffDirectory
+    #expect(!FileManager.default.fileExists(atPath: handoffDirectory.path(percentEncoded: false)))
+  }
+
   @Test(.dependencies) func lateBriefingResultAfterSkipIsIgnored() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
@@ -444,10 +491,9 @@ struct HandoffHudFeatureTests {
     await store.send(.confirmSelection)
     await store.send(.skipBriefingTapped)
     await store.receive(\.launchFinished)
-    // A racing completion that arrives after Skip must not resurrect the run.
-    await store.send(.briefingFinished(.completed))
-    await store.finish()
-
+    // A racing reply that arrives after Skip must not resurrect the run or
+    // transcribe source prose after the mechanical hand-off has started.
+    await store.send(.briefingReplyReceived(.reply(Self.usableReply)))
     let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
     #expect(log.contains("preparation=skipped"))
     #expect(!log.contains("preparation=completed"))

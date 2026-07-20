@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-07-18 |
-| **Primary PRs** | #554 (artifact base); follow-up PR unassigned |
+| **Primary PRs** | #554 (artifact base); #603 (resume-authored handoff) |
 | **Related** | [047 plan](000-plan.md), [048 runtime adapters](../048-agent-runtime-adapters/000-plan.md), [045 native-agent-session-detection](../045-native-agent-session-detection/000-plan.md), #473, `docs/components/handoff.md` |
 
 ## Context

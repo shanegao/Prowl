@@ -65,7 +65,8 @@ private struct HandoffHudCard: View {
       HandoffHudKeyCaptureView(
         onMove: { delta in store.send(.moveSelection(delta: delta)) },
         onConfirm: { confirmForCurrentPhase() },
-        onEscape: { escapeForCurrentPhase() }
+        onEscape: { escapeForCurrentPhase() },
+        onSkip: { store.send(.skipBriefingTapped) }
       )
     }
     .frame(maxWidth: 560)
@@ -322,7 +323,8 @@ private struct HandoffHudRunView: View {
           onSkip()
         }
         .controlSize(.small)
-        .help("Hand off now with the current summary and repo state")
+        .keyboardShortcut("s")
+        .help("Hand off now with the current summary and repo state (S)")
       }
     }
   }
@@ -429,12 +431,14 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
   let onMove: (Int) -> Void
   let onConfirm: () -> Void
   let onEscape: () -> Void
+  let onSkip: () -> Void
 
   func makeNSView(context: Context) -> KeyCaptureNSView {
     let view = KeyCaptureNSView()
     view.onMove = onMove
     view.onConfirm = onConfirm
     view.onEscape = onEscape
+    view.onSkip = onSkip
     return view
   }
 
@@ -442,6 +446,7 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
     nsView.onMove = onMove
     nsView.onConfirm = onConfirm
     nsView.onEscape = onEscape
+    nsView.onSkip = onSkip
     nsView.grabFocusIfNeeded()
   }
 
@@ -449,6 +454,7 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
     var onMove: ((Int) -> Void)?
     var onConfirm: (() -> Void)?
     var onEscape: (() -> Void)?
+    var onSkip: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -463,6 +469,11 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
     }
 
     override func keyDown(with event: NSEvent) {
+      if event.charactersIgnoringModifiers?.lowercased() == "s" {
+        onSkip?()
+        return
+      }
+
       switch event.keyCode {
       case 126:  // up arrow
         onMove?(-1)

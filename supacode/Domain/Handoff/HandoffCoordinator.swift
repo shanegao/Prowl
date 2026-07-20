@@ -9,6 +9,15 @@ nonisolated struct HandoffSourceContext: Sendable, Equatable {
   let session: AgentSession?
 }
 
+/// A source preparation reply before it is accepted for persistence.
+/// HUD callers keep this transient until their reducer accepts the briefing
+/// completion; a cancelled HUD must never let a late reply mutate the artifact.
+nonisolated enum HandoffPreparationReply: Equatable, Sendable {
+  case reply(String)
+  case skipped
+  case failed
+}
+
 /// Shared orchestration core for a handoff: optional source-authored
 /// preparation, the mechanical context save, the pre-launch archive, and the
 /// transition log line. The CLI's `HandoffCommandHandler` and the Command
@@ -49,32 +58,43 @@ nonisolated struct HandoffCoordinator: Sendable {
     case failed
   }
 
-  /// Resume the source read-only and transcribe its validated reply into
-  /// `current.md`. A nil request means preparation is skipped: no safe
-  /// session, an unsupported adapter, or `--no-prepare`.
-  /// `current.md` uses snapshot semantics: each preparation rewrites it from
-  /// the source session's own knowledge. History carries through the reading
-  /// chain — every receiver reads the previous snapshot when it takes over —
-  /// and full copies live under `archive/`, so no earlier text is embedded
-  /// or carried forward mechanically (stale carried-over sections would
-  /// mislead the next agent).
-  func prepare(_ request: AgentResumeRequest?, now: Date) async -> HandoffPreparationOutcome {
+  /// Resume the source read-only without mutating the artifact. Staged callers
+  /// must explicitly accept and apply a reply so cancellation remains a real
+  /// filesystem transaction boundary.
+  func collectPreparation(_ request: AgentResumeRequest?) async -> HandoffPreparationReply {
     guard let request else { return .skipped }
-    let store = self.store
     do {
-      let reply = try await resume(request, store.rootURL)
-      return await Task.detached {
-        store.applyPreparationReply(reply, now: now) ? HandoffPreparationOutcome.completed : .failed
-      }.value
+      return .reply(try await resume(request, store.rootURL))
     } catch {
       return .failed
     }
   }
 
+  /// Validate and transcribe an accepted preparation reply into `current.md`.
+  /// A cancelled task never writes, including when its resume dependency
+  /// returned a reply after observing cancellation late.
+  func applyPreparation(_ reply: HandoffPreparationReply, now: Date) -> HandoffPreparationOutcome {
+    switch reply {
+    case .reply(let text):
+      guard !Task.isCancelled else { return .skipped }
+      return store.applyPreparationReply(text, now: now) ? .completed : .failed
+    case .skipped:
+      return .skipped
+    case .failed:
+      return .failed
+    }
+  }
+
+  /// Resume, then immediately apply the reply for single-shot callers such as
+  /// the CLI. HUD callers use `collectPreparation` and `applyPreparation`
+  /// separately so reducer state decides whether a reply may be persisted.
+  func prepare(_ request: AgentResumeRequest?, now: Date) async -> HandoffPreparationOutcome {
+    applyPreparation(await collectPreparation(request), now: now)
+  }
+
   /// Refresh generated context with an already-decided preparation outcome.
-  /// Staged callers (the HUD) run `prepare` separately so they can report
-  /// progress and support Skip; `save`/`makeTransitionArtifacts` compose this
-  /// for single-shot callers.
+  /// Staged callers collect a reply before the reducer accepts it, while
+  /// `save`/`makeTransitionArtifacts` compose collection and persistence.
   func saveArtifact(
     outgoingAgent: String?,
     sessionContext: HandoffStore.SessionContext?,

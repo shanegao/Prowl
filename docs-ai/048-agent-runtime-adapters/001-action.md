@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Completed |
 | **Anchor date** | 2026-07-18 |
-| **Primary PRs** | Follow-up PR unassigned |
+| **Primary PRs** | #603 |
 | **Plan** | [000-plan.md](000-plan.md) |
 | **Related** | [047.002 resume-authored handoff](../047-cross-agent-handoff/002-resume-authored-handoff.md) |
 
