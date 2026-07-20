@@ -39,6 +39,8 @@ enum CommandPaletteItemID {
     command.paletteID
   }
 
+  static let handOff = "handoff.open"
+
   static var globalIDs: [CommandPaletteItem.ID] {
     [
       globalCheckForUpdates,
@@ -159,6 +161,8 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     return .openRepositorySettings(repositoryID)
   case .runCustomCommand(let id, _):
     return .runCustomCommand(id)
+  case .handOff:
+    return .handOff
   case .openPullRequest,
     .openRepositoryOnCodeHost,
     .markPullRequestReady,
@@ -335,7 +339,8 @@ func pullRequestDelegateAction(
     .renameBranch,
     .deleteWorktree,
     .openRepositorySettings,
-    .runCustomCommand:
+    .runCustomCommand,
+    .handOff:
     return nil
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:

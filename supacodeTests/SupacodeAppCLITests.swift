@@ -54,4 +54,48 @@ struct SupacodeAppCLITests {
         .standardizedFileURL.path(percentEncoded: false)
     )
   }
+
+  @Test func handoffStatusUsesNonMainWorktreePath() async throws {
+    let repositoryRoot = URL(fileURLWithPath: "/tmp/Prowl", isDirectory: true)
+    let worktreeRoot = URL(fileURLWithPath: "/tmp/Prowl-feature", isDirectory: true)
+    let worktree = Worktree(
+      id: worktreeRoot.path(percentEncoded: false),
+      name: "feature",
+      detail: "feature",
+      workingDirectory: worktreeRoot,
+      repositoryRootURL: repositoryRoot
+    )
+    let repository = Repository(
+      id: repositoryRoot.path(percentEncoded: false),
+      rootURL: repositoryRoot,
+      name: "Prowl",
+      worktrees: [worktree]
+    )
+    var repositories = RepositoriesFeature.State()
+    repositories.repositories = [repository]
+    repositories.selection = .worktree(worktree.id)
+    let store = Store(
+      initialState: AppFeature.State(
+        repositories: repositories,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+    let terminalManager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let terminalState = terminalManager.state(for: worktree)
+    _ = try #require(terminalState.createTab())
+    let router = SupacodeApp.makeCLICommandRouter(appStore: store, terminalManager: terminalManager)
+
+    let response = await router.route(
+      CommandEnvelope(
+        output: .json,
+        command: .handoff(HandoffInput(action: .status, selector: .worktree(worktree.id)))
+      )
+    )
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    #expect(payload.artifactPath == worktreeRoot.appending(path: ".prowl/handoff/current.md").path)
+  }
 }

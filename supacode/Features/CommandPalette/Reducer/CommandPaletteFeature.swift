@@ -71,6 +71,7 @@ struct CommandPaletteFeature {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(EffectiveCustomCommand.Identifier)
+    case handOff
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -266,6 +267,7 @@ struct CommandPaletteFeature {
       )
     }
     items.append(contentsOf: customCommandItems(customCommands))
+    items.append(contentsOf: handoffCommandItems(repositories))
     if let terminalWorktree = repositories.selectedTerminalWorktree {
       items.append(
         CommandPaletteItem(
@@ -533,6 +535,23 @@ private func customCommandItems(_ commands: [EffectiveCustomCommand]) -> [Comman
       keywords: ["custom", "command", "script"]
     )
   }
+}
+
+/// The single hand-off entry: opens the staged HUD where the receiving
+/// agent is chosen (docs-ai 049).
+private func handoffCommandItems(_ repositories: RepositoriesFeature.State) -> [CommandPaletteItem] {
+  guard repositories.selectedTerminalWorktree != nil else { return [] }
+  return [
+    CommandPaletteItem(
+      id: CommandPaletteItemID.handOff,
+      title: "Hand Off…",
+      subtitle: "Choose an agent to take over this task",
+      kind: .handOff,
+      category: .terminal,
+      defaultSuggestion: false,
+      keywords: ["handoff", "hand off", "switch agent", "takeover", "agents"]
+    )
+  ]
 }
 
 private func customCommandSubtitle(for effectiveCommand: EffectiveCustomCommand) -> String {

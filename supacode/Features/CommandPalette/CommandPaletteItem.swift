@@ -82,6 +82,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(EffectiveCustomCommand.Identifier, systemImage: String)
+    case handOff
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -166,7 +167,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .togglePinWorktree,
       .deleteWorktree,
       .openRepositorySettings,
-      .runCustomCommand:
+      .runCustomCommand,
+      .handOff:
       return nil
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:

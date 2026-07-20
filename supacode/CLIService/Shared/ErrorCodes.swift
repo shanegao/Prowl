@@ -47,6 +47,9 @@ public enum CLIErrorCode {
   // Pane
   public static let paneFailed = "PANE_FAILED"
 
+  // Handoff
+  public static let handoffFailed = "HANDOFF_FAILED"
+
   // Transport
   public static let transportFailed = "TRANSPORT_FAILED"
   public static let socketPermissionDenied = "SOCKET_PERMISSION_DENIED"

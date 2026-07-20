@@ -526,7 +526,7 @@ private struct CommandPaletteRowView: View {
       .toggleShelf, .showDiff,
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-      .openRepositorySettings, .runCustomCommand:
+      .openRepositorySettings, .runCustomCommand, .handOff:
       return nil
     case .deleteWorktree:
       return "Delete"
@@ -619,6 +619,8 @@ private struct CommandPaletteRowView: View {
       return "trash"
     case .runCustomCommand(_, let systemImage):
       return systemImage
+    case .handOff:
+      return "arrow.left.arrow.right"
     #if DEBUG
       case .debugTestToast:
         return "ladybug"
@@ -644,7 +646,7 @@ private struct CommandPaletteRowView: View {
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
       .openRepositorySettings,
-      .deleteWorktree, .runCustomCommand:
+      .deleteWorktree, .runCustomCommand, .handOff:
       return true
     case .worktreeSelect:
       return false
@@ -806,6 +808,8 @@ private struct CommandPaletteRowView: View {
       base = "Delete \(row.title)"
     case .runCustomCommand:
       base = "Run Custom Command: \(row.title)"
+    case .handOff:
+      base = row.title
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
         base = row.title

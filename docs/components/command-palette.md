@@ -45,6 +45,11 @@ selected worktree has a pull request).
   Line Tool**, Repo Settings.
 - **Custom commands:** enabled local and Global Custom Commands appear here with their
   source. Same-titled commands can coexist; disabled commands do not appear.
+- **Handoff** (every runnable workspace, repository/worktree, or plain folder):
+  a single **Hand Off…** row opens the staged Hand Off HUD, where you choose
+  the receiving agent (or save progress only) and watch the run with Skip and
+  Cancel available while the source agent summarizes its progress. Same flow as
+  the toolbar Agents capsule. See [handoff](handoff.md).
 - **Debug** (Debug builds only): toast/update/dock simulations.
 
 ## Behavior notes

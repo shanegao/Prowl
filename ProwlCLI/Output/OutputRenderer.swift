@@ -105,6 +105,14 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "handoff",
+         let data = response.data,
+         let payload = try? data.decode(as: HandoffCommandPayload.self)
+      {
+        print(renderHandoff(payload))
+        return
+      }
+
       if response.command == "open" {
         return
       }
@@ -190,6 +198,11 @@ enum OutputRenderer {
 
           var paneLine = "      \(focusMark) \(paneNum) \(paneTitle)"
 
+          // Show the detected coding agent (claude/codex/…) when present.
+          if let agent = item.pane.agent, !agent.isEmpty {
+            paneLine += "  \("⟦\(agent)⟧".dim)"
+          }
+
           // Only show cwd when it differs from the worktree path.
           if let cwd = item.pane.cwd, normalizeTrailingSlash(cwd) != worktreePath {
             paneLine += "  \(cwd.dim)"
@@ -269,6 +282,77 @@ enum OutputRenderer {
       lines.append("  \("cwd:".dim) \(cwd)")
     }
     return lines.joined(separator: "\n")
+  }
+
+  private static func renderHandoff(_ payload: HandoffCommandPayload) -> String {
+    var lines: [String] = []
+
+    switch payload.action {
+    case .status:
+      let existsLabel = (payload.exists ?? false) ? "yes".green : "no".dim
+      lines.append("Handoff \("status".cyan.bold)  \("exists:".dim) \(existsLabel)")
+      lines.append("  \("artifact:".dim) \(payload.artifactPath)")
+      if let agent = payload.outgoingAgent {
+        lines.append("  \("current agent:".dim) \(agent)")
+      }
+      if let lastLog = payload.lastLog {
+        lines.append("  \("last:".dim) \(lastLog)")
+      }
+    case .save:
+      lines.append("Handoff \("saved".green.bold)  \("changed:".dim) \(payload.changedFileCount) files")
+      lines.append("  \("artifact:".dim) \(payload.artifactPath)")
+      lines.append(contentsOf: renderHandoffPreparation(payload.preparation))
+      lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
+      lines.append(contentsOf: renderHandoffRepos(payload.repos))
+    case .toAgent:
+      let to = payload.toAgent ?? "?"
+      let from = payload.outgoingAgent ?? "agent"
+      lines.append("Handoff \("\(from) → \(to)".cyan.bold)  \("changed:".dim) \(payload.changedFileCount) files")
+      lines.append("  \("artifact:".dim) \(payload.artifactPath)")
+      if let archived = payload.archivedPath {
+        lines.append("  \("archived:".dim) \(archived)")
+      }
+      lines.append(contentsOf: renderHandoffPreparation(payload.preparation))
+      lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
+      if let pane = payload.launchedPane {
+        lines.append("  \("launched:".dim) \(to.green) → \(pane.paneTitle.green)  \(pane.paneID.dim)")
+      } else {
+        lines.append("  \("launched:".dim) \("no (--no-launch); take over manually".dim)")
+      }
+      lines.append(contentsOf: renderHandoffRepos(payload.repos))
+    }
+
+    return lines.joined(separator: "\n")
+  }
+
+  private static func renderHandoffPreparation(_ preparation: String?) -> [String] {
+    guard let preparation else { return [] }
+    let label =
+      switch preparation {
+      case "completed": preparation.green
+      case "failed": preparation.yellow
+      default: preparation.dim
+      }
+    return ["  \("source prep:".dim) \(label)"]
+  }
+
+  private static func renderHandoffRepos(_ repos: [HandoffRepoPayload]) -> [String] {
+    repos.map { repo in
+      if repo.isGit {
+        return "  \("repo:".dim) \(repo.name)  \(repo.branch ?? "?")"
+          + "  (\(repo.changedFileCount) changed, +\(repo.insertions)/-\(repo.deletions))"
+      }
+      return "  \("repo:".dim) \(repo.name)  \("(not a git repo)".dim)"
+    }
+  }
+
+  private static func renderHandoffSession(_ session: HandoffSessionPayload?) -> [String] {
+    guard let session, let excerptPath = session.excerptPath else { return [] }
+    let sessionID = session.sessionID.map { "  id=\($0)" } ?? ""
+    let transcript = session.transcriptPath.map { "  transcript=\($0)" } ?? ""
+    return [
+      "  \("session:".dim) \(excerptPath)  \(session.confidence.dim)\(sessionID.dim)\(transcript.dim)"
+    ]
   }
 
   private static func renderPane(_ payload: PaneCommandPayload) -> String {

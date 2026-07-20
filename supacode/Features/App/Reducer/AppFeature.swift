@@ -30,6 +30,9 @@ struct AppFeature {
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
     var leftSidebarVisibility: NavigationSplitViewVisibility = .all
+    var handoffAutoSaveDisplayStates: [ActiveAgentEntry.ID: AgentDisplayState] = [:]
+    var handoffAutoSaveLastSavedAt: [ActiveAgentEntry.ID: Date] = [:]
+    @Presents var handoffHud: HandoffHudFeature.State?
     @Presents var alert: AlertState<Alert>?
 
     init(
@@ -84,6 +87,8 @@ struct AppFeature {
     case systemNotificationTapped(worktreeID: Worktree.ID, surfaceID: UUID)
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
+    case openHandoffHud
+    case handoffHud(PresentationAction<HandoffHudFeature.Action>)
   }
 
   enum Alert: Equatable {
@@ -101,6 +106,7 @@ struct AppFeature {
   @Dependency(SystemNotificationClient.self) var systemNotificationClient
   @Dependency(DockClient.self) var dockClient
   @Dependency(TerminalClient.self) var terminalClient
+  @Dependency(AgentRuntimeClient.self) var agentRuntimeClient
   @Dependency(WorktreeInfoWatcherClient.self) var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) var customShortcutRegistryClient
   @Dependency(ExternalDiffToolClient.self) var externalDiffToolClient
@@ -967,11 +973,29 @@ struct AppFeature {
       case .commandPalette(let action):
         return reduceCommandPaletteAction(action, state: &state)
 
+      case .openHandoffHud:
+        return openHandoffHud(state: &state)
+
+      case .handoffHud(.presented(.delegate(.dismiss))), .handoffHud(.dismiss):
+        let worktree = state.handoffHud?.worktree
+        state.handoffHud = nil
+        guard let worktree else { return .none }
+        // Hand keyboard focus back to the terminal the HUD captured it from.
+        return .run { _ in
+          await terminalClient.send(.focusSelectedTab(worktree))
+        }
+
+      case .handoffHud:
+        return .none
+
       case .terminalEvent(let event):
         return reduceTerminalEvent(event, state: &state)
       }
     }
     core
+      .ifLet(\.$handoffHud, action: \.handoffHud) {
+        HandoffHudFeature()
+      }
     Reduce<State, Action> { state, action in
       // Default-on focus restore: every command-palette delegate action that
       // doesn't intentionally shift selection sends focus back to the active

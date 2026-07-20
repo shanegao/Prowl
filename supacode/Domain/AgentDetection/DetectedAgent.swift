@@ -19,7 +19,7 @@ enum DetectedAgent: String, CaseIterable, Equatable, Identifiable, Sendable {
 
   var id: String { rawValue }
 
-  var displayName: String {
+  nonisolated var displayName: String {
     switch self {
     case .cursor:
       return "cursor"

@@ -60,13 +60,14 @@ final class WorktreeTerminalManager {
     case .createTab(let worktree, let runSetupScriptIfNew):
       Task { createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
     case .createTabWithInput(
-      let worktree, let input, let runSetupScriptIfNew, let autoCloseOnSuccess, let customCommandName,
-      let customCommandIcon):
+      let worktree, let input, let workingDirectory, let runSetupScriptIfNew, let autoCloseOnSuccess,
+      let customCommandName, let customCommandIcon):
       Task {
         createTabAsync(
           in: worktree,
           runSetupScriptIfNew: runSetupScriptIfNew,
           initialInput: input,
+          workingDirectory: workingDirectory,
           autoCloseOnSuccess: autoCloseOnSuccess,
           customCommandName: customCommandName,
           customCommandIcon: customCommandIcon

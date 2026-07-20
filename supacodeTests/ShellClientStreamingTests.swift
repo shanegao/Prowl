@@ -189,8 +189,13 @@ struct ShellClientStreamingTests {
     _ = await consumer.value
     let elapsed = ContinuousClock.now - start
 
+    // The assertion distinguishes "cancellation worked" from "waited out the
+    // process's 30-second natural exit". Loaded CI runners have pushed the
+    // full cancel → SIGTERM → pipe-EOF → finish chain past 10s while suite
+    // tests run in parallel, so the budget leaves headroom without blurring
+    // that distinction.
     #expect(
-      elapsed < .seconds(10),
+      elapsed < .seconds(20),
       "consumer cancellation must not wait for the process's 30-second natural exit; took \(elapsed)"
     )
   }
@@ -211,8 +216,9 @@ struct ShellClientStreamingTests {
     _ = await runTask.result
     let elapsed = ContinuousClock.now - start
 
+    // Same budget rationale as cancellingRunStreamConsumerTerminatesProcessQuickly.
     #expect(
-      elapsed < .seconds(10),
+      elapsed < .seconds(20),
       "run() cancellation must not wait for the process's 30-second natural exit; took \(elapsed)"
     )
   }

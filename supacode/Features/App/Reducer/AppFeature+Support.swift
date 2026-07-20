@@ -59,7 +59,10 @@ extension AppFeature {
   ) -> Bool {
     switch delegate {
     case .selectWorktree, .jumpToLatestUnread, .viewArchivedWorktrees,
-      .newWorktree, .toggleCanvas, .renameBranch:
+      .newWorktree, .toggleCanvas, .renameBranch, .handOff:
+      // `.handOff` opens the HUD, whose key-capture view takes first
+      // responder; restoring terminal focus here would steal it back and
+      // leak arrow keys into the live agent session.
       return true
     default:
       return false

@@ -206,7 +206,8 @@ struct WorktreeDetailView: View {
       onRunCustomCommand: { index in
         store.send(.runCustomCommand(index))
       },
-      onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) }
+      onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
+      onHandOff: { store.send(.openHandoffHud) }
     )
   }
 
@@ -355,6 +356,7 @@ struct WorktreeDetailView: View {
     }
     return WorktreeToolbarState(
       title: title,
+      agentsCapsule: agentsCapsuleState(repositories: input.repositories),
       statusToast: input.repositories.statusToast,
       pullRequest: matchedPullRequest(
         for: input.selectedWorktree,
@@ -374,6 +376,36 @@ struct WorktreeDetailView: View {
       availableUpdateVersion: input.availableUpdateVersion,
       showRunButtonInToolbar: input.showRunButtonInToolbar,
       showDefaultEditorInToolbar: input.showDefaultEditorInToolbar
+    )
+  }
+
+  /// The selected pane's detected agent, feeding the Agents capsule. nil
+  /// (no detected agent) renders the capsule disabled — reserved for the
+  /// future quick launcher (docs-ai 049).
+  private func agentsCapsuleState(repositories: RepositoriesFeature.State) -> AgentsCapsuleState? {
+    guard let worktree = repositories.selectedTerminalWorktree,
+      let state = terminalManager.stateIfExists(for: worktree.id),
+      let tabID = state.tabManager.selectedTabId,
+      let surfaceID = state.activeSurfaceID(for: tabID),
+      let paneState = state.surfaceAgentStates[surfaceID],
+      let agent = paneState.detectedAgent
+    else { return nil }
+    let resumable =
+      HandoffCommandHandler.preparationRequest(
+        outgoingAgent: agent.rawValue,
+        session: paneState.session,
+        observation: paneState.launchObservation
+      ) != nil
+    let iconSource =
+      paneState.iconLookupToken.flatMap(CommandIconMap.iconForFirstToken)
+      ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken)
+    return AgentsCapsuleState(
+      displayName: agent.displayName,
+      iconSource: iconSource,
+      infoLine: resumable
+        ? "Pass this task to another agent in a new tab. "
+          + "\(agent.displayName) will summarize its progress first."
+        : "Pass this task to another agent in a new tab."
     )
   }
 
@@ -799,6 +831,7 @@ struct WorktreeDetailView: View {
 
   struct WorktreeToolbarState {
     let title: DetailToolbarTitle
+    let agentsCapsule: AgentsCapsuleState?
     let statusToast: RepositoriesFeature.StatusToast?
     let pullRequest: GithubPullRequest?
     let codeHost: CodeHost
@@ -832,9 +865,23 @@ struct WorktreeDetailView: View {
     let onStopRunScript: () -> Void
     let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
     let onActivateUpdateButton: () -> Void
+    let onHandOff: () -> Void
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
+      // `.sharedBackgroundVisibility(.hidden)` keeps the capsule out of the
+      // navigation group's shared glass background — adjacent items in the
+      // same placement would otherwise merge with the branch title into one
+      // capsule-shaped control (a fixed ToolbarSpacer does not split the
+      // navigation group).
+      ToolbarItem(placement: .navigation) {
+        AgentsToolbarButton(
+          capsule: toolbarState.agentsCapsule,
+          onHandOff: onHandOff
+        )
+      }
+      .sharedBackgroundVisibility(.hidden)
+
       ToolbarItem(placement: .navigation) {
         WorktreeDetailTitleView(
           title: toolbarState.title,

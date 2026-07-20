@@ -248,6 +248,11 @@ private struct WorktreeToolbarPreview: View {
   init() {
     toolbarState = WorktreeDetailView.WorktreeToolbarState(
       title: DetailToolbarTitle(kind: .branch(name: "feature/toolbar-preview")),
+      agentsCapsule: AgentsCapsuleState(
+        displayName: "codex",
+        iconSource: CommandIconMap.iconForFirstToken("codex"),
+        infoLine: "Pass this task to another agent in a new tab. codex will summarize its progress first."
+      ),
       statusToast: nil,
       pullRequest: nil,
       codeHost: .github,
@@ -303,7 +308,8 @@ private struct WorktreeToolbarPreview: View {
         onRunScript: {},
         onStopRunScript: {},
         onRunCustomCommand: { _ in },
-        onActivateUpdateButton: {}
+        onActivateUpdateButton: {},
+        onHandOff: {}
       )
     }
     .environment(commandKeyObserver)
