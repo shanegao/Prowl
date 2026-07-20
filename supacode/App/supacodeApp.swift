@@ -333,31 +333,22 @@ struct SupacodeApp: App {
         else { return nil }
         return state.activeSurfaceID(for: tabID)
       },
-      handoffSessionContext: { worktreeID in
+      handoffSourceContext: { worktreeID in
         guard let state = terminalManager.stateIfExists(for: worktreeID),
           let tabID = state.tabManager.selectedTabId,
           let surfaceID = state.activeSurfaceID(for: tabID)
         else { return nil }
-        return makeHandoffSessionContext(
-          worktreeID: worktreeID,
-          paneID: surfaceID,
-          paneTitle: nil,
-          terminalManager: terminalManager
+        let agentState = state.surfaceAgentStates[surfaceID]
+        return HandoffSourceContext(
+          sessionContext: makeHandoffSessionContext(
+            worktreeID: worktreeID,
+            paneID: surfaceID,
+            paneTitle: nil,
+            terminalManager: terminalManager
+          ),
+          observation: agentState?.launchObservation,
+          session: agentState?.session
         )
-      },
-      handoffLaunchObservation: { worktreeID in
-        guard let state = terminalManager.stateIfExists(for: worktreeID),
-          let tabID = state.tabManager.selectedTabId,
-          let surfaceID = state.activeSurfaceID(for: tabID)
-        else { return nil }
-        return state.surfaceAgentStates[surfaceID]?.launchObservation
-      },
-      handoffAgentSession: { worktreeID in
-        guard let state = terminalManager.stateIfExists(for: worktreeID),
-          let tabID = state.tabManager.selectedTabId,
-          let surfaceID = state.activeSurfaceID(for: tabID)
-        else { return nil }
-        return state.surfaceAgentStates[surfaceID]?.session
       },
       handoffSessionContextForSurface: { worktreeID, surfaceID in
         return makeHandoffSessionContext(

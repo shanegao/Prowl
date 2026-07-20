@@ -84,3 +84,7 @@ cwd, which is weaker than the pid-anchored, ambiguity-safe native session identi
 
 - Updated 2026-07-18: plan resume-authored semantic preparation before `handoff to`; this supersedes
   the first wave's blanket resume exclusion — see [002-resume-authored-handoff](002-resume-authored-handoff.md).
+- Updated 2026-07-20: audited the plan against the implementation and converged the
+  entry points before UI work — shared `HandoffCoordinator`, one `handoffSourceContext`
+  capture, registry-driven palette targets, `qodercli` catalog parity — see
+  [003-plan-calibration](003-plan-calibration.md).

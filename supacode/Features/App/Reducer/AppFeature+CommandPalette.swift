@@ -291,12 +291,13 @@ extension AppFeature {
     }
     guard let destinationAgent = DetectedAgent(rawValue: agent) else { return .none }
     let rootURL = worktree.workingDirectory
-    let sessionContext = terminalClient.handoffSessionContext(worktree.id)
+    let source = terminalClient.handoffSourceContext(worktree.id)
+    let sessionContext = source?.sessionContext
     let outgoing = sessionContext?.agent
-    let observation = terminalClient.handoffLaunchObservation(worktree.id)
+    let observation = source?.observation
     let preparationRequest = HandoffCommandHandler.preparationRequest(
       outgoingAgent: outgoing,
-      session: terminalClient.handoffAgentSession(worktree.id),
+      session: source?.session,
       observation: observation
     )
     let configuration: AgentLaunchConfiguration
@@ -317,37 +318,36 @@ extension AppFeature {
     guard let kickoff = try? AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput else {
       return .none
     }
+    let runtimeClient = agentRuntimeClient
     return .run { send in
-      let store = HandoffStore(rootURL: rootURL)
+      let coordinator = HandoffCoordinator(
+        store: HandoffStore(rootURL: rootURL),
+        resume: { request, workingDirectory in
+          try await runtimeClient.resume(request, in: workingDirectory)
+        }
+      )
       let now = Date()
-      let preparation: HandoffPreparationOutcome
-      if let preparationRequest {
+      if preparationRequest != nil {
         await send(.repositories(.showToast(.inProgress("Preparing handoff from \(outgoing ?? "agent")…"))))
-        preparation = await Self.prepareHandoffSource(
-          request: preparationRequest,
-          store: store,
-          rootURL: rootURL,
-          runtimeClient: agentRuntimeClient,
+      }
+      let preparation: HandoffPreparationOutcome
+      do {
+        let artifacts = try await coordinator.makeTransitionArtifacts(
+          outgoingAgent: outgoing,
+          toAgent: agent,
+          sessionContext: sessionContext,
+          preparationRequest: preparationRequest,
           now: now
         )
-      } else {
-        preparation = .skipped
-      }
-      do {
-        try await Task.detached {
-          _ = try store.save(
-            outgoingAgent: outgoing,
-            sessionContext: sessionContext,
-            note: nil,
-            now: now
-          )
-          _ = try store.archiveCurrent(from: outgoing ?? "agent", toAgent: agent, now: now)
-          try store.appendLog(
-            "handoff prepared  from=\(outgoing ?? "agent")  to=\(agent)  preparation=\(preparation.rawValue)  "
-              + "launch=requested  source=command-palette",
-            now: now
-          )
-        }.value
+        preparation = artifacts.preparation
+        await coordinator.logTransition(
+          from: outgoing ?? "agent",
+          toAgent: agent,
+          disposition: .requested,
+          preparation: preparation,
+          source: "command-palette",
+          now: now
+        )
       } catch {
         await MainActor.run {
           appLogger.warning("[Handoff] command palette failed for \(rootURL.path(percentEncoded: false)): \(error)")
@@ -375,25 +375,6 @@ extension AppFeature {
           )
         }
       }
-    }
-  }
-
-  /// Resumes the outgoing session read-only, then validates and transcribes its
-  /// reply into `current.md`. Mirrors `HandoffCommandHandler`'s CLI-side flow.
-  private static func prepareHandoffSource(
-    request: AgentResumeRequest,
-    store: HandoffStore,
-    rootURL: URL,
-    runtimeClient: AgentRuntimeClient,
-    now: Date
-  ) async -> HandoffPreparationOutcome {
-    do {
-      let reply = try await runtimeClient.resume(request, in: rootURL)
-      return await Task.detached {
-        store.applyPreparationReply(reply, now: now) ? HandoffPreparationOutcome.completed : .failed
-      }.value
-    } catch {
-      return .failed
     }
   }
 

@@ -537,24 +537,22 @@ private func customCommandItems(_ commands: [EffectiveCustomCommand]) -> [Comman
   }
 }
 
-/// Hand-off actions for any selected runnable target.
+/// Hand-off actions for any selected runnable target, one per agent with a
+/// verified launch adapter.
 private func handoffCommandItems(_ repositories: RepositoriesFeature.State) -> [CommandPaletteItem] {
   guard repositories.selectedTerminalWorktree != nil else { return [] }
-  return [
-    handoffCommandItem(agent: "claude", title: "Hand off → Claude Code"),
-    handoffCommandItem(agent: "codex", title: "Hand off → Codex"),
-  ]
+  return AgentRuntimeAdapterRegistry.launchableAgents.map(handoffCommandItem(agent:))
 }
 
-private func handoffCommandItem(agent: String, title: String) -> CommandPaletteItem {
+private func handoffCommandItem(agent: DetectedAgent) -> CommandPaletteItem {
   CommandPaletteItem(
-    id: CommandPaletteItemID.handoffToAgent(agent),
-    title: title,
+    id: CommandPaletteItemID.handoffToAgent(agent.rawValue),
+    title: "Hand off → \(AgentRuntimeAdapterRegistry.displayName(for: agent))",
     subtitle: "Refresh handoff, archive, and launch in a new tab",
-    kind: .handoffToAgent(agent),
+    kind: .handoffToAgent(agent.rawValue),
     category: .terminal,
     defaultSuggestion: false,
-    keywords: ["handoff", "hand off", "switch agent", "takeover", agent]
+    keywords: ["handoff", "hand off", "switch agent", "takeover", agent.rawValue]
   )
 }
 

@@ -129,25 +129,23 @@ struct AppFeatureHandoffTests {
       $0.terminalClient.send = { command in
         sent.withValue { $0.append(command) }
       }
-      $0.terminalClient.handoffSessionContext = { _ in
-        HandoffStore.SessionContext(
-          agent: "codex",
-          paneID: "pane-0",
-          paneTitle: "codex",
-          source: "terminal-scrollback",
-          confidence: "fallback",
-          excerptText: ""
-        )
-      }
-      $0.terminalClient.handoffLaunchObservation = { _ in
-        AgentLaunchObservation(model: "gpt-5.4", executionMode: .unrestricted)
-      }
-      $0.terminalClient.handoffAgentSession = { _ in
-        AgentSession(
-          id: "9B0E3B0E-67B3-4D45-A3A0-7DD9BC713711",
-          transcriptPath: nil,
-          source: .openFile,
-          confidence: .exact
+      $0.terminalClient.handoffSourceContext = { _ in
+        HandoffSourceContext(
+          sessionContext: HandoffStore.SessionContext(
+            agent: "codex",
+            paneID: "pane-0",
+            paneTitle: "codex",
+            source: "terminal-scrollback",
+            confidence: "fallback",
+            excerptText: ""
+          ),
+          observation: AgentLaunchObservation(model: "gpt-5.4", executionMode: .unrestricted),
+          session: AgentSession(
+            id: "9B0E3B0E-67B3-4D45-A3A0-7DD9BC713711",
+            transcriptPath: nil,
+            source: .openFile,
+            confidence: .exact
+          )
         )
       }
       $0.agentRuntimeClient = AgentRuntimeClient(
@@ -280,14 +278,18 @@ struct AppFeatureHandoffTests {
     let store = TestStore(initialState: state) {
       AppFeature()
     } withDependencies: {
-      $0.terminalClient.handoffSessionContext = { _ in
-        HandoffStore.SessionContext(
-          agent: "claude",
-          paneID: claudeSurfaceID.uuidString,
-          paneTitle: "claude",
-          source: "terminal-scrollback",
-          confidence: "fallback",
-          excerptText: "focused claude context"
+      $0.terminalClient.handoffSourceContext = { _ in
+        HandoffSourceContext(
+          sessionContext: HandoffStore.SessionContext(
+            agent: "claude",
+            paneID: claudeSurfaceID.uuidString,
+            paneTitle: "claude",
+            source: "terminal-scrollback",
+            confidence: "fallback",
+            excerptText: "focused claude context"
+          ),
+          observation: nil,
+          session: nil
         )
       }
     }

@@ -104,17 +104,15 @@ final class HandoffCommandHandler: CommandHandler {
   ) async -> CommandResponse {
     let outgoing = target.outgoingAgent
     let note = input.note
-    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store, timestamp: timestamp)
+    let coordinator = makeCoordinator(store: store)
     do {
-      let result = try await Task.detached {
-        try store.save(
-          outgoingAgent: outgoing,
-          sessionContext: target.sessionContext,
-          note: note,
-          preparation: preparation,
-          now: timestamp
-        )
-      }.value
+      let (result, preparation) = try await coordinator.save(
+        outgoingAgent: outgoing,
+        sessionContext: target.sessionContext,
+        note: note,
+        preparationRequest: preparationRequest(input: input, target: target),
+        now: timestamp
+      )
       return success(payload: makePayload(action: .save, save: result, preparation: preparation))
     } catch {
       return errorResponse(
@@ -140,23 +138,18 @@ final class HandoffCommandHandler: CommandHandler {
     guard let destinationAgent = DetectedAgent(rawValue: toAgent) else {
       return errorResponse(code: CLIErrorCode.invalidArgument, message: "Unknown handoff agent: \(toAgent).")
     }
-    let preparation = await prepareOutgoingAgent(input: input, target: target, store: store, timestamp: timestamp)
+    let coordinator = makeCoordinator(store: store)
 
-    let saveResult: HandoffStore.SaveResult
-    let archivedPath: String?
+    let artifacts: HandoffCoordinator.TransitionArtifacts
     do {
-      // Refresh the appendix, then archive the current artifact before launching.
-      saveResult = try await Task.detached {
-        try store.save(
-          outgoingAgent: outgoing,
-          sessionContext: target.sessionContext,
-          note: nil,
-          now: timestamp
-        )
-      }.value
-      archivedPath = try await Task.detached {
-        try store.archiveCurrent(from: from, toAgent: toAgent, now: timestamp)
-      }.value
+      // Prepare, refresh the appendix, then archive before launching.
+      artifacts = try await coordinator.makeTransitionArtifacts(
+        outgoingAgent: outgoing,
+        toAgent: toAgent,
+        sessionContext: target.sessionContext,
+        preparationRequest: preparationRequest(input: input, target: target),
+        now: timestamp
+      )
     } catch {
       return errorResponse(
         code: CLIErrorCode.handoffFailed,
@@ -185,67 +178,53 @@ final class HandoffCommandHandler: CommandHandler {
         )
       )
       if launched == nil {
-        let archiveSuffix = archivedPath.map { "  archive=\($0)" } ?? ""
-        let noteSuffix = input.note.map { "  note=\"\($0.replacing("\n", with: " "))\"" } ?? ""
-        try? await Task.detached {
-          try store.appendLog(
-            "\(from) → \(toAgent)  launch=failed  preparation=\(preparation.rawValue)\(archiveSuffix)\(noteSuffix)",
-            now: timestamp
-          )
-        }.value
+        await coordinator.logTransition(
+          from: from,
+          toAgent: toAgent,
+          disposition: .failed,
+          preparation: artifacts.preparation,
+          archivedPath: artifacts.archivedPath,
+          note: input.note,
+          now: timestamp
+        )
         return errorResponse(code: CLIErrorCode.handoffFailed, message: "Failed to launch \(toAgent).")
       }
     }
 
-    let note = input.note
-    let paneSuffix = launched.map { "  pane=\($0.paneID)" } ?? "  (no launch)"
-    let noteSuffix = note.map { "  note=\"\($0.replacing("\n", with: " "))\"" } ?? ""
-    try? await Task.detached {
-      try store.appendLog(
-        "\(from) → \(toAgent)\(paneSuffix)  preparation=\(preparation.rawValue)\(noteSuffix)",
-        now: timestamp
-      )
-    }.value
+    await coordinator.logTransition(
+      from: from,
+      toAgent: toAgent,
+      disposition: launched.map { .pane($0.paneID) } ?? .skipped,
+      preparation: artifacts.preparation,
+      note: input.note,
+      now: timestamp
+    )
 
     return success(
       payload: makePayload(
         action: .toAgent,
-        save: saveResult,
+        save: artifacts.save,
         toAgent: toAgent,
-        archivedPath: archivedPath,
+        archivedPath: artifacts.archivedPath,
         launched: launched,
-        preparation: preparation
+        preparation: artifacts.preparation
       )
     )
   }
 
-  private func prepareOutgoingAgent(
-    input: HandoffInput,
-    target: HandoffResolvedTarget,
-    store: HandoffStore,
-    timestamp: Date
-  ) async -> HandoffPreparationOutcome {
-    guard
-      input.prepare,
-      let request = Self.preparationRequest(
-        outgoingAgent: target.outgoingAgent,
-        session: target.outgoingSession,
-        observation: target.outgoingLaunchObservation
-      )
-    else {
-      return .skipped
-    }
-    do {
-      let reply = try await preparationProvider(
-        request,
-        URL(fileURLWithPath: target.rootPath, isDirectory: true)
-      )
-      return await Task.detached {
-        store.applyPreparationReply(reply, now: timestamp) ? HandoffPreparationOutcome.completed : .failed
-      }.value
-    } catch {
-      return .failed
-    }
+  private func makeCoordinator(store: HandoffStore) -> HandoffCoordinator {
+    HandoffCoordinator(store: store, resume: preparationProvider)
+  }
+
+  /// The safe source-preparation request, or nil when `--no-prepare` was
+  /// passed or no exact/high-confidence resumable session exists.
+  private func preparationRequest(input: HandoffInput, target: HandoffResolvedTarget) -> AgentResumeRequest? {
+    guard input.prepare else { return nil }
+    return Self.preparationRequest(
+      outgoingAgent: target.outgoingAgent,
+      session: target.outgoingSession,
+      observation: target.outgoingLaunchObservation
+    )
   }
 
   // MARK: - status

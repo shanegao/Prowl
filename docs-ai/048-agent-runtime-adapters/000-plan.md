@@ -165,3 +165,9 @@ or a source model string to another vendor.
   bounded by a 2-minute timeout with child termination. Codex `--yolo` is
   recognized as explicit unrestricted observation. Details in
   [047.002](../047-cross-agent-handoff/002-resume-authored-handoff.md).
+- 2026-07-20: adapters now carry a user-facing `displayName`, and
+  `AgentRuntimeAdapterRegistry.launchableAgents` is the list UI entry points derive
+  handoff targets from (first consumer: the Command Palette). Scope note: the
+  registry is the source of truth for launch/resume *capability*; token
+  recognition stays with the CLI-shared catalog, guarded by an app-side parity
+  test. See [047.003](../047-cross-agent-handoff/003-plan-calibration.md).

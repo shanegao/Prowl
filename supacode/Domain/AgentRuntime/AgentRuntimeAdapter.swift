@@ -2,6 +2,8 @@ import Foundation
 
 nonisolated protocol AgentRuntimeAdapter: Sendable {
   var agent: DetectedAgent { get }
+  /// Human-readable product name for UI entry points ("Claude Code").
+  var displayName: String { get }
 
   func observe(arguments: [String]) -> AgentLaunchObservation
   func makeStartInvocation(_ request: AgentStartRequest) throws -> AgentInvocation
@@ -106,6 +108,16 @@ nonisolated enum AgentRuntimeAdapterRegistry {
     }
   }
 
+  /// Agents with a verified interactive launch adapter, in catalog order.
+  /// UI entry points derive their handoff targets from this list.
+  static var launchableAgents: [DetectedAgent] {
+    DetectedAgent.allCases.filter { adapter(for: $0) != nil }
+  }
+
+  static func displayName(for agent: DetectedAgent) -> String {
+    adapter(for: agent)?.displayName ?? agent.displayName
+  }
+
   static func canStart(_ agent: DetectedAgent) -> Bool {
     adapter(for: agent) != nil
   }
@@ -149,6 +161,7 @@ nonisolated enum AgentRuntimeAdapterRegistry {
 
 nonisolated private struct CodexRuntimeAdapter: AgentRuntimeAdapter {
   let agent: DetectedAgent = .codex
+  let displayName = "Codex"
 
   func observe(arguments: [String]) -> AgentLaunchObservation {
     let explicitlyBypassesSandbox =
@@ -192,6 +205,7 @@ nonisolated private struct CodexRuntimeAdapter: AgentRuntimeAdapter {
 
 nonisolated private struct ClaudeCodeRuntimeAdapter: AgentRuntimeAdapter {
   let agent: DetectedAgent = .claude
+  let displayName = "Claude Code"
 
   func observe(arguments: [String]) -> AgentLaunchObservation {
     let explicitlyBypassesPermissions =

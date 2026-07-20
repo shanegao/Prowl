@@ -9,9 +9,10 @@ struct TerminalClient {
   /// synchronously before an async dispatch races against AppKit focus reshuffle
   /// (e.g. when a palette dismisses and the leftmost pane reclaims first responder).
   var selectedSurfaceID: @MainActor @Sendable (Worktree.ID) -> UUID?
-  var handoffSessionContext: @MainActor @Sendable (Worktree.ID) -> HandoffStore.SessionContext?
-  var handoffLaunchObservation: @MainActor @Sendable (Worktree.ID) -> AgentLaunchObservation? = { _ in nil }
-  var handoffAgentSession: @MainActor @Sendable (Worktree.ID) -> AgentSession? = { _ in nil }
+  /// Everything the selected pane knows about the outgoing agent, captured in
+  /// one synchronous read: session context for the artifact, launch
+  /// observation, and the pid-anchored native session.
+  var handoffSourceContext: @MainActor @Sendable (Worktree.ID) -> HandoffSourceContext?
   var handoffSessionContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffStore.SessionContext?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
@@ -88,9 +89,7 @@ extension TerminalClient: DependencyKey {
     events: { fatalError("TerminalClient.events not configured") },
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
-    handoffSessionContext: { _ in nil },
-    handoffLaunchObservation: { _ in nil },
-    handoffAgentSession: { _ in nil },
+    handoffSourceContext: { _ in nil },
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
@@ -103,9 +102,7 @@ extension TerminalClient: DependencyKey {
     events: { AsyncStream { $0.finish() } },
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
-    handoffSessionContext: { _ in nil },
-    handoffLaunchObservation: { _ in nil },
-    handoffAgentSession: { _ in nil },
+    handoffSourceContext: { _ in nil },
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
