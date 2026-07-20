@@ -100,3 +100,4 @@ agent-facing manual for that).
 | 046 | [cli-short-handles](046-cli-short-handles/000-plan.md) | 2026-07-13 | Session-scoped tab and pane handles for CLI targeting |
 | 047 | [cross-agent-handoff](047-cross-agent-handoff/000-plan.md) | 2026-07-17 | Durable artifact-based task handoff across coding agents |
 | 048 | [agent-runtime-adapters](048-agent-runtime-adapters/000-plan.md) | 2026-07-18 | Protocol-backed agent session resume and configurable launch invocations |
+| 049 | [agents-toolbar-entry](049-agents-toolbar-entry/000-plan.md) | 2026-07-20 | Agents status capsule + staged handoff HUD toolbar entry |

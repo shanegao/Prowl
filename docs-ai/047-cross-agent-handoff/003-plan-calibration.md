@@ -72,16 +72,16 @@ with `main` (2026-07-20) as part of this wave.
 ### Open (next waves)
 
 - **Discoverability.** Handoff is invisible outside `prowl handoff` and two
-  palette rows. A toolbar "Agents" entry (left of the branch title) is being
-  designed — three interaction proposals (native menu / popover panel /
-  status button + staged HUD) are under review. The chosen design consumes
-  `HandoffCoordinator`, `TerminalClient.handoffSourceContext`, and
-  `AgentRuntimeAdapterRegistry.launchableAgents` directly; no further
-  plumbing work is expected.
+  palette rows. Resolved 2026-07-20: the status-capsule + staged-HUD direction
+  was chosen from three prototyped proposals and planned as
+  [049-agents-toolbar-entry](../049-agents-toolbar-entry/000-plan.md), which
+  consumes `HandoffCoordinator`, `TerminalClient.handoffSourceContext`, and
+  `AgentRuntimeAdapterRegistry.launchableAgents` directly.
 - **Cancellation.** A palette-initiated preparation can occupy up to the
   2-minute resume timeout with only an in-progress toast; there is no cancel
-  affordance. The CLI path inherits Ctrl-C. Any richer UI must expose
-  cancellation of the preparation turn.
+  affordance. The CLI path inherits Ctrl-C. Addressed by 049's execution step
+  (Skip and Cancel during the briefing stage); until that lands, the toast-only
+  behavior stands.
 - **Retention.** `archive/` and `sessions/` grow without bound: every save adds
   a session excerpt, every transition adds an archive, every preparation adds a
   backup. Acceptable for a local, self-ignored directory in the short term;
