@@ -99,8 +99,8 @@ prowl handoff status     [target]
 ```
 
 - **`save`** first asks the detected outgoing Claude Code or Codex session to
-  reply with an updated `current.md` when its native session identity is exact
-  or high confidence; Prowl validates and transcribes the reply. The resume is
+  reply with a fresh `current.md` snapshot when its native session identity is
+  exact or high confidence; Prowl validates and transcribes the reply. The resume is
   read-only (no permission flags) and bounded to **2 minutes** — a stalled or
   unusable reply is logged as `preparation=failed` and the existing artifact
   stays in place. It then refreshes generated context from live git state and
@@ -128,9 +128,11 @@ The outgoing agent is detected automatically (the same signal as
 
 Prowl also auto-saves an initialized handoff artifact from the same detection
 chain. Once `.prowl/handoff/current.md` exists for a runnable target, Prowl
-refreshes it when a detected agent moves from **working** to **done** or
-**blocked**. Auto-save is throttled per pane and does not create handoff files
-for targets that have never run `prowl handoff save` or `prowl handoff to`.
+refreshes the generated `context.md` and session excerpt when a detected
+agent moves from **working** to **done** or **blocked** (`current.md` itself
+is never touched by auto-save). Auto-save is throttled per pane and does not
+create handoff files for targets that have never run `prowl handoff save` or
+`prowl handoff to`.
 
 ## In the app: the Agents capsule and the Hand Off HUD
 

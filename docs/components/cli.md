@@ -261,8 +261,10 @@ prowl handoff status     [target]
 - **`save`** — when Prowl has an exact or high-confidence native session for
   the detected outgoing Claude Code or Codex process, it first resumes that
   session non-interactively (read-only, bounded to 2 minutes) and asks it to
-  **reply** with the updated agent-authored `current.md`; Prowl validates the
-  reply and transcribes it into the file. It then refreshes
+  **reply** with a fresh agent-authored `current.md` snapshot, written
+  entirely from that session's own knowledge; Prowl validates the
+  reply and transcribes it into the file (the previous version is backed up
+  to `archive/` first). It then refreshes
   `.prowl/handoff/context.md` from live git state (per-repo branch + change
   counts, changed-file list, detected outgoing agent, and captured session
   excerpt). The single `save` log line records whether source preparation

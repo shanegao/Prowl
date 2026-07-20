@@ -88,3 +88,11 @@ cwd, which is weaker than the pid-anchored, ambiguity-safe native session identi
   entry points before UI work — shared `HandoffCoordinator`, one `handoffSourceContext`
   capture, registry-driven palette targets, `qodercli` catalog parity — see
   [003-plan-calibration](003-plan-calibration.md).
+- Updated 2026-07-20: `current.md` adopted **snapshot semantics** — each
+  preparation rewrites it entirely from the source session's own knowledge,
+  superseding 047.002's "reply with the complete updated document /
+  carry forward still-relevant notes" instruction. Carry-forward degraded
+  into unverified copying (the source has no real memory of earlier rounds'
+  text) and let stale sections mislead the receiver; history flows through
+  the receiver's takeover read and the `archive/` chain instead. Decision
+  record: [049 amendments](../049-agents-toolbar-entry/000-plan.md#amendments).
