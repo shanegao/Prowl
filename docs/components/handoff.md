@@ -110,7 +110,8 @@ prowl handoff status     [target]
   agent family and are never translated between Codex and Claude Code.
   `--no-launch` still prepares, archives, and saves; it accepts the full
   detected-agent token list: `pi`, `claude`, `codex`, `gemini`, `cursor-agent`,
-  `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qwen`, `grok`.
+  `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qodercli`, `qwen`,
+  `grok`.
 - **`status`** reports the artifact path, whether it exists, the detected current
   agent, and the last log line.
 

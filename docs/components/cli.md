@@ -280,7 +280,7 @@ prowl handoff status     [target]
   Interactive launch is verified for `claude` and `codex`; `--no-launch`
   accepts the full detected-agent list: `pi`, `claude`, `codex`, `gemini`,
   `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`,
-  `qwen`, `grok`.
+  `qodercli`, `qwen`, `grok`.
 - **`status`** — report the artifact path, whether it exists, the agent
   currently detected in the target, and the last handoff-log line.
 

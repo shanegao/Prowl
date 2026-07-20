@@ -13,6 +13,7 @@ public enum HandoffAgentSupport {
     "kimi",
     "droid",
     "amp",
+    "qodercli",
     "qwen",
     "grok",
   ]
