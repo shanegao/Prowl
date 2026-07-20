@@ -36,9 +36,12 @@
   direct-execution rows are gone, and the post-palette focus restore skips
   hand-off so the HUD keeps first responder.
 - **Preparation-prompt hardening** (during review): reader framing,
-  per-section guidance, current-artifact embedding in
-  `HandoffCoordinator.prepare`, a no-redo instruction in the kickoff
-  prompt, and a normalizer that discards post-fence chatter.
+  per-section guidance, snapshot semantics for `current.md` (each
+  preparation rewrites it fresh from the source session's knowledge; the
+  rolling carry-forward instruction and a brief embedding attempt were
+  dropped — see the plan amendments), a no-redo instruction plus an
+  `archive/` pointer in the kickoff prompt, and a normalizer that discards
+  post-fence chatter.
 - Event-stream hygiene surfaced during review: `emitAgentEntry` deduplicates
   against the last consumer-visible `ActiveAgentEntry`, keeping raw-state
   oscillation and session-miss bookkeeping out of the TCA action stream.
@@ -49,7 +52,8 @@
   guards, artifact assertions against a real temp store),
   `AppFeatureHandoffTests` (palette → HUD → run end-to-end, source
   attribution, no-agent gating), `HandoffCommandHandlerTests` (prompt/
-  template/validator section contract, artifact embedding),
+  template/validator section contract, prompt independence from the
+  existing artifact),
   `HandoffStoreTests` (fence/chatter fixtures), `AgentEntryEmissionDedupTests`.
   Full suite green (1,910+), `make check` clean.
 - Live debug-app verification: capsule enabled/disabled forms, agent

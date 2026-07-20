@@ -147,15 +147,24 @@ plumbing from 047.003; no new pipeline work is expected.
   plus "codex will summarize its progress first" when resumable); the
   "brief" vocabulary was replaced by "progress summary" throughout the HUD.
 - 2026-07-20 (PR1 review): preparation-prompt hardening. The prompt now
-  frames the reader ("another agent with none of your context"), gives
-  per-section guidance, and `HandoffCoordinator.prepare` embeds the current
-  `current.md` into the prompt (the resume is read-only, so this is the only
-  way earlier notes can actually carry forward — the previous prompt asked
-  for carry-forward while barring file reads). The kickoff prompt tells the
-  receiver not to redo work listed under What Has Been Done. The reply
-  normalizer additionally discards chatter after a wrapping fence's closer.
-  Guarded by a prompt/template/validator section-contract test, embedding
-  tests, and fence-handling fixtures.
+  frames the reader ("another agent with none of your context") and gives
+  per-section guidance; the kickoff prompt tells the receiver not to redo
+  work listed under What Has Been Done and points at `archive/` for deeper
+  history. The reply normalizer additionally discards chatter after a
+  wrapping fence's closer. Guarded by a prompt/template/validator
+  section-contract test and fence-handling fixtures.
+- 2026-07-20 (PR1 review, superseding the embedding attempt from the same
+  day): **`current.md` uses snapshot semantics — every preparation rewrites
+  it fresh from the source session's own knowledge.** The 047 rolling
+  carry-forward instruction had a structural flaw: the source has no real
+  memory of earlier rounds' text, so "carrying forward" degrades into
+  unverified copying and stale sections (finished Next Steps, outdated
+  Current State) mislead the receiver. Embedding the previous artifact into
+  the prompt (briefly implemented) only fed that copying. History instead
+  flows through the reading chain — each receiver reads the previous
+  snapshot at takeover, digests it, and its own summary reflects verified
+  history — and through full copies in `archive/` (the `to` archive plus
+  the preparation backup), which the kickoff prompt now references.
 - 2026-07-20: **PR2 is deferred indefinitely.** Skip already covers the
   waiting pain (an impatient user hands off immediately with existing
   notes), hand-off is a low-frequency action, and the modal wait is bounded

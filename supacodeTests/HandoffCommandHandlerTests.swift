@@ -183,12 +183,16 @@ struct HandoffCommandHandlerTests {
     #expect(HandoffStore.preparedArtifact(fromAgentReply: document) != nil)
   }
 
-  @Test func saveEmbedsExistingArtifactIntoThePreparationPrompt() async throws {
+  /// Snapshot semantics: the preparation prompt never embeds or references
+  /// the previous artifact — the source writes a fresh document from its own
+  /// session knowledge; history flows through the receiver's read and the
+  /// archive chain.
+  @Test func preparationPromptIsIndependentOfTheExistingArtifact() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
     try store.ensureScaffold()
-    try "# Handoff\n\n## Objective\nEarlier notes worth carrying forward.\n"
+    try "# Handoff\n\n## Objective\nEarlier notes from a previous round.\n"
       .write(to: store.currentURL, atomically: true, encoding: .utf8)
     let resumed = LockIsolated<AgentResumeRequest?>(nil)
     let handler = makeHandler(
@@ -203,28 +207,8 @@ struct HandoffCommandHandlerTests {
     _ = await handler.handle(envelope: envelope(HandoffInput(action: .save)))
 
     let prompt = try #require(resumed.value?.prompt)
-    #expect(prompt.contains("Earlier notes worth carrying forward."))
-    #expect(prompt.contains("Current contents of .prowl/handoff/current.md"))
-  }
-
-  @Test func saveDoesNotEmbedTheSeededTemplate() async throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    try HandoffStore(rootURL: root).ensureScaffold()
-    let resumed = LockIsolated<AgentResumeRequest?>(nil)
-    let handler = makeHandler(
-      root: root,
-      outgoingAgent: "codex",
-      preparationSpy: { request, _ in
-        resumed.setValue(request)
-        return "unusable"
-      }
-    )
-
-    _ = await handler.handle(envelope: envelope(HandoffInput(action: .save)))
-
-    let prompt = try #require(resumed.value?.prompt)
-    #expect(!prompt.contains("Current contents of .prowl/handoff/current.md"))
+    #expect(prompt == HandoffCommandHandler.preparationPrompt())
+    #expect(!prompt.contains("Earlier notes from a previous round."))
   }
 
   @Test func saveMarksPreparationFailedForUnusableReply() async throws {

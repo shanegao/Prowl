@@ -41,16 +41,22 @@ repository's root `.gitignore` is required.
 
 `current.md` contains only agent-authored prose: `Objective`, `Current State`,
 `What Has Been Done`, `Open Questions`, `Risks`, `Next Steps`, and
-`Suggested Prompt For Next Agent`. When Prowl has an exact or high-confidence
-native session for a supported outgoing agent, `handoff save` and `handoff to`
-first resume that agent in a read-only, non-interactive turn and ask it to
-**reply** with the updated document; Prowl validates the reply (required
-sections present, not the seeded template) and transcribes it into `current.md`.
-Before transcription, the previous edited `current.md` is snapshotted to
-`archive/<ts>-preparation-backup.md`, so a reply that drops sections never
-destroys the only copy of earlier notes. The prose is always the agent's —
-Prowl never authors semantic content, it only seeds the template and
-transcribes validated replies.
+`Suggested Prompt For Next Agent`. It is a **snapshot, not a rolling
+document**: each preparation rewrites it entirely from the outgoing session's
+own knowledge, so every line is vouched for by the agent that just worked on
+the task — stale sections from earlier rounds cannot linger. History flows
+through the reading chain (each receiver reads the previous snapshot when it
+takes over) and through full copies under `archive/`.
+
+When Prowl has an exact or high-confidence native session for a supported
+outgoing agent, `handoff save` and `handoff to` first resume that agent in a
+read-only, non-interactive turn and ask it to **reply** with a fresh
+document; Prowl validates the reply (required sections present, not the
+seeded template) and transcribes it into `current.md`. Before transcription,
+the previous edited `current.md` is snapshotted to
+`archive/<ts>-preparation-backup.md`, so earlier notes always survive in the
+archive chain. The prose is always the agent's — Prowl never authors semantic
+content, it only seeds the template and transcribes validated replies.
 
 `context.md` contains the detected outgoing agent, a pointer to the captured
 session excerpt, each repo's branch and change counts, and the changed files.

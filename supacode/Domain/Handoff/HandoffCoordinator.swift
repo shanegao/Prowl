@@ -52,43 +52,23 @@ nonisolated struct HandoffCoordinator: Sendable {
   /// Resume the source read-only and transcribe its validated reply into
   /// `current.md`. A nil request means preparation is skipped: no safe
   /// session, an unsupported adapter, or `--no-prepare`.
+  /// `current.md` uses snapshot semantics: each preparation rewrites it from
+  /// the source session's own knowledge. History carries through the reading
+  /// chain — every receiver reads the previous snapshot when it takes over —
+  /// and full copies live under `archive/`, so no earlier text is embedded
+  /// or carried forward mechanically (stale carried-over sections would
+  /// mislead the next agent).
   func prepare(_ request: AgentResumeRequest?, now: Date) async -> HandoffPreparationOutcome {
     guard let request else { return .skipped }
     let store = self.store
     do {
-      let augmented = await Task.detached {
-        Self.embeddingCurrentArtifact(into: request, store: store)
-      }.value
-      let reply = try await resume(augmented, store.rootURL)
+      let reply = try await resume(request, store.rootURL)
       return await Task.detached {
         store.applyPreparationReply(reply, now: now) ? HandoffPreparationOutcome.completed : .failed
       }.value
     } catch {
       return .failed
     }
-  }
-
-  /// Append the current agent-authored artifact to the preparation prompt.
-  /// The resume is read-only and its prompt bars file access, so this is the
-  /// only way the source can actually carry earlier notes forward. The
-  /// seeded template carries no prose and is not worth embedding.
-  nonisolated static func embeddingCurrentArtifact(
-    into request: AgentResumeRequest,
-    store: HandoffStore
-  ) -> AgentResumeRequest {
-    guard
-      let existing = try? String(contentsOf: store.currentURL, encoding: .utf8),
-      existing.trimmingCharacters(in: .whitespacesAndNewlines)
-        != HandoffStore.template.trimmingCharacters(in: .whitespacesAndNewlines)
-    else { return request }
-    return AgentResumeRequest(
-      agent: request.agent,
-      session: request.session,
-      prompt: request.prompt
-        + "\n\nCurrent contents of .prowl/handoff/current.md (carry forward what is still relevant):\n\n"
-        + existing,
-      model: request.model
-    )
   }
 
   /// Refresh generated context with an already-decided preparation outcome.
