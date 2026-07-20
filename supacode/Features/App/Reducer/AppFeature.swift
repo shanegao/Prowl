@@ -977,8 +977,13 @@ struct AppFeature {
         return openHandoffHud(state: &state)
 
       case .handoffHud(.presented(.delegate(.dismiss))), .handoffHud(.dismiss):
+        let worktree = state.handoffHud?.worktree
         state.handoffHud = nil
-        return .none
+        guard let worktree else { return .none }
+        // Hand keyboard focus back to the terminal the HUD captured it from.
+        return .run { _ in
+          await terminalClient.send(.focusSelectedTab(worktree))
+        }
 
       case .handoffHud:
         return .none
