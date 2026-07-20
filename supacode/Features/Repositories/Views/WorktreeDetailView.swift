@@ -206,7 +206,8 @@ struct WorktreeDetailView: View {
       onRunCustomCommand: { index in
         store.send(.runCustomCommand(index))
       },
-      onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) }
+      onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
+      onHandOff: { store.send(.openHandoffHud) }
     )
   }
 
@@ -355,6 +356,7 @@ struct WorktreeDetailView: View {
     }
     return WorktreeToolbarState(
       title: title,
+      agentsCapsule: agentsCapsuleState(repositories: input.repositories),
       statusToast: input.repositories.statusToast,
       pullRequest: matchedPullRequest(
         for: input.selectedWorktree,
@@ -374,6 +376,33 @@ struct WorktreeDetailView: View {
       availableUpdateVersion: input.availableUpdateVersion,
       showRunButtonInToolbar: input.showRunButtonInToolbar,
       showDefaultEditorInToolbar: input.showDefaultEditorInToolbar
+    )
+  }
+
+  /// The selected pane's detected agent, feeding the Agents capsule. nil
+  /// (no detected agent) renders the capsule disabled — reserved for the
+  /// future quick launcher (docs-ai 049).
+  private func agentsCapsuleState(repositories: RepositoriesFeature.State) -> AgentsCapsuleState? {
+    guard let worktree = repositories.selectedTerminalWorktree,
+      let state = terminalManager.stateIfExists(for: worktree.id),
+      let tabID = state.tabManager.selectedTabId,
+      let surfaceID = state.activeSurfaceID(for: tabID),
+      let paneState = state.surfaceAgentStates[surfaceID],
+      let agent = paneState.detectedAgent
+    else { return nil }
+    let resumable =
+      HandoffCommandHandler.preparationRequest(
+        outgoingAgent: agent.rawValue,
+        session: paneState.session,
+        observation: paneState.launchObservation
+      ) != nil
+    return AgentsCapsuleState(
+      displayName: agent.displayName,
+      iconToken: paneState.iconLookupToken ?? agent.iconLookupToken,
+      displayState: paneState.displayState,
+      infoLine: resumable
+        ? "\(agent.displayName) will brief the incoming agent first"
+        : "Hands this task to another agent in a new tab"
     )
   }
 
@@ -799,6 +828,7 @@ struct WorktreeDetailView: View {
 
   struct WorktreeToolbarState {
     let title: DetailToolbarTitle
+    let agentsCapsule: AgentsCapsuleState?
     let statusToast: RepositoriesFeature.StatusToast?
     let pullRequest: GithubPullRequest?
     let codeHost: CodeHost
@@ -832,9 +862,17 @@ struct WorktreeDetailView: View {
     let onStopRunScript: () -> Void
     let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
     let onActivateUpdateButton: () -> Void
+    let onHandOff: () -> Void
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
+      ToolbarItem(placement: .navigation) {
+        AgentsToolbarButton(
+          capsule: toolbarState.agentsCapsule,
+          onHandOff: onHandOff
+        )
+      }
+
       ToolbarItem(placement: .navigation) {
         WorktreeDetailTitleView(
           title: toolbarState.title,
