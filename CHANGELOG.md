@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.7.20](https://github.com/onevcat/Prowl/releases/tag/v2026.7.20)
+
+### New
+
+- Global Custom Commands: create custom commands in Settings that apply across all repositories instead of duplicating them per repo. Repository-local commands still take precedence if a name or shortcut conflicts.
+- Prowl now detects Qoder CLI as a coding agent, so it shows up in Active Agents and `prowl agents` with correct working/blocked status.
+
+### Improved
+
+- Custom Commands settings now let you enable/disable local commands and opt out of a Global command per repository (Repo Settings → Custom Commands → **This Repo** checkbox), with a clearer insertion indicator while reordering.
+- If a repository-local command and a Global command share the same name, Prowl now shows both instead of hiding one.
+
+### Fixed
+
+- Ask-style permission prompts from the OMP agent no longer show as "working" — they're now correctly reported as blocked until you respond.
+- Cancelling a running shell command is more reliable and no longer waits on stream teardown to terminate the process.
+
 ## [2026.7.17](https://github.com/onevcat/Prowl/releases/tag/v2026.7.17)
 
 Grok Build agent detection and a reworked branch-deletion memory setting.
