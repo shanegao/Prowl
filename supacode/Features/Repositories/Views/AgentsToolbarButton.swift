@@ -25,14 +25,35 @@ struct AgentsToolbarButton: View {
   let capsule: AgentsCapsuleState?
   let onHandOff: () -> Void
   @State private var isPopoverPresented = false
+  @State private var isHovered = false
 
   var body: some View {
     Button {
       isPopoverPresented.toggle()
     } label: {
       label
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .contentShape(Capsule())
     }
+    // The item opts out of the navigation group's shared background
+    // (`sharedBackgroundVisibility(.hidden)`) to stay separate from the
+    // branch title, and draws its own glass capsule. `.plain` + an explicit
+    // glass background keeps the horizontal padding as tight as the other
+    // toolbar buttons; `.buttonStyle(.glass)` pads noticeably wider.
+    .buttonStyle(.plain)
+    // Hover feedback must live in the glass material itself: a translucent
+    // fill layered under `glassEffect` gets swallowed by the material
+    // compositing, and `.interactive()` only adds press feedback on macOS.
+    .glassEffect(
+      isHovered && capsule != nil
+        ? .regular.tint(.primary.opacity(0.12)).interactive()
+        : .regular.interactive(),
+      in: Capsule()
+    )
+    .opacity(capsule == nil ? 0.45 : 1)
     .disabled(capsule == nil)
+    .onHover { isHovered = $0 }
     .help(helpText)
     .accessibilityLabel(accessibilityText)
     .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {
@@ -48,27 +69,31 @@ struct AgentsToolbarButton: View {
     }
   }
 
+  /// Mirrors `WorktreeDetailTitleView`'s label metrics (title3 medium,
+  /// 20pt icon slot) so the two neighboring pills read as one family.
   @ViewBuilder
   private var label: some View {
-    HStack(spacing: 5) {
+    HStack(spacing: 6) {
       if let capsule {
         agentIcon(capsule)
+          .frame(width: 20, height: 20)
         Text(capsule.displayName)
-          .font(.callout.weight(.medium))
           .monospaced()
       } else {
         Image(systemName: "person.2")
+          .foregroundStyle(.secondary)
           .accessibilityHidden(true)
+          .frame(width: 20, height: 20)
         Text("Agents")
-          .font(.callout.weight(.medium))
       }
     }
+    .font(.title3.weight(.medium))
   }
 
   @ViewBuilder
   private func agentIcon(_ capsule: AgentsCapsuleState) -> some View {
     if let source = capsule.iconSource {
-      TabIconImage(rawName: source.storageString, pointSize: 13)
+      TabIconImage(rawName: source.storageString, pointSize: 17)
     } else {
       Image(systemName: "sparkle")
         .accessibilityHidden(true)
