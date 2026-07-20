@@ -9,17 +9,18 @@ struct AgentsCapsuleState: Equatable {
   /// the assembler with the same two-step token fallback the Active Agents
   /// panel uses, so a wrapper process name never loses the brand icon.
   let iconSource: TabIconSource?
-  let displayState: AgentDisplayState
   /// Behavior preview shown as the popover's read-only first line.
   let infoLine: String
 }
 
 /// Toolbar entry point for agent-scoped actions, left of the branch title.
-/// The capsule is a passive status indicator for the selected pane; clicking
-/// it opens a popover that hosts the agent actions — hand-off today, more
-/// later (docs-ai 049). A `Menu` cannot host this control: macOS toolbars
-/// flatten custom menu labels to their text, dropping the badge and status
-/// dot, so the popover is the durable container for this surface.
+/// The capsule identifies the selected pane's agent (the hand-off source);
+/// clicking it opens a popover that hosts the agent actions — hand-off
+/// today, more later (docs-ai 049). Live status stays with the terminal,
+/// the Active Agents panel, and the central status toast — the capsule
+/// deliberately carries no state indicator. A `Menu` cannot host this
+/// control: macOS toolbars flatten custom menu labels to their text,
+/// dropping the badge, so the popover is the durable container here.
 struct AgentsToolbarButton: View {
   let capsule: AgentsCapsuleState?
   let onHandOff: () -> Void
@@ -55,10 +56,6 @@ struct AgentsToolbarButton: View {
         Text(capsule.displayName)
           .font(.callout.weight(.medium))
           .monospaced()
-        Circle()
-          .fill(capsule.displayState.foregroundStyle)
-          .frame(width: 6, height: 6)
-          .accessibilityHidden(true)
       } else {
         Image(systemName: "person.2")
           .accessibilityHidden(true)
@@ -82,12 +79,12 @@ struct AgentsToolbarButton: View {
     guard let capsule else {
       return "No agent detected in the selected pane"
     }
-    return "Agent actions — \(capsule.displayName) · \(capsule.displayState.label)"
+    return "Agent actions for \(capsule.displayName)"
   }
 
   private var accessibilityText: String {
     guard let capsule else { return "Agents (no agent detected)" }
-    return "Agents: \(capsule.displayName), \(capsule.displayState.label)"
+    return "Agents: \(capsule.displayName)"
   }
 }
 

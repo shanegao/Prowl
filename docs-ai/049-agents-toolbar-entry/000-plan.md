@@ -129,3 +129,11 @@ plumbing from 047.003; no new pipeline work is expected.
   `sharedBackgroundVisibility(.hidden)` (a fixed `ToolbarSpacer` does not
   split the navigation group). Known issue for verification: the capsule may
   be missing from the accessibility tree; audit before PR2.
+- 2026-07-20 (PR1 review): the display-state dot is **removed, permanently**.
+  It only ever described the selected pane — whose terminal is right in front
+  of the user — duplicating the Active Agents panel and the sidebar dots at a
+  6px size with no legend. This narrows decision 1: the capsule identifies
+  the hand-off source (badge + name); it is not a status indicator. Decision
+  6 changes with it: PR2's background-run progress uses the central toolbar
+  status toast (existing `StatusToast` infrastructure), not a capsule
+  progress form.

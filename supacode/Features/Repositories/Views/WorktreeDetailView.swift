@@ -402,7 +402,6 @@ struct WorktreeDetailView: View {
     return AgentsCapsuleState(
       displayName: agent.displayName,
       iconSource: iconSource,
-      displayState: paneState.displayState,
       infoLine: resumable
         ? "\(agent.displayName) will brief the incoming agent first"
         : "Hands this task to another agent in a new tab"
