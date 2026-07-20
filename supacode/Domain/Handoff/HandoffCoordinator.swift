@@ -65,6 +65,37 @@ nonisolated struct HandoffCoordinator: Sendable {
     }
   }
 
+  /// Refresh generated context with an already-decided preparation outcome.
+  /// Staged callers (the HUD) run `prepare` separately so they can report
+  /// progress and support Skip; `save`/`makeTransitionArtifacts` compose this
+  /// for single-shot callers.
+  func saveArtifact(
+    outgoingAgent: String?,
+    sessionContext: HandoffStore.SessionContext?,
+    note: String?,
+    preparation: HandoffPreparationOutcome?,
+    now: Date
+  ) async throws -> HandoffStore.SaveResult {
+    let store = self.store
+    return try await Task.detached {
+      try store.save(
+        outgoingAgent: outgoingAgent,
+        sessionContext: sessionContext,
+        note: note,
+        preparation: preparation,
+        now: now
+      )
+    }.value
+  }
+
+  /// Archive the combined artifact snapshot ahead of the destination launch.
+  func archive(from: String, toAgent: String, now: Date) async throws -> String? {
+    let store = self.store
+    return try await Task.detached {
+      try store.archiveCurrent(from: from, toAgent: toAgent, now: now)
+    }.value
+  }
+
   /// `handoff save`: prepare, then refresh generated context, recording the
   /// preparation outcome on the single save log line.
   func save(
@@ -75,16 +106,13 @@ nonisolated struct HandoffCoordinator: Sendable {
     now: Date
   ) async throws -> (result: HandoffStore.SaveResult, preparation: HandoffPreparationOutcome) {
     let preparation = await prepare(preparationRequest, now: now)
-    let store = self.store
-    let result = try await Task.detached {
-      try store.save(
-        outgoingAgent: outgoingAgent,
-        sessionContext: sessionContext,
-        note: note,
-        preparation: preparation,
-        now: now
-      )
-    }.value
+    let result = try await saveArtifact(
+      outgoingAgent: outgoingAgent,
+      sessionContext: sessionContext,
+      note: note,
+      preparation: preparation,
+      now: now
+    )
     return (result, preparation)
   }
 
@@ -99,18 +127,14 @@ nonisolated struct HandoffCoordinator: Sendable {
     now: Date
   ) async throws -> TransitionArtifacts {
     let preparation = await prepare(preparationRequest, now: now)
-    let store = self.store
-    let from = outgoingAgent ?? "agent"
-    let (save, archivedPath) = try await Task.detached {
-      let save = try store.save(
-        outgoingAgent: outgoingAgent,
-        sessionContext: sessionContext,
-        note: nil,
-        now: now
-      )
-      let archivedPath = try store.archiveCurrent(from: from, toAgent: toAgent, now: now)
-      return (save, archivedPath)
-    }.value
+    let save = try await saveArtifact(
+      outgoingAgent: outgoingAgent,
+      sessionContext: sessionContext,
+      note: nil,
+      preparation: nil,
+      now: now
+    )
+    let archivedPath = try await archive(from: outgoingAgent ?? "agent", toAgent: toAgent, now: now)
     return TransitionArtifacts(preparation: preparation, save: save, archivedPath: archivedPath)
   }
 
