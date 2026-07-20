@@ -80,7 +80,7 @@ struct AgentsToolbarButton: View {
           .frame(width: 20, height: 20)
         Text(capsule.displayName)
       } else {
-        Image(systemName: "person.2")
+        Image(systemName: "sparkles")
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
           .frame(width: 20, height: 20)
