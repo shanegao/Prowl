@@ -159,7 +159,7 @@ struct HandoffHudFeatureTests {
     await store.send(.moveSelection(delta: 1)) {
       $0.selectedIndex = 0
     }
-    await store.send(.setSelectedIndex(count)) // out of bounds: ignored
+    await store.send(.setSelectedIndex(count))  // out of bounds: ignored
     await store.send(.setSelectedIndex(1)) {
       $0.selectedIndex = 1
     }
