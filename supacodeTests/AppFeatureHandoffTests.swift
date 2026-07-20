@@ -111,6 +111,72 @@ struct AppFeatureHandoffTests {
     #expect(ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
   }
 
+  // MARK: - HUD presentation
+
+  @Test(.dependencies) func openHandoffHudPresentsForDetectedAgent() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let state = AppFeature.State(
+      repositories: makeWorkspaceState(root: root),
+      settings: SettingsFeature.State()
+    )
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.handoffSourceContext = { _ in
+        HandoffSourceContext(
+          sessionContext: HandoffStore.SessionContext(
+            agent: "codex",
+            paneID: "pane-0",
+            paneTitle: "codex",
+            source: "terminal-scrollback",
+            confidence: "fallback",
+            excerptText: nil
+          ),
+          observation: nil,
+          session: nil
+        )
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.openHandoffHud) {
+      let hud = try #require($0.handoffHud)
+      #expect(hud.source.agentToken == "codex")
+      #expect(hud.source.preparationRequest == nil)
+      #expect(hud.phase == .choosing)
+    }
+
+    await store.send(.handoffHud(.presented(.delegate(.dismiss)))) {
+      $0.handoffHud = nil
+    }
+  }
+
+  @Test(.dependencies) func openHandoffHudWarnsWithoutDetectedAgent() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let state = AppFeature.State(
+      repositories: makeWorkspaceState(root: root),
+      settings: SettingsFeature.State()
+    )
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.handoffSourceContext = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.openHandoffHud)
+    await store.receive(\.repositories.showToast) {
+      guard case .warning(let message) = $0.repositories.statusToast else {
+        Issue.record("Expected warning toast")
+        return
+      }
+      #expect(message.contains("No agent detected"))
+    }
+    #expect(store.state.handoffHud == nil)
+  }
+
   // MARK: - Delegate launches the receiving agent
 
   @Test(.dependencies) func handoffDelegateLaunchesAgentTab() async throws {
