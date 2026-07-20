@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned (PR1/PR2 pending) |
+| **Status** | PR1 implemented on `feature/hand-off` (awaiting review); PR2 pending |
 | **Anchor date** | 2026-07-20 |
 | **Primary PRs** | Unassigned (feature/hand-off branch) |
 | **Related** | [047 cross-agent-handoff](../047-cross-agent-handoff/000-plan.md), [047.003 plan calibration](../047-cross-agent-handoff/003-plan-calibration.md), [048 agent-runtime-adapters](../048-agent-runtime-adapters/000-plan.md), [031 command-palette-architecture](../031-command-palette-architecture/000-plan.md) |
