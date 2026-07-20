@@ -174,6 +174,98 @@ struct AppFeatureHandoffTests {
     #expect(store.state.handoffHud == nil)
   }
 
+  @Test(.dependencies) func agentRowHandOffPresentsHudForEntryPane() async throws {
+    let repositoryRoot = try makeTempRoot()
+    defer { remove(repositoryRoot) }
+    let worktreeRoot = try makeTempRoot()
+    defer { remove(worktreeRoot) }
+    var repositories = makeGitWorktreeState(repositoryRoot: repositoryRoot, worktreeRoot: worktreeRoot)
+    // Deselect: the context menu must not depend on the entry being selected.
+    repositories.selection = nil
+    let worktreeID = worktreeRoot.standardizedFileURL.path(percentEncoded: false)
+    let surfaceID = uuid(7)
+    let entry = activeAgentEntry(
+      id: uuid(1),
+      worktreeID: worktreeID,
+      surfaceID: surfaceID,
+      displayState: .working
+    )
+    repositories.activeAgents.entries = [entry]
+    let state = AppFeature.State(
+      repositories: repositories,
+      settings: SettingsFeature.State()
+    )
+
+    let capturedSurface = LockIsolated<(Worktree.ID, UUID)?>(nil)
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.handoffSourceContextForSurface = { worktreeID, surfaceID in
+        capturedSurface.setValue((worktreeID, surfaceID))
+        return HandoffSourceContext(
+          sessionContext: HandoffStore.SessionContext(
+            agent: "codex",
+            paneID: surfaceID.uuidString,
+            paneTitle: "codex",
+            source: "terminal-scrollback",
+            confidence: "fallback",
+            excerptText: nil
+          ),
+          observation: nil,
+          session: nil
+        )
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.activeAgents(.handOffTapped(entry.id)))) {
+      let hud = try #require($0.handoffHud)
+      #expect(hud.source.agentToken == "codex")
+      #expect(hud.worktree.id == worktreeID)
+      #expect(hud.phase == .choosing)
+    }
+    // The source is captured from the entry's own pane, not the focused one.
+    #expect(capturedSurface.value?.0 == worktreeID)
+    #expect(capturedSurface.value?.1 == surfaceID)
+  }
+
+  @Test(.dependencies) func agentRowHandOffWarnsWithoutDetectedAgent() async throws {
+    let repositoryRoot = try makeTempRoot()
+    defer { remove(repositoryRoot) }
+    let worktreeRoot = try makeTempRoot()
+    defer { remove(worktreeRoot) }
+    var repositories = makeGitWorktreeState(repositoryRoot: repositoryRoot, worktreeRoot: worktreeRoot)
+    let worktreeID = worktreeRoot.standardizedFileURL.path(percentEncoded: false)
+    let entry = activeAgentEntry(
+      id: uuid(1),
+      worktreeID: worktreeID,
+      surfaceID: uuid(7),
+      displayState: .working
+    )
+    repositories.activeAgents.entries = [entry]
+    let state = AppFeature.State(
+      repositories: repositories,
+      settings: SettingsFeature.State()
+    )
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.handoffSourceContextForSurface = { _, _ in nil }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.activeAgents(.handOffTapped(entry.id))))
+    await store.receive(\.repositories.showToast) {
+      guard case .warning(let message) = $0.repositories.statusToast else {
+        Issue.record("Expected warning toast")
+        return
+      }
+      #expect(message.contains("No agent detected"))
+    }
+    #expect(store.state.handoffHud == nil)
+  }
+
   // MARK: - Palette delegate opens the HUD; the HUD runs the hand-off
 
   @Test(.dependencies) func paletteHandOffRunsThroughHud() async throws {

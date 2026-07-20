@@ -2660,6 +2660,93 @@ struct RepositoriesFeatureTests {
     #expect(focusedSurface.value?.1 == surfaceID)
   }
 
+  @Test func activeAgentHandOffTappedFocusesSurfaceAndSelectsWorktree() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    let surfaceID = UUID()
+    let entry = ActiveAgentEntry(
+      id: surfaceID,
+      worktreeID: worktree.id,
+      worktreeName: worktree.name,
+      workingDirectory: nil,
+      tabID: TerminalTabID(rawValue: UUID()),
+      paneTitle: "agent",
+      surfaceID: surfaceID,
+      paneIndex: 0,
+      iconLookupToken: DetectedAgent.codex.iconLookupToken,
+      agent: .codex,
+      rawState: .working,
+      displayState: .working,
+      lastChangedAt: Date(timeIntervalSince1970: 0)
+    )
+    state.activeAgents.entries = [entry]
+
+    let focusedSurface = LockIsolated<(Worktree.ID, UUID)?>(nil)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.focusSurface = { worktreeID, surface in
+        focusedSurface.setValue((worktreeID, surface))
+        return true
+      }
+    }
+
+    // The context-menu hand off shares the tap path: anchor first, then the
+    // worktree selection so the HUD opens over the entry's own terminal.
+    await store.send(.activeAgents(.handOffTapped(entry.id))) {
+      $0.activeAgents.focusedSurfaceID = surfaceID
+    }
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.openedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    #expect(focusedSurface.value?.0 == worktree.id)
+    #expect(focusedSurface.value?.1 == surfaceID)
+  }
+
+  @Test func activeAgentMarkAsReadTappedMarksSurfaceNotificationsRead() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    let surfaceID = UUID()
+    let entry = ActiveAgentEntry(
+      id: surfaceID,
+      worktreeID: worktree.id,
+      worktreeName: worktree.name,
+      workingDirectory: nil,
+      tabID: TerminalTabID(rawValue: UUID()),
+      paneTitle: "agent",
+      surfaceID: surfaceID,
+      paneIndex: 0,
+      iconLookupToken: DetectedAgent.codex.iconLookupToken,
+      agent: .codex,
+      rawState: .working,
+      displayState: .working,
+      lastChangedAt: Date(timeIntervalSince1970: 0)
+    )
+    state.activeAgents.entries = [entry]
+
+    let markedRead = LockIsolated<(Worktree.ID, UUID)?>(nil)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.markNotificationsReadForSurface = { worktreeID, surface in
+        markedRead.setValue((worktreeID, surface))
+      }
+    }
+
+    // Mark as Read clears the entry's pane without selecting or focusing it.
+    await store.send(.activeAgents(.markAsReadTapped(entry.id)))
+
+    #expect(markedRead.value?.0 == worktree.id)
+    #expect(markedRead.value?.1 == surfaceID)
+  }
+
   @Test func selectWorktreeCollapsesSidebarSelectedWorktreeIDs() async {
     let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
     let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")

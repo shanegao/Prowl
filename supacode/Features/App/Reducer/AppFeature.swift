@@ -961,6 +961,9 @@ struct AppFeature {
       case .alert:
         return .none
 
+      case .repositories(.activeAgents(.handOffTapped(let entryID))):
+        return openHandoffHud(state: &state, entryID: entryID)
+
       case .repositories:
         return .none
 

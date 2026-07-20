@@ -163,7 +163,10 @@ The HUD runs in two steps:
 
 The Command Palette (`⌘P`) offers the same flow as a single **Hand Off…**
 row for any selected workspace, git repository, worktree, or plain folder;
-it opens the same HUD.
+it opens the same HUD. So does right-clicking a row in the
+[Active Agents panel](active-agents.md) and choosing **Hand Off…** — that
+entry point targets the row's own pane (selecting and focusing it first),
+so you can hand off an agent that isn't currently focused.
 
 ## Safety
 
