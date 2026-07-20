@@ -79,7 +79,6 @@ struct AgentsToolbarButton: View {
         agentIcon(capsule)
           .frame(width: 20, height: 20)
         Text(capsule.displayName)
-          .monospaced()
       } else {
         Image(systemName: "person.2")
           .foregroundStyle(.secondary)
