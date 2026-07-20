@@ -95,12 +95,12 @@ private struct HandoffHudCard: View {
       case .agent:
         return "Handing off to \(run.target.title)"
       case .briefOnly:
-        return "Updating the brief"
+        return "Saving progress"
       }
     case .finished(.handedOff(let name)):
       return "Handed off to \(name)"
     case .finished(.briefSaved):
-      return "Brief updated"
+      return "Progress saved"
     case .finished(.failed):
       return "Hand off failed"
     }
@@ -110,16 +110,17 @@ private struct HandoffHudCard: View {
     switch store.phase {
     case .choosing:
       if store.source.preparationRequest != nil {
-        return "\(store.source.displayName) will brief the incoming agent first"
+        return "Pass this task to another agent in a new tab. "
+          + "\(store.source.displayName) will summarize its progress first."
       }
-      return "Hands this task to another agent in a new tab"
+      return "Pass this task to another agent in a new tab."
     case .running(let run):
       if run.stage == .briefing {
-        return "\(store.source.displayName) is writing a brief for the next agent"
+        return "\(store.source.displayName) is summarizing its progress"
       }
       return "Preparing the hand-off…"
     case .finished(.handedOff):
-      return "The receiving agent starts from the hand-off notes in a new tab"
+      return "The receiving agent picks up the task in a new tab"
     case .finished(.briefSaved):
       return "The current state is saved for a later hand-off"
     case .finished(.failed(let message)):
@@ -192,7 +193,7 @@ private struct HandoffHudChooseView: View {
     case .agent:
       return "Hand Off to \(target.title)"
     case .briefOnly:
-      return "Update Brief"
+      return "Save Progress"
     }
   }
 }
@@ -264,7 +265,7 @@ private struct HandoffTargetRow: View {
     case .agent:
       return "Hand this task to \(target.title) in a new tab"
     case .briefOnly:
-      return "Update the hand-off notes without launching another agent"
+      return "Save the agent's progress for a later hand-off without launching anything"
     }
   }
 }
@@ -290,7 +291,7 @@ private struct HandoffHudRunView: View {
 
       HStack {
         if run.stage == .briefing {
-          Text("This can take a moment while \(sourceDisplayName) writes its brief.")
+          Text("This can take a moment while \(sourceDisplayName) summarizes its progress.")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -345,7 +346,7 @@ private struct HandoffHudRunView: View {
   private func stageTitle(_ stage: HandoffStage) -> String {
     switch stage {
     case .briefing:
-      return "Collect brief from \(sourceDisplayName)"
+      return "Collect progress summary from \(sourceDisplayName)"
     case .saving:
       return "Save context"
     case .archiving:

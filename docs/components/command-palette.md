@@ -47,8 +47,8 @@ selected worktree has a pull request).
   source. Same-titled commands can coexist; disabled commands do not appear.
 - **Handoff** (every runnable workspace, repository/worktree, or plain folder):
   a single **Hand Off…** row opens the staged Hand Off HUD, where you choose
-  the receiving agent (or update the brief only) and watch the run with Skip
-  and Cancel available during the source agent's briefing turn. Same flow as
+  the receiving agent (or save progress only) and watch the run with Skip and
+  Cancel available while the source agent summarizes its progress. Same flow as
   the toolbar Agents capsule. See [handoff](handoff.md).
 - **Debug** (Debug builds only): toast/update/dock simulations.
 

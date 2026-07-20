@@ -115,7 +115,7 @@ struct HandoffHudFeature {
       targets.append(
         HandoffTargetOption(
           kind: .briefOnly,
-          title: "Only brief, don't hand off",
+          title: "Only save progress, don't hand off",
           subtitle: "Saves the current state for a later hand-off",
           isCurrentAgent: false
         )

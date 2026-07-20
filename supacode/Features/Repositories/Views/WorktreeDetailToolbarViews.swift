@@ -251,7 +251,7 @@ private struct WorktreeToolbarPreview: View {
       agentsCapsule: AgentsCapsuleState(
         displayName: "codex",
         iconSource: CommandIconMap.iconForFirstToken("codex"),
-        infoLine: "codex will brief the incoming agent first"
+        infoLine: "Pass this task to another agent in a new tab. codex will summarize its progress first."
       ),
       statusToast: nil,
       pullRequest: nil,

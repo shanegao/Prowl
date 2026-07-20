@@ -9,7 +9,8 @@ struct AgentsCapsuleState: Equatable {
   /// the assembler with the same two-step token fallback the Active Agents
   /// panel uses, so a wrapper process name never loses the brand icon.
   let iconSource: TabIconSource?
-  /// Behavior preview shown as the popover's read-only first line.
+  /// Plain-language explanation of the hand-off action, shown under its
+  /// title in the popover row; varies with the source session's state.
   let infoLine: String
 }
 
@@ -113,53 +114,52 @@ struct AgentsToolbarButton: View {
   }
 }
 
-/// The agent-actions popover: a read-only behavior preview line and the
-/// action list. Rows follow menu conventions (full-width highlight on
-/// hover) so future actions slot in as additional rows.
+/// The agent-actions popover. Each action is one full row — title with a
+/// plain-language explanation underneath, highlighted together on hover —
+/// so future actions slot in as additional rows.
 private struct AgentsPopoverContent: View {
   let capsule: AgentsCapsuleState
   let onHandOff: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(capsule.infoLine)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
-
-      Divider()
-        .padding(.horizontal, 6)
-
+    VStack(alignment: .leading, spacing: 0) {
       AgentsPopoverRow(
         title: "Hand Off…",
+        subtitle: capsule.infoLine,
         systemImage: "arrow.left.arrow.right",
         action: onHandOff
       )
-      .padding(.horizontal, 6)
-      .padding(.bottom, 6)
     }
-    .frame(width: 260, alignment: .leading)
+    .padding(6)
+    .frame(width: 280, alignment: .leading)
   }
 }
 
 private struct AgentsPopoverRow: View {
   let title: String
+  let subtitle: String
   let systemImage: String
   let action: () -> Void
   @State private var isHovered = false
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 8) {
+      HStack(alignment: .top, spacing: 8) {
         Image(systemName: systemImage)
           .frame(width: 16)
+          .padding(.top, 2)
           .accessibilityHidden(true)
-        Text(title)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title)
+          Text(subtitle)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         Spacer(minLength: 0)
       }
       .padding(.horizontal, 8)
-      .padding(.vertical, 5)
+      .padding(.vertical, 6)
       .contentShape(.rect)
     }
     .buttonStyle(.plain)

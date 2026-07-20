@@ -403,8 +403,9 @@ struct WorktreeDetailView: View {
       displayName: agent.displayName,
       iconSource: iconSource,
       infoLine: resumable
-        ? "\(agent.displayName) will brief the incoming agent first"
-        : "Hands this task to another agent in a new tab"
+        ? "Pass this task to another agent in a new tab. "
+          + "\(agent.displayName) will summarize its progress first."
+        : "Pass this task to another agent in a new tab."
     )
   }
 

@@ -130,26 +130,28 @@ for targets that have never run `prowl handoff save` or `prowl handoff to`.
 
 A capsule button left of the branch title identifies the selected pane's
 detected agent (badge and name — live status stays with the terminal and
-the Active Agents panel). Clicking it opens a popover that previews what a
-hand-off will do — "codex will brief the incoming agent first" when the
-native session is resumable — and carries **Hand Off…**, which opens a
-centered HUD. Future agent actions land in the same popover. The capsule is
-disabled when no agent is detected in the selected pane.
+the Active Agents panel). Clicking it opens a popover whose hand-off row
+explains the action in place — "Pass this task to another agent in a new
+tab", plus "codex will summarize its progress first" when the native session
+is resumable — and opens a centered HUD. Future agent actions land in the
+same popover. The capsule is disabled when no agent is detected in the
+selected pane.
 
 The HUD runs in two steps:
 
 1. **Choose** — pick the receiving agent (the current agent stays listed as a
-   fresh-session restart) or **Only brief, don't hand off**, which updates the
-   artifact without launching anything. Rows state read-only launch facts,
-   e.g. when an explicitly observed unrestricted mode carries over. There are
-   no other options; launch configuration follows the same adapter rules as
-   `prowl handoff to`.
-2. **Run** — staged progress: collect the brief from the source agent, save
-   context, archive, launch. While the source agent writes its brief you can
-   **Skip** (continue immediately with the existing notes and fresh repo
-   state, `preparation=skipped`) or **Cancel** (abort entirely — the artifact
-   is untouched and nothing is logged, like Ctrl-C on the CLI). After the
-   brief the remaining steps are sub-second and cannot be interrupted.
+   fresh-session restart) or **Only save progress, don't hand off**, which
+   updates the artifact without launching anything. Rows state read-only
+   launch facts, e.g. when an explicitly observed unrestricted mode carries
+   over. There are no other options; launch configuration follows the same
+   adapter rules as `prowl handoff to`.
+2. **Run** — staged progress: collect a progress summary from the source
+   agent, save context, archive, launch. While the source agent writes its
+   summary you can **Skip** (continue immediately with the existing notes and
+   fresh repo state, `preparation=skipped`) or **Cancel** (abort entirely —
+   the artifact is untouched and nothing is logged, like Ctrl-C on the CLI).
+   After the summary the remaining steps are sub-second and cannot be
+   interrupted.
 
 The Command Palette (`⌘P`) offers the same flow as a single **Hand Off…**
 row for any selected workspace, git repository, worktree, or plain folder;
