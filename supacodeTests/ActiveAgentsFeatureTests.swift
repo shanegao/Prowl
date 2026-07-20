@@ -193,6 +193,32 @@ struct ActiveAgentsFeatureTests {
     }
   }
 
+  @Test func handOffTappedUpdatesFocusAnchorLikeEntryTapped() async {
+    var state = ActiveAgentsFeature.State()
+    state.entries = sampleEntries()
+    let store = TestStore(initialState: state) {
+      ActiveAgentsFeature()
+    }
+
+    // The context-menu hand off selects the entry's pane (parents focus it),
+    // so the keyboard-nav anchor must move with it exactly like a tap.
+    await store.send(.handOffTapped(UUID(2))) {
+      $0.focusedSurfaceID = UUID(2)
+    }
+  }
+
+  @Test func markAsReadTappedIsLocalNoOp() async {
+    var state = ActiveAgentsFeature.State()
+    state.entries = sampleEntries()
+    let store = TestStore(initialState: state) {
+      ActiveAgentsFeature()
+    }
+
+    // Handled by RepositoriesFeature; the panel reducer itself must not move
+    // the anchor or mutate entries.
+    await store.send(.markAsReadTapped(UUID(1)))
+  }
+
   @Test func focusedSurfaceChangedUpdatesAnchor() async {
     let store = TestStore(initialState: ActiveAgentsFeature.State()) {
       ActiveAgentsFeature()

@@ -15,4 +15,21 @@ extension AppFeature {
     state.handoffHud = hudState
     return .none
   }
+
+  /// Open the hand-off HUD for a specific Active Agents entry (context menu).
+  /// The source is captured from the entry's own pane, so it works regardless
+  /// of which pane currently holds focus; RepositoriesFeature selects and
+  /// focuses the entry's worktree from the same action.
+  func openHandoffHud(state: inout State, entryID: ActiveAgentEntry.ID) -> Effect<Action> {
+    guard state.handoffHud == nil else { return .none }
+    guard let entry = state.repositories.activeAgents.entries[id: entryID],
+      let worktree = state.repositories.terminalWorktree(for: entry.worktreeID)
+    else { return .none }
+    let source = terminalClient.handoffSourceContextForSurface(entry.worktreeID, entry.surfaceID)
+    guard let hudState = HandoffHudFeature.State.make(worktree: worktree, source: source) else {
+      return .send(.repositories(.showToast(.warning("No agent detected in this pane"))))
+    }
+    state.handoffHud = hudState
+    return .none
+  }
 }

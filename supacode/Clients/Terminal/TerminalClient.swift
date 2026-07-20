@@ -13,6 +13,9 @@ struct TerminalClient {
   /// one synchronous read: session context for the artifact, launch
   /// observation, and the pid-anchored native session.
   var handoffSourceContext: @MainActor @Sendable (Worktree.ID) -> HandoffSourceContext?
+  /// Same capture as `handoffSourceContext`, but for an explicit pane instead of
+  /// the selected one — the Active Agents context menu targets a specific row.
+  var handoffSourceContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffSourceContext?
   var handoffSessionContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffStore.SessionContext?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
@@ -90,6 +93,7 @@ extension TerminalClient: DependencyKey {
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
     handoffSourceContext: { _ in nil },
+    handoffSourceContextForSurface: { _, _ in nil },
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
@@ -103,6 +107,7 @@ extension TerminalClient: DependencyKey {
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
     handoffSourceContext: { _ in nil },
+    handoffSourceContextForSurface: { _, _ in nil },
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },

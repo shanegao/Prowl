@@ -338,16 +338,17 @@ struct SupacodeApp: App {
           let tabID = state.tabManager.selectedTabId,
           let surfaceID = state.activeSurfaceID(for: tabID)
         else { return nil }
-        let agentState = state.surfaceAgentStates[surfaceID]
-        return HandoffSourceContext(
-          sessionContext: makeHandoffSessionContext(
-            worktreeID: worktreeID,
-            paneID: surfaceID,
-            paneTitle: nil,
-            terminalManager: terminalManager
-          ),
-          observation: agentState?.launchObservation,
-          session: agentState?.session
+        return makeHandoffSourceContext(
+          worktreeID: worktreeID,
+          surfaceID: surfaceID,
+          terminalManager: terminalManager
+        )
+      },
+      handoffSourceContextForSurface: { worktreeID, surfaceID in
+        makeHandoffSourceContext(
+          worktreeID: worktreeID,
+          surfaceID: surfaceID,
+          terminalManager: terminalManager
         )
       },
       handoffSessionContextForSurface: { worktreeID, surfaceID in
@@ -428,6 +429,25 @@ struct SupacodeApp: App {
       )
     }
     return client
+  }
+
+  private static func makeHandoffSourceContext(
+    worktreeID: Worktree.ID,
+    surfaceID: UUID,
+    terminalManager: WorktreeTerminalManager
+  ) -> HandoffSourceContext? {
+    guard let state = terminalManager.stateIfExists(for: worktreeID) else { return nil }
+    let agentState = state.surfaceAgentStates[surfaceID]
+    return HandoffSourceContext(
+      sessionContext: makeHandoffSessionContext(
+        worktreeID: worktreeID,
+        paneID: surfaceID,
+        paneTitle: nil,
+        terminalManager: terminalManager
+      ),
+      observation: agentState?.launchObservation,
+      session: agentState?.session
+    )
   }
 
   private static func makeHandoffSessionContext(
