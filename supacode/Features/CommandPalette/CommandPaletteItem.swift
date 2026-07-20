@@ -81,7 +81,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case deleteWorktree(Worktree.ID, Repository.ID)
     case renameBranch
     case openRepositorySettings(Repository.ID)
-    case runCustomCommand(index: Int, commandID: String, systemImage: String)
+    case runCustomCommand(EffectiveCustomCommand.Identifier, systemImage: String)
     case handoffToAgent(String)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)

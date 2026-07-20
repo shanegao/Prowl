@@ -70,7 +70,7 @@ struct CommandPaletteFeature {
     case togglePinWorktree(Worktree.ID, isCurrentlyPinned: Bool)
     case renameBranch
     case openRepositorySettings(Repository.ID)
-    case runCustomCommand(Int)
+    case runCustomCommand(EffectiveCustomCommand.Identifier)
     case handoffToAgent(String)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
@@ -222,7 +222,7 @@ struct CommandPaletteFeature {
 
   static func commandPaletteItems(
     from repositories: RepositoriesFeature.State,
-    customCommands: [UserCustomCommand] = [],
+    customCommands: [EffectiveCustomCommand] = [],
     runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:],
     actionTargetWorktreeID: Worktree.ID? = nil,
     ghosttyCommands: [GhosttyCommand] = []
@@ -325,10 +325,10 @@ struct CommandPaletteFeature {
 
   static func recencyRetentionIDs(
     from repositories: IdentifiedArrayOf<Repository>,
-    customCommands: [UserCustomCommand] = []
+    customCommands: [EffectiveCustomCommand] = []
   ) -> [CommandPaletteItem.ID] {
     var ids = CommandPaletteItemID.globalIDs
-    ids.append(contentsOf: customCommands.map { CommandPaletteItemID.customCommand($0.id) })
+    ids.append(contentsOf: customCommands.map(CommandPaletteItemID.customCommand))
     for repository in repositories {
       ids.append(contentsOf: CommandPaletteItemID.pullRequestIDs(repositoryID: repository.id))
       ids.append(CommandPaletteItemID.openRepositorySettings(repository.id))
@@ -518,16 +518,16 @@ private func activeRepository(
   return repositories.repositories[id: repositoryID]
 }
 
-private func customCommandItems(_ commands: [UserCustomCommand]) -> [CommandPaletteItem] {
-  commands.enumerated().compactMap { index, command in
+private func customCommandItems(_ commands: [EffectiveCustomCommand]) -> [CommandPaletteItem] {
+  commands.compactMap { effectiveCommand in
+    let command = effectiveCommand.command
     guard command.hasRunnableCommand else { return nil }
     return CommandPaletteItem(
-      id: CommandPaletteItemID.customCommand(command.id),
+      id: CommandPaletteItemID.customCommand(effectiveCommand),
       title: command.resolvedTitle,
-      subtitle: customCommandSubtitle(for: command),
+      subtitle: customCommandSubtitle(for: effectiveCommand),
       kind: .runCustomCommand(
-        index: index,
-        commandID: command.id,
+        effectiveCommand.id,
         systemImage: command.resolvedSystemImage
       ),
       category: .worktree,
@@ -558,8 +558,9 @@ private func handoffCommandItem(agent: String, title: String) -> CommandPaletteI
   )
 }
 
-private func customCommandSubtitle(for command: UserCustomCommand) -> String {
-  "Custom command in this repo · \(customCommandExecutionDescription(for: command))"
+private func customCommandSubtitle(for effectiveCommand: EffectiveCustomCommand) -> String {
+  "\(effectiveCommand.source.displayTitle) custom command · "
+    + customCommandExecutionDescription(for: effectiveCommand.command)
 }
 
 private func customCommandExecutionDescription(for command: UserCustomCommand) -> String {

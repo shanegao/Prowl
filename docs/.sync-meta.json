@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "5defd27da02d1e77fa97237226ec47dcc97c3a17",
-  "last_synced_date": "2026-07-17",
-  "note": "Release prep. User-facing changes in range (Grok Build detection #590, branch deletion settings split #592) were doc-synced in their own PRs; verified deleteBranchOnAutomaticCleanup / deleteBranchOnManualWorktreeDelete and Grok coverage still match source."
+  "last_synced_commit": "a66655d9053f35251d733fedb6b2c5dfd34889ab",
+  "last_synced_date": "2026-07-20",
+  "note": "Verified Qoder CLI detection/session support and custom-command editor polish; no manual changes required."
 }

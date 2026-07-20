@@ -617,7 +617,7 @@ private struct CommandPaletteRowView: View {
       return "gearshape"
     case .deleteWorktree:
       return "trash"
-    case .runCustomCommand(_, _, let systemImage):
+    case .runCustomCommand(_, let systemImage):
       return systemImage
     case .handoffToAgent:
       return "arrow.left.arrow.right"

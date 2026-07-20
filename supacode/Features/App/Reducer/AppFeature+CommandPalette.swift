@@ -243,8 +243,8 @@ extension AppFeature {
       }
       return .send(.repositories(.worktreeOrdering(.pinWorktree(worktreeID))))
 
-    case .runCustomCommand(let index):
-      return .send(.runCustomCommand(index))
+    case .runCustomCommand(let id):
+      return .send(.runCustomCommand(id))
 
     case .ghosttyCommand(let action):
       guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
