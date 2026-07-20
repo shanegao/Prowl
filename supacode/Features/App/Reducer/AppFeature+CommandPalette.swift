@@ -282,100 +282,10 @@ extension AppFeature {
     _ delegate: CommandPaletteFeature.Delegate,
     state: inout State
   ) -> Effect<Action>? {
-    guard case .handoffToAgent(let agent) = delegate else { return nil }
-    // Hand off the current workspace task to the other agent: refresh + archive
-    // the handoff artifact, then launch the receiving agent in a new tab whose
-    // kickoff points at `.prowl/handoff/current.md`. Mirrors `prowl handoff to`.
-    guard let worktree = state.repositories.selectedTerminalWorktree else {
-      return .none
-    }
-    guard let destinationAgent = DetectedAgent(rawValue: agent) else { return .none }
-    let rootURL = worktree.workingDirectory
-    let source = terminalClient.handoffSourceContext(worktree.id)
-    let sessionContext = source?.sessionContext
-    let outgoing = sessionContext?.agent
-    let observation = source?.observation
-    let preparationRequest = HandoffCommandHandler.preparationRequest(
-      outgoingAgent: outgoing,
-      session: source?.session,
-      observation: observation
-    )
-    let configuration: AgentLaunchConfiguration
-    if let sourceAgent = outgoing.flatMap(DetectedAgent.init(rawValue:)) {
-      configuration = AgentRuntimeAdapterRegistry.inheritedConfiguration(
-        from: sourceAgent,
-        observation: observation,
-        to: destinationAgent
-      )
-    } else {
-      configuration = .init()
-    }
-    let request = AgentStartRequest(
-      agent: destinationAgent,
-      prompt: HandoffCommandHandler.kickoffPrompt(),
-      configuration: configuration
-    )
-    guard let kickoff = try? AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput else {
-      return .none
-    }
-    let runtimeClient = agentRuntimeClient
-    return .run { send in
-      let coordinator = HandoffCoordinator(
-        store: HandoffStore(rootURL: rootURL),
-        resume: { request, workingDirectory in
-          try await runtimeClient.resume(request, in: workingDirectory)
-        }
-      )
-      let now = Date()
-      if preparationRequest != nil {
-        await send(.repositories(.showToast(.inProgress("Preparing handoff from \(outgoing ?? "agent")…"))))
-      }
-      let preparation: HandoffPreparationOutcome
-      do {
-        let artifacts = try await coordinator.makeTransitionArtifacts(
-          outgoingAgent: outgoing,
-          toAgent: agent,
-          sessionContext: sessionContext,
-          preparationRequest: preparationRequest,
-          now: now
-        )
-        preparation = artifacts.preparation
-        await coordinator.logTransition(
-          from: outgoing ?? "agent",
-          toAgent: agent,
-          disposition: .requested,
-          preparation: preparation,
-          source: "command-palette",
-          now: now
-        )
-      } catch {
-        await MainActor.run {
-          appLogger.warning("[Handoff] command palette failed for \(rootURL.path(percentEncoded: false)): \(error)")
-        }
-        await send(.repositories(.showToast(.warning("Hand off failed: \(error.localizedDescription)"))))
-        return
-      }
-      await terminalClient.send(
-        .createTabWithInput(
-          worktree,
-          input: kickoff,
-          workingDirectory: rootURL,
-          runSetupScriptIfNew: false,
-          autoCloseOnSuccess: false,
-          customCommandName: "Hand off → \(agent)",
-          customCommandIcon: nil
-        )
-      )
-      if preparationRequest != nil {
-        if preparation == .completed {
-          await send(.repositories(.dismissToast))
-        } else {
-          await send(
-            .repositories(.showToast(.warning("Handed off with existing notes (source preparation failed)")))
-          )
-        }
-      }
-    }
+    guard case .handOff = delegate else { return nil }
+    // One execution path: the palette row opens the same staged HUD as the
+    // toolbar capsule (docs-ai 049).
+    return openHandoffHud(state: &state)
   }
 
   func reduceCommandPalettePullRequestDelegate(

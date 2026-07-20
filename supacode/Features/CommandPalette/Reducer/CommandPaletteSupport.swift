@@ -39,9 +39,7 @@ enum CommandPaletteItemID {
     command.paletteID
   }
 
-  static func handoffToAgent(_ agent: String) -> CommandPaletteItem.ID {
-    "handoff.to.\(agent)"
-  }
+  static let handOff = "handoff.open"
 
   static var globalIDs: [CommandPaletteItem.ID] {
     [
@@ -163,8 +161,8 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     return .openRepositorySettings(repositoryID)
   case .runCustomCommand(let id, _):
     return .runCustomCommand(id)
-  case .handoffToAgent(let agent):
-    return .handoffToAgent(agent)
+  case .handOff:
+    return .handOff
   case .openPullRequest,
     .openRepositoryOnCodeHost,
     .markPullRequestReady,
@@ -342,7 +340,7 @@ func pullRequestDelegateAction(
     .deleteWorktree,
     .openRepositorySettings,
     .runCustomCommand,
-    .handoffToAgent:
+    .handOff:
     return nil
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:

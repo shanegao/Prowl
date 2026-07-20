@@ -74,8 +74,7 @@ struct AppFeatureHandoffTests {
     let items = CommandPaletteFeature.commandPaletteItems(from: repositories)
     let ids = items.map(\.id)
 
-    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("claude")))
-    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
+    #expect(ids.contains(CommandPaletteItemID.handOff))
   }
 
   @Test func regularGitWorktreeShowsHandoffCommands() {
@@ -87,8 +86,7 @@ struct AppFeatureHandoffTests {
     let items = CommandPaletteFeature.commandPaletteItems(from: repositories)
     let ids = items.map(\.id)
 
-    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("claude")))
-    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
+    #expect(ids.contains(CommandPaletteItemID.handOff))
   }
 
   @Test func plainFolderShowsHandoffCommands() {
@@ -107,8 +105,7 @@ struct AppFeatureHandoffTests {
     let items = CommandPaletteFeature.commandPaletteItems(from: repositories)
     let ids = items.map(\.id)
 
-    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("claude")))
-    #expect(ids.contains(CommandPaletteItemID.handoffToAgent("codex")))
+    #expect(ids.contains(CommandPaletteItemID.handOff))
   }
 
   // MARK: - HUD presentation
@@ -177,9 +174,9 @@ struct AppFeatureHandoffTests {
     #expect(store.state.handoffHud == nil)
   }
 
-  // MARK: - Delegate launches the receiving agent
+  // MARK: - Palette delegate opens the HUD; the HUD runs the hand-off
 
-  @Test(.dependencies) func handoffDelegateLaunchesAgentTab() async throws {
+  @Test(.dependencies) func paletteHandOffRunsThroughHud() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
 
@@ -192,6 +189,7 @@ struct AppFeatureHandoffTests {
     let store = TestStore(initialState: state) {
       AppFeature()
     } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
       $0.terminalClient.send = { command in
         sent.withValue { $0.append(command) }
       }
@@ -232,15 +230,23 @@ struct AppFeatureHandoffTests {
         }
       )
     }
+    store.exhaustivity = .off
 
-    await store.send(.commandPalette(.delegate(.handoffToAgent("claude"))))
-    await store.receive(\.repositories.showToast) {
-      $0.repositories.statusToast = .inProgress("Preparing handoff from codex…")
-    }
-    await store.receive(\.repositories.dismissToast) {
-      $0.repositories.statusToast = nil
-    }
+    await store.send(.commandPalette(.delegate(.handOff)))
+    let hud = try #require(store.state.handoffHud)
+    #expect(hud.source.agentToken == "codex")
+    let claudeIndex = try #require(hud.targets.firstIndex { $0.agent == .claude })
+
+    await store.send(.handoffHud(.presented(.setSelectedIndex(claudeIndex))))
+    await store.send(.handoffHud(.presented(.confirmSelection)))
+    await store.receive(\.handoffHud.presented.launchFinished)
     await store.finish()
+
+    guard case .finished(.handedOff(let name))? = store.state.handoffHud?.phase else {
+      Issue.record("Expected handed-off outcome, got \(String(describing: store.state.handoffHud?.phase))")
+      return
+    }
+    #expect(name == "Claude Code")
 
     #expect(sent.value.count == 1)
     guard
@@ -250,7 +256,7 @@ struct AppFeatureHandoffTests {
         workingDirectory: let workingDirectory,
         runSetupScriptIfNew: let runSetup,
         autoCloseOnSuccess: let autoClose,
-        customCommandName: let name,
+        customCommandName: let commandName,
         customCommandIcon: let icon
       )? = sent.value.first
     else {
@@ -263,17 +269,17 @@ struct AppFeatureHandoffTests {
     #expect(input.contains(HandoffCommandHandler.kickoffPrompt()))
     #expect(runSetup == false)
     #expect(autoClose == false)
-    #expect(name == "Hand off → claude")
+    #expect(commandName == "Hand off → Claude Code")
     #expect(icon == nil)
     #expect(workingDirectory == root)
 
     // The handoff artifact was materialized in the workspace root.
     let store2 = HandoffStore(rootURL: root)
-    #expect(FileManager.default.fileExists(atPath: store2.currentURL.path(percentEncoded: false)))
     let log = try String(contentsOf: store2.logURL, encoding: .utf8)
+    #expect(log.contains("codex → claude"))
     #expect(log.contains("launch=requested"))
-    #expect(!log.contains("agent → claude  (command palette)"))
     #expect(log.contains("preparation=completed"))
+    #expect(log.contains("source=agents-hud"))
     #expect(resumed.value?.agent == .codex)
     #expect(resumed.value?.model == "gpt-5.4")
     // Prowl transcribed the source reply into current.md.
@@ -282,63 +288,12 @@ struct AppFeatureHandoffTests {
     #expect(current.contains("Palette source status."))
   }
 
-  @Test(.dependencies) func handoffDelegateDoesNotLaunchWhenArtifactPreparationFails() async throws {
+  @Test(.dependencies) func paletteHandOffAttributesFocusedAgent() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
-    let repositories = makeWorkspaceState(root: root)
-    try FileManager.default.removeItem(at: root)
-    try "not a directory".write(to: root, atomically: true, encoding: .utf8)
-
-    let state = AppFeature.State(
-      repositories: repositories,
-      settings: SettingsFeature.State()
-    )
-    let sent = LockIsolated<[TerminalClient.Command]>([])
-    let store = TestStore(initialState: state) {
-      AppFeature()
-    } withDependencies: {
-      $0.terminalClient.send = { command in
-        sent.withValue { $0.append(command) }
-      }
-    }
-    store.exhaustivity = .off
-
-    await store.send(.commandPalette(.delegate(.handoffToAgent("claude"))))
-    await store.receive(\.repositories.showToast) {
-      guard case .warning(let message) = $0.repositories.statusToast else {
-        Issue.record("Expected warning toast")
-        return
-      }
-      #expect(message.hasPrefix("Hand off failed:"))
-    }
-
-    #expect(sent.value.isEmpty)
-  }
-
-  @Test(.dependencies) func handoffDelegateAttributesFocusedAgent() async throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let codexSurfaceID = uuid(3)
     let claudeSurfaceID = uuid(4)
-    var repositories = makeWorkspaceState(root: root)
-    repositories.activeAgents.entries = [
-      activeAgentEntry(
-        id: codexSurfaceID,
-        worktreeID: root.path(percentEncoded: false),
-        surfaceID: codexSurfaceID,
-        displayState: .working,
-        agent: .codex
-      ),
-      activeAgentEntry(
-        id: claudeSurfaceID,
-        worktreeID: root.path(percentEncoded: false),
-        surfaceID: claudeSurfaceID,
-        displayState: .working,
-        agent: .claude
-      ),
-    ]
     let state = AppFeature.State(
-      repositories: repositories,
+      repositories: makeWorkspaceState(root: root),
       settings: SettingsFeature.State()
     )
     let store = TestStore(initialState: state) {
@@ -361,12 +316,13 @@ struct AppFeatureHandoffTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.commandPalette(.delegate(.handoffToAgent("codex"))))
-    await store.finish()
-
-    let context = try String(contentsOf: HandoffStore(rootURL: root).contextURL, encoding: .utf8)
-    #expect(context.contains("Outgoing agent (detected): claude"))
-    #expect(!context.contains("Outgoing agent (detected): codex"))
+    // The HUD source is the focused pane's agent, not any sibling pane.
+    await store.send(.commandPalette(.delegate(.handOff)))
+    let hud = try #require(store.state.handoffHud)
+    #expect(hud.source.agentToken == "claude")
+    #expect(hud.source.sessionContext?.excerptText == "focused claude context")
+    let claudeTarget = try #require(hud.targets.first { $0.agent == .claude })
+    #expect(claudeTarget.isCurrentAgent)
   }
 
   @Test(.dependencies) func agentDoneAutoSavesExistingHandoffArtifact() async throws {
