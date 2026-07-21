@@ -40,7 +40,10 @@ final class CLICommandRouter {
     self.handoffHandler = handoffHandler
   }
 
-  func route(_ envelope: CommandEnvelope) async -> CommandResponse {
+  func route(
+    _ envelope: CommandEnvelope,
+    context: CLICommandContext = CLICommandContext()
+  ) async -> CommandResponse {
     let handler: any CommandHandler
     switch envelope.command {
     case .open: handler = openHandler
@@ -54,7 +57,7 @@ final class CLICommandRouter {
     case .pane: handler = paneHandler
     case .handoff: handler = handoffHandler
     }
-    return await handler.handle(envelope: envelope)
+    return await handler.handle(envelope: envelope, context: context)
   }
 }
 
