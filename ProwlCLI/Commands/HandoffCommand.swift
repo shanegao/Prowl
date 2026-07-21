@@ -70,8 +70,8 @@ struct HandoffSaveCommand: ParsableCommand {
   var note: String?
 
   mutating func run() throws {
-    let resolvedBrief = try briefOptions.resolve()
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
+      let resolvedBrief = try briefOptions.resolve()
       let envelope = CommandEnvelope(
         output: options.outputMode,
         command: .handoff(
@@ -115,22 +115,22 @@ struct HandoffToCommand: ParsableCommand {
   var noLaunch = false
 
   mutating func run() throws {
-    let rawAgent = agent.lowercased()
-    guard let normalizedAgent = HandoffAgentSupport.normalize(rawAgent) else {
-      throw ExitError(
-        code: CLIErrorCode.invalidArgument,
-        message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
-      )
-    }
-    if !noLaunch, !HandoffAgentSupport.canLaunch(normalizedAgent) {
-      throw ExitError(
-        code: CLIErrorCode.invalidArgument,
-        message:
-          "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
-      )
-    }
-    let resolvedBrief = try briefOptions.resolve()
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
+      let rawAgent = agent.lowercased()
+      guard let normalizedAgent = HandoffAgentSupport.normalize(rawAgent) else {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
+        )
+      }
+      if !noLaunch, !HandoffAgentSupport.canLaunch(normalizedAgent) {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message:
+            "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
+        )
+      }
+      let resolvedBrief = try briefOptions.resolve()
       let envelope = CommandEnvelope(
         output: options.outputMode,
         command: .handoff(

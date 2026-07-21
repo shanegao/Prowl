@@ -16,10 +16,13 @@ enum OutputRenderer {
   }
 
   static func renderError(code: String, message: String, command: String, mode: OutputMode) {
+    // Keep pre-transport error envelopes on the same schema the app serves
+    // for the command (handoff moved to v2 with the inline-briefing redesign).
+    let schemaVersion = command == "handoff" ? "prowl.cli.handoff.v2" : "prowl.cli.\(command).v1"
     let response = CommandResponse(
       ok: false,
       command: command,
-      schemaVersion: "prowl.cli.\(command).v1",
+      schemaVersion: schemaVersion,
       error: CommandError(code: code, message: message)
     )
     render(response, mode: mode)
