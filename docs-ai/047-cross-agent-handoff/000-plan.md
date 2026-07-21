@@ -96,3 +96,9 @@ cwd, which is weaker than the pid-anchored, ambiguity-safe native session identi
   text) and let stale sections mislead the receiver; history flows through
   the receiver's takeover read and the `archive/` chain instead. Decision
   record: [049 amendments](../049-agents-toolbar-entry/000-plan.md#amendments).
+- Updated 2026-07-21: inline-first redesign — caller-pane source identity, inline
+  `--brief` as the primary briefing path (UI injects the request into the live
+  agent), side-effect-free resume-fork (`--fork-session`/`--ephemeral`) demoted to
+  explicit fallback, pure archive-first transition with template/manual-maintenance
+  abolished, headless launch + completion notification, `status`/auto-save removed —
+  see [004-inline-handoff-redesign](004-inline-handoff-redesign.md).
