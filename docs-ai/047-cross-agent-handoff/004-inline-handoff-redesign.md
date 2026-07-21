@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-07-21 |
 | **Primary PRs** | (this wave) |
 | **Related** | [047 plan](000-plan.md), [047.002](002-resume-authored-handoff.md), [047.003](003-plan-calibration.md), [045-native-agent-session-detection](../045-native-agent-session-detection/000-plan.md), `docs/components/handoff.md` |
@@ -172,6 +172,37 @@ transition(source, destination, briefing) =
   `AppFeatureHandoffTests` (entry points + CLI-completion routing),
   `SupacodeAppCLITests`, CLI parsing + socket round-trip tests
   (`--brief`/`--no-brief`, v2 payload rendering).
-- End-to-end: debug app on a dedicated `PROWL_CLI_SOCKET`, driving real
-  self-handoff (`--brief` heredoc), third-party fork, context-only, and the
-  HUD injection path. (See PR notes.)
+- End-to-end (debug app on a dedicated `PROWL_CLI_SOCKET`, driven from a
+  sibling Prowl session; full suite: 1954 unit tests green, CLI smoke +
+  integration green):
+  - **Caller-pane identity**: `prowl handoff` inside a pane with no selector
+    resolved that pane as the source (LOCAL_PEERPID → ancestry → shell-PID
+    map) and classified it as a self-handoff; outside any pane it returned
+    `SOURCE_REQUIRED`.
+  - **Inline self-handoff**: `--brief -` heredoc wrote `current.md`
+    verbatim, logged `briefing=inline`, launched the receiver in a
+    **background tab** (original tab stayed selected/focused), and the
+    receiving Claude read the briefing and executed exactly its Next Steps.
+    `BRIEF_REQUIRED` / `INVALID_BRIEF` errors verified with zero side
+    effects.
+  - **Context-only transition** archived and removed the stale briefing;
+    the kickoff prompt switched to the no-briefing variant.
+  - **Fork fallback**: a real third-party `handoff to` resumed the source's
+    session (`claude -p --fork-session --resume`) in ~30 s, produced an
+    honest agent-authored briefing, and left the original transcript
+    **byte-identical** (fork wrote a new session file) — the dual-writer
+    defect this redesign set out to eliminate is confirmed gone.
+  - **HUD path**: palette → choose → one-line injection into the live
+    agent → the agent wrote its own briefing and ran the CLI itself → the
+    completion observer flipped the HUD to "Handed off" and focused the
+    receiver. Verification surfaced that the waiting panel swallowed the
+    keyboard while the source agent asked for permission approvals — fixed
+    by making the requesting stage non-modal (key capture only in
+    choosing/finished, focus returned to the terminal, click-outside
+    collapses).
+  - Observations: session-identity resolution (045) is inherently
+    intermittent, so the fork fallback is often unavailable while inline
+    always works — reinforcing the inline-first decision. Nested-agent
+    environments (`CLAUDECODE` inherited into the debug app) suppress
+    transcript persistence and thus session resolution; test-harness
+    artifact, not a product defect.

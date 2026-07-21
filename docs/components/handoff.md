@@ -180,7 +180,10 @@ The HUD is a trigger and an observer for the same CLI transition:
    waits. The agent writes its briefing in its own words and the transition
    completes through the CLI service; the HUD observes the completion and
    jumps you to the receiver. If the agent is busy, the request queues in its
-   input — the HUD says so.
+   input — the HUD says so. While waiting the panel is **non-modal**: the
+   keyboard stays with the terminal (the request may trigger permission
+   prompts you need to approve), and clicking outside collapses the panel —
+   the hand-off still completes headlessly and notifies.
 3. **Fallbacks while waiting** — **Fork Briefing** (only for a resumable
    exact/high-confidence claude/codex session) collects the briefing from the
    recorded session instead; **Context Only** hands off without one;
