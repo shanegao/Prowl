@@ -42,6 +42,19 @@ struct HandoffStoreTests {
 
   private let fixedDate = Date(timeIntervalSince1970: 1_760_000_000)
 
+  private let validBriefing = """
+    # Handoff
+
+    ## Objective
+    Ship it.
+
+    ## Current State
+    Green.
+
+    ## Next Steps
+    1. Review.
+    """
+
   // MARK: - parseShortstat (pure)
 
   @Test func parseShortstatExtractsInsertionsAndDeletions() {
@@ -64,25 +77,13 @@ struct HandoffStoreTests {
     #expect(deletions == 0)
   }
 
-  // MARK: - preparedArtifact (pure)
+  // MARK: - validatedBriefing (pure)
 
-  @Test func preparedArtifactAcceptsPlainDocument() {
-    let reply = """
-      # Handoff
-
-      ## Objective
-      Ship it.
-
-      ## Current State
-      Green.
-
-      ## Next Steps
-      1. Review.
-      """
-    #expect(HandoffStore.preparedArtifact(fromAgentReply: reply) == reply + "\n")
+  @Test func validatedBriefingAcceptsPlainDocument() {
+    #expect(HandoffStore.validatedBriefing(from: validBriefing) == validBriefing + "\n")
   }
 
-  @Test func preparedArtifactUnwrapsCodeFenceAndDropsPreamble() {
+  @Test func validatedBriefingUnwrapsCodeFenceAndDropsPreamble() {
     let reply = """
       Sure! Here's the updated handoff:
 
@@ -99,13 +100,13 @@ struct HandoffStoreTests {
       1. Review.
       ```
       """
-    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    let artifact = HandoffStore.validatedBriefing(from: reply)
     #expect(artifact?.hasPrefix("# Handoff") == true)
     #expect(artifact?.contains("```") == false)
     #expect(artifact?.contains("Sure!") == false)
   }
 
-  @Test func preparedArtifactDropsChatterAfterTheClosingFence() {
+  @Test func validatedBriefingDropsChatterAfterTheClosingFence() {
     let reply = """
       ```markdown
       # Handoff
@@ -122,12 +123,12 @@ struct HandoffStoreTests {
 
       Let me know if you need anything else!
       """
-    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    let artifact = HandoffStore.validatedBriefing(from: reply)
     #expect(artifact?.hasSuffix("1. Address review feedback.\n") == true)
     #expect(artifact?.contains("Let me know") == false)
   }
 
-  @Test func preparedArtifactKeepsEmbeddedCodeBlocksIntact() {
+  @Test func validatedBriefingKeepsEmbeddedCodeBlocksIntact() {
     // A fence-wrapped reply whose document embeds its own code block: the
     // embedded pair closes before the wrapper's closing fence, so the last
     // fence line is the correct cut point and the block survives.
@@ -148,11 +149,11 @@ struct HandoffStoreTests {
       ```
       ```
       """
-    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    let artifact = HandoffStore.validatedBriefing(from: reply)
     #expect(artifact?.contains("make test") == true)
   }
 
-  @Test func preparedArtifactNeverCutsAtAFenceInsideAnUnwrappedDocument() {
+  @Test func validatedBriefingNeverCutsAtAFenceInsideAnUnwrappedDocument() {
     // No wrapper fence: an embedded code block's fence lines are body
     // content, never a truncation point.
     let reply = """
@@ -171,48 +172,38 @@ struct HandoffStoreTests {
       ```
       2. Push the branch.
       """
-    let artifact = HandoffStore.preparedArtifact(fromAgentReply: reply)
+    let artifact = HandoffStore.validatedBriefing(from: reply)
     #expect(artifact?.contains("make test") == true)
     #expect(artifact?.contains("2. Push the branch.") == true)
   }
 
-  @Test func preparedArtifactRejectsUnusableReplies() {
-    #expect(HandoffStore.preparedArtifact(fromAgentReply: "") == nil)
-    #expect(HandoffStore.preparedArtifact(fromAgentReply: "I could not update the file.") == nil)
+  @Test func validatedBriefingRejectsUnusableText() {
+    #expect(HandoffStore.validatedBriefing(from: "") == nil)
+    #expect(HandoffStore.validatedBriefing(from: "I could not update the file.") == nil)
     // Missing required sections.
-    #expect(HandoffStore.preparedArtifact(fromAgentReply: "# Handoff\n\n## Objective\nOnly this.") == nil)
-    // Echoing the seeded template back is not a prepared artifact.
-    #expect(HandoffStore.preparedArtifact(fromAgentReply: HandoffStore.template) == nil)
+    #expect(HandoffStore.validatedBriefing(from: "# Handoff\n\n## Objective\nOnly this.") == nil)
   }
 
-  @Test func applyPreparationReplyTranscribesIntoCurrent() throws {
+  // MARK: - writeBriefing / removeCurrentArtifact
+
+  @Test func writeBriefingCreatesCurrentArtifact() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
 
-    let reply = """
-      # Handoff
+    try store.writeBriefing(validBriefing + "\n", archivingPrevious: true, now: fixedDate)
 
-      ## Objective
-      Ship it.
-
-      ## Current State
-      Green.
-
-      ## Next Steps
-      1. Review.
-      """
-    #expect(store.applyPreparationReply(reply, now: fixedDate))
     let content = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(content == reply + "\n")
-
-    // An unusable reply leaves the transcribed artifact untouched.
-    #expect(store.applyPreparationReply("nope", now: fixedDate) == false)
-    let unchanged = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(unchanged == reply + "\n")
+    #expect(content == validBriefing + "\n")
+    // First-ever write: nothing to archive.
+    let archived = try FileManager.default.contentsOfDirectory(
+      at: store.archiveDirectory,
+      includingPropertiesForKeys: nil
+    )
+    #expect(archived.isEmpty)
   }
 
-  @Test func applyPreparationReplyArchivesPreviousArtifact() throws {
+  @Test func writeBriefingArchivesReplacedArtifact() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
@@ -220,78 +211,80 @@ struct HandoffStoreTests {
     try FileManager.default.createDirectory(at: store.handoffDirectory, withIntermediateDirectories: true)
     try previous.write(to: store.currentURL, atomically: true, encoding: .utf8)
 
-    let reply = """
-      # Handoff
-
-      ## Objective
-      Ship it.
-
-      ## Current State
-      Green.
-
-      ## Next Steps
-      1. Review.
-      """
-    #expect(store.applyPreparationReply(reply, now: fixedDate))
+    try store.writeBriefing(validBriefing + "\n", archivingPrevious: true, now: fixedDate)
 
     let archived = try FileManager.default.contentsOfDirectory(
       at: store.archiveDirectory,
       includingPropertiesForKeys: nil
     )
-    let backup = try #require(archived.first { $0.lastPathComponent.hasSuffix("-preparation-backup.md") })
+    let backup = try #require(archived.first { $0.lastPathComponent.contains("-replaced-current") })
     #expect(archived.count == 1)
     #expect(try String(contentsOf: backup, encoding: .utf8) == previous)
-    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == reply + "\n")
+    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == validBriefing + "\n")
   }
 
-  @Test func applyPreparationReplySkipsArchiveForTemplateOrMissingArtifact() throws {
-    let reply = """
-      # Handoff
+  @Test func writeBriefingWithoutArchivingLeavesArchiveAlone() throws {
+    // The transition path archives the outgoing state as a combined snapshot
+    // first, so its write must not add a second backup.
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+    let previous = "# Handoff\n\n## Objective\nOutgoing round.\n"
+    try FileManager.default.createDirectory(at: store.handoffDirectory, withIntermediateDirectories: true)
+    try previous.write(to: store.currentURL, atomically: true, encoding: .utf8)
 
-      ## Objective
-      Ship it.
+    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
 
-      ## Current State
-      Green.
-
-      ## Next Steps
-      1. Review.
-      """
-
-    // First-ever preparation: no current.md to snapshot.
-    let freshRoot = try makeTempRoot()
-    defer { remove(freshRoot) }
-    let freshStore = HandoffStore(rootURL: freshRoot)
-    #expect(freshStore.applyPreparationReply(reply, now: fixedDate))
-    #expect(!FileManager.default.fileExists(atPath: freshStore.archiveDirectory.path(percentEncoded: false)))
-
-    // A never-edited seeded template carries no prose worth archiving.
-    let seededRoot = try makeTempRoot()
-    defer { remove(seededRoot) }
-    let seededStore = HandoffStore(rootURL: seededRoot)
-    try seededStore.ensureScaffold()
-    #expect(seededStore.applyPreparationReply(reply, now: fixedDate))
     let archived = try FileManager.default.contentsOfDirectory(
-      at: seededStore.archiveDirectory,
+      at: store.archiveDirectory,
       includingPropertiesForKeys: nil
     )
     #expect(archived.isEmpty)
+    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == validBriefing + "\n")
   }
 
-  // MARK: - save (filesystem; non-git root)
+  @Test func removeCurrentArtifactDeletesAndToleratesAbsence() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
 
-  @Test func scaffoldSelfIgnoresHandoffInGitRepository() throws {
+    // Absent: a no-op.
+    try store.removeCurrentArtifact()
+
+    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
+    #expect(store.hasCurrentArtifact)
+    try store.removeCurrentArtifact()
+    #expect(!store.hasCurrentArtifact)
+  }
+
+  // MARK: - layout
+
+  @Test func layoutSelfIgnoresHandoffInGitRepository() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     _ = try runGit(["init", "--quiet"], in: root)
     let store = HandoffStore(rootURL: root)
 
-    try store.ensureScaffold()
+    try store.ensureLayout()
 
     let ignore = try String(contentsOf: store.ignoreURL, encoding: .utf8)
     #expect(ignore == "*\n")
     #expect(try runGit(["status", "--porcelain"], in: root).isEmpty)
   }
+
+  @Test func layoutNeverSeedsCurrentArtifact() throws {
+    // current.md exists iff a validated briefing produced it — no template.
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+
+    try store.ensureLayout()
+    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
+
+    #expect(!store.hasCurrentArtifact)
+  }
+
+  // MARK: - save (filesystem; non-git root)
 
   @Test func saveKeepsNonASCIIChangedFileNamesReadable() throws {
     let root = try makeTempRoot()
@@ -307,22 +300,30 @@ struct HandoffStoreTests {
     #expect(context.contains("交接记录.md"))
   }
 
-  @Test func saveSeedsArtifactWithAppendixForNonGitRoot() throws {
+  @Test func saveWritesAppendixForNonGitRoot() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
 
     let result = try store.save(outgoingAgent: "codex", note: "wip", now: fixedDate)
 
-    #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
-    let current = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(current.contains("## Objective"))
     let context = try String(contentsOf: store.contextURL, encoding: .utf8)
     #expect(context.contains("Outgoing agent (detected): codex"))
     #expect(context.contains("(not a git repo)"))
     #expect(result.outgoingAgent == "codex")
     // A non-git root contributes no git repos summary count.
     #expect(result.totalChangedFiles == 0)
+  }
+
+  @Test func saveRecordsBriefingOnLogLine() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+
+    _ = try store.save(outgoingAgent: "codex", note: nil, briefing: .inline, now: fixedDate)
+
+    let log = try String(contentsOf: store.logURL, encoding: .utf8)
+    #expect(log.contains("briefing=inline"))
   }
 
   @Test func saveWritesSessionContextExcerpt() throws {
@@ -439,42 +440,18 @@ struct HandoffStoreTests {
     #expect(!content.contains("Outgoing agent (detected): codex"))
   }
 
-  @Test func savePreservesEditedProse() throws {
+  @Test func saveNeverTouchesCurrentArtifact() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
-
-    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
-    // Simulate the agent editing the semantic section.
-    var content = try String(contentsOf: store.currentURL, encoding: .utf8)
-    content = content.replacingOccurrences(
-      of: "## Objective\n<!-- one-paragraph task goal; stable across the whole run -->",
-      with: "## Objective\nFinish the checkout flow."
-    )
-    try content.write(to: store.currentURL, atomically: true, encoding: .utf8)
+    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
 
     _ = try store.save(outgoingAgent: "claude", note: nil, now: fixedDate)
 
     let updated = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(updated == content)
+    #expect(updated == validBriefing + "\n")
     let context = try String(contentsOf: store.contextURL, encoding: .utf8)
     #expect(context.contains("Outgoing agent (detected): claude"))
-  }
-
-  @Test func saveNeverRewritesCurrentArtifactAfterScaffold() throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-    try store.ensureScaffold()
-    let prose = "# Handoff\n\n## Objective\nPreserve this concurrent objective.\n"
-    try prose.write(to: store.currentURL, atomically: true, encoding: .utf8)
-
-    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
-
-    let updated = try String(contentsOf: store.currentURL, encoding: .utf8)
-    #expect(updated == prose)
-    let context = try String(contentsOf: store.contextURL, encoding: .utf8)
-    #expect(context.contains("Outgoing agent (detected): codex"))
   }
 
   // MARK: - log + archive
@@ -484,6 +461,7 @@ struct HandoffStoreTests {
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
 
+    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
     _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
     try store.appendLog("codex → claude", now: fixedDate)
 
@@ -501,8 +479,18 @@ struct HandoffStoreTests {
     let archive = try String(contentsOf: archiveURL, encoding: .utf8)
     #expect(archive.contains("## Objective"))
     #expect(archive.contains("# Handoff Context (generated)"))
-    // current.md remains for the receiving agent.
-    #expect(FileManager.default.fileExists(atPath: store.currentURL.path(percentEncoded: false)))
+    // current.md remains until the transition decides its fate.
+    #expect(store.hasCurrentArtifact)
+  }
+
+  @Test func archiveCurrentReturnsNilWithoutArtifact() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let store = HandoffStore(rootURL: root)
+
+    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
+
+    #expect(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate) == nil)
   }
 
   @Test func appendLogPreservesConcurrentEntries() async throws {
@@ -533,6 +521,7 @@ struct HandoffStoreTests {
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
 
+    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
     _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
     let first = try #require(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate))
     let second = try #require(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate))
@@ -549,19 +538,5 @@ struct HandoffStoreTests {
     )
     #expect(FileManager.default.fileExists(atPath: firstURL.path(percentEncoded: false)))
     #expect(FileManager.default.fileExists(atPath: secondURL.path(percentEncoded: false)))
-  }
-
-  @Test func readStatusReportsExistenceAndLastLog() throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-
-    let before = store.readStatus()
-    #expect(before.exists == false)
-
-    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
-    let after = store.readStatus()
-    #expect(after.exists == true)
-    #expect(after.lastLogLine?.contains("save") == true)
   }
 }

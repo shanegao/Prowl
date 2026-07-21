@@ -50,11 +50,14 @@ private struct HandoffHudCard: View {
       case .choosing:
         HandoffHudChooseView(store: store)
       case .running(let run):
-        HandoffHudRunView(run: run, sourceDisplayName: store.source.displayName) {
-          store.send(.skipBriefingTapped)
-        } onCancel: {
-          store.send(.cancelTapped)
-        }
+        HandoffHudRunView(
+          run: run,
+          sourceDisplayName: store.source.displayName,
+          canFork: store.canFork,
+          onFork: { store.send(.fallbackForkTapped) },
+          onContextOnly: { store.send(.fallbackContextOnlyTapped) },
+          onCancel: { store.send(.cancelTapped) }
+        )
       case .finished(let outcome):
         HandoffHudFinishedView(outcome: outcome) {
           store.send(.closeTapped)
@@ -65,8 +68,7 @@ private struct HandoffHudCard: View {
       HandoffHudKeyCaptureView(
         onMove: { delta in store.send(.moveSelection(delta: delta)) },
         onConfirm: { confirmForCurrentPhase() },
-        onEscape: { escapeForCurrentPhase() },
-        onSkip: { store.send(.skipBriefingTapped) }
+        onEscape: { escapeForCurrentPhase() }
       )
     }
     .frame(maxWidth: 560)
@@ -110,16 +112,17 @@ private struct HandoffHudCard: View {
   private var headerSubtitle: String {
     switch store.phase {
     case .choosing:
-      if store.source.preparationRequest != nil {
-        return "Pass this task to another agent in a new tab. "
-          + "\(store.source.displayName) will summarize its progress first."
-      }
-      return "Pass this task to another agent in a new tab."
+      return "Pass this task to another agent in a new tab. "
+        + "\(store.source.displayName) writes its own briefing first."
     case .running(let run):
-      if run.stage == .briefing {
-        return "\(store.source.displayName) is summarizing its progress"
+      switch run.stage {
+      case .requesting:
+        return "Waiting for \(store.source.displayName) to write its briefing and run the hand-off"
+      case .forking:
+        return "Collecting a briefing from \(store.source.displayName)'s recorded session"
+      case .saving:
+        return "Preparing a context-only hand-off"
       }
-      return "Preparing the hand-off…"
     case .finished(.handedOff):
       return "The receiving agent picks up the task in a new tab"
     case .finished(.briefSaved):
@@ -276,90 +279,84 @@ private struct HandoffTargetRow: View {
 private struct HandoffHudRunView: View {
   let run: HandoffHudRun
   let sourceDisplayName: String
-  let onSkip: () -> Void
+  let canFork: Bool
+  let onFork: () -> Void
+  let onContextOnly: () -> Void
   let onCancel: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      VStack(alignment: .leading, spacing: 10) {
-        ForEach(Array(run.stages.enumerated()), id: \.element) { index, stage in
-          stageRow(stage: stage, index: index)
-        }
+      HStack(spacing: 10) {
+        ProgressView()
+          .controlSize(.small)
+        Text(stageDescription)
+          .font(.body)
+        Spacer(minLength: 0)
       }
       .padding(16)
 
       Divider()
 
       HStack {
-        if run.stage == .briefing {
-          Text("This can take a moment while \(sourceDisplayName) summarizes its progress.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
+        Text(footerHint)
+          .font(.caption)
+          .foregroundStyle(.secondary)
         Spacer()
-        if run.stage == .briefing {
-          Button("Cancel") {
-            onCancel()
+        if run.stage == .requesting {
+          if canFork {
+            Button("Fork Briefing") {
+              onFork()
+            }
+            .help("Don't wait: collect the briefing by resuming \(sourceDisplayName)'s recorded session")
           }
-          .keyboardShortcut(.cancelAction)
-          .help("Stop this hand-off; nothing is changed")
+          Button("Context Only") {
+            onContextOnly()
+          }
+          .help("Don't wait: hand off with generated context only, no briefing")
         }
+        Button("Cancel") {
+          onCancel()
+        }
+        .keyboardShortcut(.cancelAction)
+        .help(cancelHelp)
       }
       .padding(12)
     }
   }
 
-  @ViewBuilder
-  private func stageRow(stage: HandoffStage, index: Int) -> some View {
-    let currentIndex = run.stages.firstIndex(of: run.stage) ?? 0
-    HStack(spacing: 8) {
-      stageIndicator(stage: stage, index: index, currentIndex: currentIndex)
-      Text(stageTitle(stage))
-        .font(.body)
-        .foregroundStyle(index <= currentIndex ? .primary : .secondary)
-      Spacer(minLength: 0)
-      if stage == .briefing, run.stage == .briefing {
-        Button("Skip") {
-          onSkip()
-        }
-        .controlSize(.small)
-        .keyboardShortcut("s")
-        .help("Hand off now with the current summary and repo state (S)")
-      }
-    }
-  }
-
-  @ViewBuilder
-  private func stageIndicator(stage: HandoffStage, index: Int, currentIndex: Int) -> some View {
-    if index < currentIndex {
-      Image(systemName: "checkmark.circle.fill")
-        .foregroundStyle(.green)
-        .accessibilityLabel("Completed")
-    } else if index == currentIndex {
-      ProgressView()
-        .controlSize(.small)
-    } else {
-      Image(systemName: "circle")
-        .foregroundStyle(.quaternary)
-        .accessibilityLabel("Pending")
-    }
-  }
-
-  private func stageTitle(_ stage: HandoffStage) -> String {
-    switch stage {
-    case .briefing:
-      return "Collect progress summary from \(sourceDisplayName)"
-    case .saving:
-      return "Save context"
-    case .archiving:
-      return "Archive"
-    case .launching:
+  private var stageDescription: String {
+    switch run.stage {
+    case .requesting:
       switch run.target.kind {
       case .agent:
-        return "Launch \(run.target.title)"
+        return "Asked \(sourceDisplayName) to write its briefing and hand off to \(run.target.title)"
       case .briefOnly:
-        return "Launch"
+        return "Asked \(sourceDisplayName) to write a briefing checkpoint"
       }
+    case .forking:
+      return "Collecting a briefing from \(sourceDisplayName)'s recorded session"
+    case .saving:
+      return "Handing off with generated context only"
+    }
+  }
+
+  private var footerHint: String {
+    switch run.stage {
+    case .requesting:
+      return "The request is queued if \(sourceDisplayName) is busy."
+    case .forking:
+      return "This can take a moment; the live session is untouched."
+    case .saving:
+      return ""
+    }
+  }
+
+  private var cancelHelp: String {
+    switch run.stage {
+    case .requesting:
+      return "Close this panel; if \(sourceDisplayName) still hands off, it completes in the background"
+    case .forking, .saving:
+      return "Stop this hand-off; nothing is changed"
     }
   }
 }
@@ -431,14 +428,12 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
   let onMove: (Int) -> Void
   let onConfirm: () -> Void
   let onEscape: () -> Void
-  let onSkip: () -> Void
 
   func makeNSView(context: Context) -> KeyCaptureNSView {
     let view = KeyCaptureNSView()
     view.onMove = onMove
     view.onConfirm = onConfirm
     view.onEscape = onEscape
-    view.onSkip = onSkip
     return view
   }
 
@@ -446,7 +441,6 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
     nsView.onMove = onMove
     nsView.onConfirm = onConfirm
     nsView.onEscape = onEscape
-    nsView.onSkip = onSkip
     nsView.grabFocusIfNeeded()
   }
 
@@ -454,7 +448,6 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
     var onMove: ((Int) -> Void)?
     var onConfirm: (() -> Void)?
     var onEscape: (() -> Void)?
-    var onSkip: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -469,11 +462,6 @@ private struct HandoffHudKeyCaptureView: NSViewRepresentable {
     }
 
     override func keyDown(with event: NSEvent) {
-      if event.charactersIgnoringModifiers?.lowercased() == "s" {
-        onSkip?()
-        return
-      }
-
       switch event.keyCode {
       case 126:  // up arrow
         onMove?(-1)

@@ -288,20 +288,10 @@ enum OutputRenderer {
     var lines: [String] = []
 
     switch payload.action {
-    case .status:
-      let existsLabel = (payload.exists ?? false) ? "yes".green : "no".dim
-      lines.append("Handoff \("status".cyan.bold)  \("exists:".dim) \(existsLabel)")
-      lines.append("  \("artifact:".dim) \(payload.artifactPath)")
-      if let agent = payload.outgoingAgent {
-        lines.append("  \("current agent:".dim) \(agent)")
-      }
-      if let lastLog = payload.lastLog {
-        lines.append("  \("last:".dim) \(lastLog)")
-      }
     case .save:
       lines.append("Handoff \("saved".green.bold)  \("changed:".dim) \(payload.changedFileCount) files")
       lines.append("  \("artifact:".dim) \(payload.artifactPath)")
-      lines.append(contentsOf: renderHandoffPreparation(payload.preparation))
+      lines.append(contentsOf: renderHandoffBriefing(payload.briefing))
       lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
       lines.append(contentsOf: renderHandoffRepos(payload.repos))
     case .toAgent:
@@ -312,7 +302,7 @@ enum OutputRenderer {
       if let archived = payload.archivedPath {
         lines.append("  \("archived:".dim) \(archived)")
       }
-      lines.append(contentsOf: renderHandoffPreparation(payload.preparation))
+      lines.append(contentsOf: renderHandoffBriefing(payload.briefing))
       lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
       if let pane = payload.launchedPane {
         lines.append("  \("launched:".dim) \(to.green) → \(pane.paneTitle.green)  \(pane.paneID.dim)")
@@ -325,15 +315,15 @@ enum OutputRenderer {
     return lines.joined(separator: "\n")
   }
 
-  private static func renderHandoffPreparation(_ preparation: String?) -> [String] {
-    guard let preparation else { return [] }
+  private static func renderHandoffBriefing(_ briefing: String?) -> [String] {
+    guard let briefing else { return [] }
     let label =
-      switch preparation {
-      case "completed": preparation.green
-      case "failed": preparation.yellow
-      default: preparation.dim
+      switch briefing {
+      case "inline", "fork": briefing.green
+      case "failed": briefing.yellow
+      default: briefing.dim
       }
-    return ["  \("source prep:".dim) \(label)"]
+    return ["  \("briefing:".dim) \(label)"]
   }
 
   private static func renderHandoffRepos(_ repos: [HandoffRepoPayload]) -> [String] {

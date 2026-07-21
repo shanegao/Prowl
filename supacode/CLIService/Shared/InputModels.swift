@@ -175,7 +175,6 @@ public struct TabInput: Codable, Sendable {
 public enum HandoffAction: String, Codable, Sendable {
   case save
   case toAgent = "to"
-  case status
 }
 
 public struct HandoffInput: Codable, Sendable {
@@ -188,9 +187,12 @@ public struct HandoffInput: Codable, Sendable {
   /// When false, `to` refreshes + archives the handoff but does not launch the
   /// receiving agent (the human takes over manually).
   public let launch: Bool
-  /// When false, skip asking the detected source agent to refresh `current.md`
-  /// before the save (`--no-prepare`).
-  public let prepare: Bool
+  /// Inline agent-authored briefing text (`--brief`); the primary briefing
+  /// path for self-handoffs.
+  public let brief: String?
+  /// Explicit context-only run (`--no-brief`): no briefing is collected and
+  /// no fork resume is attempted.
+  public let contextOnly: Bool
 
   enum CodingKeys: String, CodingKey {
     case action
@@ -198,7 +200,8 @@ public struct HandoffInput: Codable, Sendable {
     case toAgent = "to_agent"
     case note
     case launch
-    case prepare
+    case brief
+    case contextOnly = "context_only"
   }
 
   public init(
@@ -207,14 +210,16 @@ public struct HandoffInput: Codable, Sendable {
     toAgent: String? = nil,
     note: String? = nil,
     launch: Bool = true,
-    prepare: Bool = true
+    brief: String? = nil,
+    contextOnly: Bool = false
   ) {
     self.action = action
     self.selector = selector
     self.toAgent = toAgent
     self.note = note
     self.launch = launch
-    self.prepare = prepare
+    self.brief = brief
+    self.contextOnly = contextOnly
   }
 
   public init(from decoder: Decoder) throws {
@@ -224,7 +229,8 @@ public struct HandoffInput: Codable, Sendable {
     self.toAgent = try container.decodeIfPresent(String.self, forKey: .toAgent)
     self.note = try container.decodeIfPresent(String.self, forKey: .note)
     self.launch = try container.decodeIfPresent(Bool.self, forKey: .launch) ?? true
-    self.prepare = try container.decodeIfPresent(Bool.self, forKey: .prepare) ?? true
+    self.brief = try container.decodeIfPresent(String.self, forKey: .brief)
+    self.contextOnly = try container.decodeIfPresent(Bool.self, forKey: .contextOnly) ?? false
   }
 }
 

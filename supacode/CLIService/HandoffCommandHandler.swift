@@ -2,8 +2,9 @@
 
 import Foundation
 
-/// A handoff target resolved on the main actor: the runnable root to store the
-/// artifact under, plus the agent currently detected in that target's pane.
+/// A handoff source resolved on the main actor: the runnable root to store the
+/// artifact under, the agent currently detected in that pane, and whether the
+/// pane belongs to the calling process itself.
 struct HandoffResolvedTarget: Sendable, Equatable {
   let worktreeID: String
   let worktreeName: String
@@ -13,6 +14,14 @@ struct HandoffResolvedTarget: Sendable, Equatable {
   let outgoingLaunchObservation: AgentLaunchObservation?
   let outgoingSession: AgentSession?
   let sessionContext: HandoffStore.SessionContext?
+  /// The resolved source pane is the pane the calling `prowl` process runs in.
+  let isSelfHandoff: Bool
+}
+
+enum HandoffResolveError: Error {
+  case resolver(TargetResolverError)
+  /// No selector was given and the caller is not inside a Prowl pane.
+  case noCallerPane
 }
 
 /// The pane the receiving agent was launched into.
@@ -24,39 +33,69 @@ struct HandoffLaunchedPane: Sendable, Equatable {
   let paneTitle: String
 }
 
+/// A successful CLI handoff, announced so the UI (the Hand Off HUD waiting on
+/// an injected request) can correlate it with the source pane and finish.
+struct HandoffCLICompletion: Sendable, Equatable {
+  let action: HandoffAction
+  let sourcePaneID: String
+  let toAgent: String?
+  let briefing: HandoffBriefing
+  let launched: HandoffLaunchedPane?
+}
+
 @MainActor
 final class HandoffCommandHandler: CommandHandler {
-  typealias ResolveProvider = @MainActor (TargetSelector) -> Result<HandoffResolvedTarget, TargetResolverError>
+  typealias ResolveProvider =
+    @MainActor (TargetSelector, pid_t?) -> Result<HandoffResolvedTarget, HandoffResolveError>
   typealias LaunchProvider = @MainActor (HandoffResolvedTarget, AgentStartRequest) -> HandoffLaunchedPane?
-  /// Resumes the source session headlessly and returns its reply text; the
-  /// handler validates the reply and transcribes it into `current.md`.
-  typealias PreparationProvider = @Sendable (AgentResumeRequest, URL) async throws -> String
+  /// Resumes the source session headlessly and returns its reply text
+  /// (the fork briefing fallback).
+  typealias ForkProvider = @Sendable (AgentResumeRequest, URL) async throws -> String
+  /// Announces a completed transition (`from`, `to`) for the launched pane.
+  typealias LaunchNotifier = @MainActor (HandoffLaunchedPane, String, String) -> Void
+  /// Announces every successful save/to so the UI can observe injected requests.
+  typealias CompletionObserver = @MainActor (HandoffCLICompletion) -> Void
 
   /// Agents this command can launch (it injects an agent-specific kickoff command).
   static let supportedAgents = HandoffAgentSupport.launchableAgents
 
   private let resolveProvider: ResolveProvider
   private let launchProvider: LaunchProvider
-  private let preparationProvider: PreparationProvider
+  private let forkProvider: ForkProvider
+  private let notifyLaunch: LaunchNotifier
+  private let completionObserver: CompletionObserver
   private let now: @Sendable () -> Date
 
   init(
     resolveProvider: @escaping ResolveProvider,
     launchProvider: @escaping LaunchProvider,
-    preparationProvider: @escaping PreparationProvider,
+    forkProvider: @escaping ForkProvider,
+    notifyLaunch: @escaping LaunchNotifier = { _, _, _ in },
+    completionObserver: @escaping CompletionObserver = { _ in },
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.resolveProvider = resolveProvider
     self.launchProvider = launchProvider
-    self.preparationProvider = preparationProvider
+    self.forkProvider = forkProvider
+    self.notifyLaunch = notifyLaunch
+    self.completionObserver = completionObserver
     self.now = now
   }
 
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
+    await handle(envelope: envelope, context: CLICommandContext())
+  }
+
+  func handle(envelope: CommandEnvelope, context: CLICommandContext) async -> CommandResponse {
     guard case .handoff(let input) = envelope.command else {
       return errorResponse(code: CLIErrorCode.handoffFailed, message: "Invalid command.")
     }
-
+    if input.brief != nil, input.contextOnly {
+      return errorResponse(
+        code: CLIErrorCode.invalidArgument,
+        message: "--brief and --no-brief are mutually exclusive."
+      )
+    }
     if input.action == .toAgent {
       guard let rawAgent = input.toAgent, let toAgent = HandoffAgentSupport.normalize(rawAgent) else {
         return errorResponse(
@@ -74,11 +113,19 @@ final class HandoffCommandHandler: CommandHandler {
     }
 
     let target: HandoffResolvedTarget
-    switch resolveProvider(input.selector) {
+    switch resolveProvider(input.selector, context.callerProcessID) {
     case .success(let resolved):
       target = resolved
     case .failure(let error):
-      return mapResolverError(error)
+      return mapResolveError(error)
+    }
+
+    let briefingSource: HandoffBriefingSource
+    switch briefingDecision(for: input, target: target) {
+    case .source(let source):
+      briefingSource = source
+    case .rejected(let response):
+      return response
     }
 
     let store = HandoffStore(rootURL: URL(fileURLWithPath: target.rootPath, isDirectory: true))
@@ -86,12 +133,61 @@ final class HandoffCommandHandler: CommandHandler {
 
     switch input.action {
     case .save:
-      return await handleSave(input: input, target: target, store: store, timestamp: timestamp)
+      return await handleSave(
+        input: input,
+        target: target,
+        store: store,
+        briefingSource: briefingSource,
+        timestamp: timestamp
+      )
     case .toAgent:
-      return await handleTo(input: input, target: target, store: store, timestamp: timestamp)
-    case .status:
-      return await handleStatus(target: target, store: store)
+      return await handleTo(
+        input: input,
+        target: target,
+        store: store,
+        briefingSource: briefingSource,
+        timestamp: timestamp
+      )
     }
+  }
+
+  // MARK: - Briefing decision
+
+  private enum BriefingDecision {
+    case source(HandoffBriefingSource)
+    case rejected(CommandResponse)
+  }
+
+  /// Inline when provided, context-only when explicit, error for a brief-less
+  /// self-handoff (the author is on the command line — asking it to rerun with
+  /// `--brief` is the cheapest correct outcome), fork for third-party sources,
+  /// context-only when no safe fork exists.
+  private func briefingDecision(
+    for input: HandoffInput,
+    target: HandoffResolvedTarget
+  ) -> BriefingDecision {
+    if let brief = input.brief {
+      return .source(.inline(brief))
+    }
+    if input.contextOnly {
+      return .source(.none)
+    }
+    if target.isSelfHandoff {
+      return .rejected(
+        errorResponse(
+          code: CLIErrorCode.briefRequired,
+          message: Self.briefRequiredMessage(action: input.action, toAgent: input.toAgent)
+        )
+      )
+    }
+    if let request = Self.forkRequest(
+      outgoingAgent: target.outgoingAgent,
+      session: target.outgoingSession,
+      observation: target.outgoingLaunchObservation
+    ) {
+      return .source(.fork(request))
+    }
+    return .source(.none)
   }
 
   // MARK: - save
@@ -100,20 +196,32 @@ final class HandoffCommandHandler: CommandHandler {
     input: HandoffInput,
     target: HandoffResolvedTarget,
     store: HandoffStore,
+    briefingSource: HandoffBriefingSource,
     timestamp: Date
   ) async -> CommandResponse {
-    let outgoing = target.outgoingAgent
-    let note = input.note
     let coordinator = makeCoordinator(store: store)
     do {
-      let (result, preparation) = try await coordinator.save(
-        outgoingAgent: outgoing,
+      let (result, briefing) = try await coordinator.makeCheckpoint(
+        outgoingAgent: target.outgoingAgent,
         sessionContext: target.sessionContext,
-        note: note,
-        preparationRequest: preparationRequest(input: input, target: target),
+        note: input.note,
+        briefingSource: briefingSource,
         now: timestamp
       )
-      return success(payload: makePayload(action: .save, save: result, preparation: preparation))
+      completionObserver(
+        HandoffCLICompletion(
+          action: .save,
+          sourcePaneID: target.paneID,
+          toAgent: nil,
+          briefing: briefing,
+          launched: nil
+        )
+      )
+      return success(
+        payload: makePayload(action: .save, save: result, briefing: briefing)
+      )
+    } catch HandoffBriefingError.invalidInlineBrief {
+      return errorResponse(code: CLIErrorCode.invalidBrief, message: Self.invalidBriefMessage())
     } catch {
       return errorResponse(
         code: CLIErrorCode.handoffFailed,
@@ -128,6 +236,7 @@ final class HandoffCommandHandler: CommandHandler {
     input: HandoffInput,
     target: HandoffResolvedTarget,
     store: HandoffStore,
+    briefingSource: HandoffBriefingSource,
     timestamp: Date
   ) async -> CommandResponse {
     guard let rawAgent = input.toAgent, let toAgent = HandoffAgentSupport.normalize(rawAgent) else {
@@ -142,14 +251,15 @@ final class HandoffCommandHandler: CommandHandler {
 
     let artifacts: HandoffCoordinator.TransitionArtifacts
     do {
-      // Prepare, refresh the appendix, then archive before launching.
       artifacts = try await coordinator.makeTransitionArtifacts(
         outgoingAgent: outgoing,
         toAgent: toAgent,
         sessionContext: target.sessionContext,
-        preparationRequest: preparationRequest(input: input, target: target),
+        briefingSource: briefingSource,
         now: timestamp
       )
+    } catch HandoffBriefingError.invalidInlineBrief {
+      return errorResponse(code: CLIErrorCode.invalidBrief, message: Self.invalidBriefMessage())
     } catch {
       return errorResponse(
         code: CLIErrorCode.handoffFailed,
@@ -173,100 +283,82 @@ final class HandoffCommandHandler: CommandHandler {
         target,
         AgentStartRequest(
           agent: destinationAgent,
-          prompt: Self.kickoffPrompt(),
+          prompt: Self.kickoffPrompt(hasBriefing: artifacts.hasBriefing),
           configuration: configuration
         )
       )
-      if launched == nil {
+      guard let launched else {
         await coordinator.logTransition(
           from: from,
           toAgent: toAgent,
           disposition: .failed,
-          preparation: artifacts.preparation,
+          briefing: artifacts.briefing,
           archivedPath: artifacts.archivedPath,
           note: input.note,
           now: timestamp
         )
         return errorResponse(code: CLIErrorCode.handoffFailed, message: "Failed to launch \(toAgent).")
       }
+      notifyLaunch(launched, from, toAgent)
     }
 
     await coordinator.logTransition(
       from: from,
       toAgent: toAgent,
       disposition: launched.map { .pane($0.paneID) } ?? .skipped,
-      preparation: artifacts.preparation,
+      briefing: artifacts.briefing,
       note: input.note,
       now: timestamp
+    )
+
+    completionObserver(
+      HandoffCLICompletion(
+        action: .toAgent,
+        sourcePaneID: target.paneID,
+        toAgent: toAgent,
+        briefing: artifacts.briefing,
+        launched: launched
+      )
     )
 
     return success(
       payload: makePayload(
         action: .toAgent,
         save: artifacts.save,
+        briefing: artifacts.briefing,
         toAgent: toAgent,
         archivedPath: artifacts.archivedPath,
-        launched: launched,
-        preparation: artifacts.preparation
+        launched: launched
       )
     )
   }
 
   private func makeCoordinator(store: HandoffStore) -> HandoffCoordinator {
-    HandoffCoordinator(store: store, resume: preparationProvider)
-  }
-
-  /// The safe source-preparation request, or nil when `--no-prepare` was
-  /// passed or no exact/high-confidence resumable session exists.
-  private func preparationRequest(input: HandoffInput, target: HandoffResolvedTarget) -> AgentResumeRequest? {
-    guard input.prepare else { return nil }
-    return Self.preparationRequest(
-      outgoingAgent: target.outgoingAgent,
-      session: target.outgoingSession,
-      observation: target.outgoingLaunchObservation
-    )
-  }
-
-  // MARK: - status
-
-  private func handleStatus(target: HandoffResolvedTarget, store: HandoffStore) async -> CommandResponse {
-    let (status, sessionContext) = await Task.detached {
-      (store.readStatus(), target.sessionContext)
-    }.value
-    return success(
-      payload: HandoffCommandPayload(
-        action: .status,
-        artifactPath: status.artifactPath,
-        outgoingAgent: target.outgoingAgent,
-        sessionContext: sessionContext.map {
-          HandoffSessionPayload(
-            agent: $0.agent,
-            sessionID: $0.sessionID,
-            paneID: $0.paneID,
-            paneTitle: $0.paneTitle,
-            source: $0.source,
-            confidence: $0.confidence,
-            transcriptPath: $0.transcriptPath
-          )
-        },
-        exists: status.exists,
-        lastLog: status.lastLogLine
-      )
-    )
+    HandoffCoordinator(store: store, resume: forkProvider)
   }
 
   // MARK: - Kickoff prompt
 
-  nonisolated static func kickoffPrompt() -> String {
-    "Take over this Prowl workspace task. Read .prowl/handoff/current.md (agent notes), "
-      + ".prowl/handoff/context.md (generated state), and .prowl/workspace.json (repo layout, if present), "
-      + "then continue from Next Steps. Do not redo work already listed under What Has Been Done. "
-      + "If context.md lists a Session Context excerpt, read it before changing code. Earlier hand-off "
-      + "snapshots are under .prowl/handoff/archive/ if you need deeper history. "
-      + "Ask before any commit/push or destructive git."
+  nonisolated static func kickoffPrompt(hasBriefing: Bool) -> String {
+    if hasBriefing {
+      "Take over this Prowl workspace task. Read .prowl/handoff/current.md (the previous agent's "
+        + "briefing), .prowl/handoff/context.md (generated state), and .prowl/workspace.json "
+        + "(repo layout, if present), then continue from Next Steps. Do not redo work already listed "
+        + "under What Has Been Done. If context.md lists a Session Context excerpt, read it before "
+        + "changing code. Earlier hand-off snapshots are under .prowl/handoff/archive/ if you need "
+        + "deeper history. Ask before any commit/push or destructive git."
+    } else {
+      "Take over this Prowl workspace task. There is no briefing from the previous agent: orient "
+        + "from .prowl/handoff/context.md (generated repository and session state) and "
+        + ".prowl/workspace.json (repo layout, if present). If context.md lists a Session Context "
+        + "excerpt, read it before changing code. Earlier hand-off snapshots are under "
+        + ".prowl/handoff/archive/ if you need history. Ask before any commit/push or destructive git."
+    }
   }
 
-  nonisolated static func preparationRequest(
+  // MARK: - Fork briefing (fallback)
+
+  nonisolated static func forkRequest(
     outgoingAgent: String?,
     session: AgentSession?,
     observation: AgentLaunchObservation?
@@ -283,13 +375,13 @@ final class HandoffCommandHandler: CommandHandler {
     return AgentResumeRequest(
       agent: agent,
       session: session,
-      prompt: preparationPrompt(),
+      prompt: forkBriefingPrompt(),
       model: observation?.model
     )
   }
 
-  nonisolated static func preparationPrompt() -> String {
-    "Prowl handoff preparation: another agent with none of your context will take over this task, "
+  nonisolated static func forkBriefingPrompt() -> String {
+    "Prowl handoff briefing: another agent with none of your context will take over this task, "
       + "starting only from the document you write now. Reply with the complete contents of a fresh "
       + ".prowl/handoff/current.md and nothing else — a markdown document titled \"# Handoff\" with the "
       + "sections \"## Objective\", \"## Current State\", \"## What Has Been Done\", \"## Open Questions\", "
@@ -301,15 +393,54 @@ final class HandoffCommandHandler: CommandHandler {
       + "the file from your reply. Be concise and answer in a single reply."
   }
 
+  // MARK: - Error messages
+
+  nonisolated static func briefRequiredMessage(action: HandoffAction, toAgent: String?) -> String {
+    let command =
+      switch action {
+      case .save: "prowl handoff save --brief -"
+      case .toAgent: "prowl handoff to \(toAgent ?? "<agent>") --brief -"
+      }
+    return """
+      Self-handoff requires an inline briefing — you are the author. Rerun with your briefing on stdin:
+        \(command) <<'EOF'
+        # Handoff
+        ## Objective
+        …
+        ## Current State
+        …
+        ## What Has Been Done
+        …
+        ## Open Questions
+        …
+        ## Risks / Watch Out
+        …
+        ## Next Steps
+        …
+        ## Suggested Prompt For Next Agent
+        …
+        EOF
+      Write it from your current working knowledge. Use --no-brief only for an intentional \
+      context-only handoff.
+      """
+  }
+
+  nonisolated static func invalidBriefMessage() -> String {
+    "The briefing is missing required sections. Include at least \"## Objective\", "
+      + "\"## Current State\", and \"## Next Steps\" "
+      + "(recommended: the full skeleton \(HandoffStore.briefingSections.joined(separator: " / "))). "
+      + "Nothing was written — fix the briefing and rerun."
+  }
+
   // MARK: - Payload
 
   private func makePayload(
     action: HandoffAction,
     save: HandoffStore.SaveResult,
+    briefing: HandoffBriefing,
     toAgent: String? = nil,
     archivedPath: String? = nil,
-    launched: HandoffLaunchedPane? = nil,
-    preparation: HandoffPreparationOutcome? = nil
+    launched: HandoffLaunchedPane? = nil
   ) -> HandoffCommandPayload {
     HandoffCommandPayload(
       action: action,
@@ -329,7 +460,8 @@ final class HandoffCommandHandler: CommandHandler {
       changedFileCount: save.totalChangedFiles,
       archivedPath: archivedPath,
       sessionContext: save.sessionContext,
-      preparation: preparation?.rawValue,
+      briefing: briefing.rawValue,
+      hasBriefing: briefing.wroteBriefing,
       launchedPane: launched.map {
         HandoffPanePayload(
           worktreeID: $0.worktreeID,
@@ -349,7 +481,7 @@ final class HandoffCommandHandler: CommandHandler {
       return try CommandResponse(
         ok: true,
         command: "handoff",
-        schemaVersion: "prowl.cli.handoff.v1",
+        schemaVersion: "prowl.cli.handoff.v2",
         data: RawJSON(encoding: payload)
       )
     } catch {
@@ -357,12 +489,18 @@ final class HandoffCommandHandler: CommandHandler {
     }
   }
 
-  private func mapResolverError(_ error: TargetResolverError) -> CommandResponse {
+  private func mapResolveError(_ error: HandoffResolveError) -> CommandResponse {
     switch error {
-    case .notFound(let message):
+    case .resolver(.notFound(let message)):
       return errorResponse(code: CLIErrorCode.targetNotFound, message: message)
-    case .notUnique(let message):
+    case .resolver(.notUnique(let message)):
       return errorResponse(code: CLIErrorCode.targetNotUnique, message: message)
+    case .noCallerPane:
+      return errorResponse(
+        code: CLIErrorCode.sourceRequired,
+        message: "No source pane: run this inside a Prowl pane (the calling agent's pane becomes "
+          + "the source), or pass an explicit selector (--pane p3, --tab t2, --worktree <name>)."
+      )
     }
   }
 
@@ -370,7 +508,7 @@ final class HandoffCommandHandler: CommandHandler {
     CommandResponse(
       ok: false,
       command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
+      schemaVersion: "prowl.cli.handoff.v2",
       error: CommandError(code: code, message: message)
     )
   }

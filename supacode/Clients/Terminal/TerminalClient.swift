@@ -19,6 +19,9 @@ struct TerminalClient {
   var handoffSessionContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffStore.SessionContext?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
+  /// Types a line into a specific pane and submits it. The UI handoff path
+  /// injects its request to the live source agent this way.
+  var sendTextToSurface: @MainActor @Sendable (Worktree.ID, UUID, String) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var markNotificationsReadForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Void
 
@@ -97,6 +100,7 @@ extension TerminalClient: DependencyKey {
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
+    sendTextToSurface: { _, _, _ in false },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in }
   )
@@ -111,6 +115,7 @@ extension TerminalClient: DependencyKey {
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
+    sendTextToSurface: { _, _, _ in false },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in }
   )

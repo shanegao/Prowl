@@ -7,37 +7,70 @@ import ProwlCLIShared
 struct HandoffCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "handoff",
-    abstract: "Refresh, archive, and hand off the cross-agent task artifact in a runnable target.",
+    abstract: "Hand a task off between agents: archive, brief, and launch the receiver.",
     subcommands: [
       HandoffSaveCommand.self,
       HandoffToCommand.self,
-      HandoffStatusCommand.self,
     ]
   )
+}
+
+/// Shared briefing options. `--brief <text|->` supplies the agent-authored
+/// briefing inline (`-` reads stdin, the standard heredoc posture for a
+/// self-handoff); `--no-brief` is the explicit context-only escape.
+struct HandoffBriefOptions: ParsableArguments {
+  @Option(
+    name: .long,
+    help: "Inline agent-authored briefing; pass '-' to read it from stdin (heredoc)."
+  )
+  var brief: String?
+
+  @Flag(name: .customLong("no-brief"), help: "Context-only: skip the briefing entirely.")
+  var noBrief = false
+
+  /// Resolve to the wire shape, reading stdin for the `-` sentinel.
+  func resolve() throws -> (brief: String?, contextOnly: Bool) {
+    if noBrief, brief != nil {
+      throw ExitError(
+        code: CLIErrorCode.invalidArgument,
+        message: "--brief and --no-brief are mutually exclusive."
+      )
+    }
+    guard var text = brief else { return (nil, noBrief) }
+    if text == "-" {
+      guard
+        let data = try? FileHandle.standardInput.readToEnd(),
+        let stdinText = String(data: data, encoding: .utf8)
+      else {
+        throw ExitError(code: CLIErrorCode.emptyInput, message: "Failed to read the briefing from stdin.")
+      }
+      text = stdinText
+    }
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw ExitError(code: CLIErrorCode.emptyInput, message: "The briefing is empty.")
+    }
+    return (text, false)
+  }
 }
 
 struct HandoffSaveCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "save",
-    abstract: "Refresh the handoff artifact's auto context appendix from live git state."
+    abstract: "Checkpoint: install a fresh briefing and refresh generated context, without launching."
   )
 
   @OptionGroup var selector: SelectorOptions
+  @OptionGroup var briefOptions: HandoffBriefOptions
   @OptionGroup var options: GlobalOptions
 
-  @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
+  @Argument(help: "Source pane/tab UUID or worktree id/name/path (defaults to the calling pane).")
   var target: String?
 
   @Option(name: .long, help: "Optional note appended to the handoff log.")
   var note: String?
 
-  @Flag(
-    name: .customLong("no-prepare"),
-    help: "Skip asking the detected source agent to refresh current.md before saving."
-  )
-  var noPrepare = false
-
   mutating func run() throws {
+    let resolvedBrief = try briefOptions.resolve()
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let envelope = CommandEnvelope(
         output: options.outputMode,
@@ -46,7 +79,8 @@ struct HandoffSaveCommand: ParsableCommand {
             action: .save,
             selector: try selector.resolve(positionalTarget: target),
             note: note,
-            prepare: !noPrepare
+            brief: resolvedBrief.brief,
+            contextOnly: resolvedBrief.contextOnly
           )
         )
       )
@@ -58,7 +92,7 @@ struct HandoffSaveCommand: ParsableCommand {
 struct HandoffToCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "to",
-    abstract: "Save + archive the handoff, then launch the receiving agent in a new tab."
+    abstract: "Archive the outgoing state, install the briefing, and launch the receiving agent."
   )
 
   @Argument(
@@ -67,10 +101,11 @@ struct HandoffToCommand: ParsableCommand {
   )
   var agent: String
 
-  @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
+  @Argument(help: "Source pane/tab UUID or worktree id/name/path (defaults to the calling pane).")
   var target: String?
 
   @OptionGroup var selector: SelectorOptions
+  @OptionGroup var briefOptions: HandoffBriefOptions
   @OptionGroup var options: GlobalOptions
 
   @Option(name: .long, help: "Optional note appended to the handoff log.")
@@ -79,28 +114,23 @@ struct HandoffToCommand: ParsableCommand {
   @Flag(name: .customLong("no-launch"), help: "Archive + save only; do not launch the receiving agent.")
   var noLaunch = false
 
-  @Flag(
-    name: .customLong("no-prepare"),
-    help: "Skip asking the detected source agent to refresh current.md before saving."
-  )
-  var noPrepare = false
-
   mutating func run() throws {
+    let rawAgent = agent.lowercased()
+    guard let normalizedAgent = HandoffAgentSupport.normalize(rawAgent) else {
+      throw ExitError(
+        code: CLIErrorCode.invalidArgument,
+        message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
+      )
+    }
+    if !noLaunch, !HandoffAgentSupport.canLaunch(normalizedAgent) {
+      throw ExitError(
+        code: CLIErrorCode.invalidArgument,
+        message:
+          "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
+      )
+    }
+    let resolvedBrief = try briefOptions.resolve()
     try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
-      let rawAgent = agent.lowercased()
-      guard let normalizedAgent = HandoffAgentSupport.normalize(rawAgent) else {
-        throw ExitError(
-          code: CLIErrorCode.invalidArgument,
-          message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
-        )
-      }
-      if !noLaunch, !HandoffAgentSupport.canLaunch(normalizedAgent) {
-        throw ExitError(
-          code: CLIErrorCode.invalidArgument,
-          message:
-            "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
-        )
-      }
       let envelope = CommandEnvelope(
         output: options.outputMode,
         command: .handoff(
@@ -110,33 +140,9 @@ struct HandoffToCommand: ParsableCommand {
             toAgent: normalizedAgent,
             note: note,
             launch: !noLaunch,
-            prepare: !noPrepare
+            brief: resolvedBrief.brief,
+            contextOnly: resolvedBrief.contextOnly
           )
-        )
-      )
-      try CLIRunner.execute(envelope)
-    }
-  }
-}
-
-struct HandoffStatusCommand: ParsableCommand {
-  static let configuration = CommandConfiguration(
-    commandName: "status",
-    abstract: "Show the handoff artifact path, existence, and last log line."
-  )
-
-  @OptionGroup var selector: SelectorOptions
-  @OptionGroup var options: GlobalOptions
-
-  @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
-  var target: String?
-
-  mutating func run() throws {
-    try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
-      let envelope = CommandEnvelope(
-        output: options.outputMode,
-        command: .handoff(
-          HandoffInput(action: .status, selector: try selector.resolve(positionalTarget: target))
         )
       )
       try CLIRunner.execute(envelope)

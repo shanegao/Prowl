@@ -13,14 +13,12 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
   public let archivedPath: String?
   /// Auto-captured outgoing session context saved alongside `current.md`.
   public let sessionContext: HandoffSessionPayload?
-  /// Whether source preparation completed, failed, or was skipped (save/to).
-  public let preparation: String?
+  /// How the briefing was obtained: "inline", "fork", "none", or "failed".
+  public let briefing: String?
+  /// Whether a fresh `current.md` was written for the receiver.
+  public let hasBriefing: Bool
   /// The pane the receiving agent was launched into (for `to` with launch).
   public let launchedPane: HandoffPanePayload?
-  /// Whether `current.md` exists (for `status`).
-  public let exists: Bool?
-  /// Most recent handoff-log line (for `status`).
-  public let lastLog: String?
 
   enum CodingKeys: String, CodingKey {
     case action
@@ -31,10 +29,9 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     case changedFileCount = "changed_file_count"
     case archivedPath = "archived_path"
     case sessionContext = "session_context"
-    case preparation
+    case briefing
+    case hasBriefing = "has_briefing"
     case launchedPane = "launched_pane"
-    case exists
-    case lastLog = "last_log"
   }
 
   public init(
@@ -46,10 +43,9 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     changedFileCount: Int = 0,
     archivedPath: String? = nil,
     sessionContext: HandoffSessionPayload? = nil,
-    preparation: String? = nil,
-    launchedPane: HandoffPanePayload? = nil,
-    exists: Bool? = nil,
-    lastLog: String? = nil
+    briefing: String? = nil,
+    hasBriefing: Bool = false,
+    launchedPane: HandoffPanePayload? = nil
   ) {
     self.action = action
     self.artifactPath = artifactPath
@@ -59,10 +55,9 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     self.changedFileCount = changedFileCount
     self.archivedPath = archivedPath
     self.sessionContext = sessionContext
-    self.preparation = preparation
+    self.briefing = briefing
+    self.hasBriefing = hasBriefing
     self.launchedPane = launchedPane
-    self.exists = exists
-    self.lastLog = lastLog
   }
 }
 
