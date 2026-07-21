@@ -2,10 +2,13 @@ import AppKit
 import ComposableArchitecture
 import SwiftUI
 
-/// Command-palette-style overlay hosting the staged hand-off flow
-/// (docs-ai 049). The panel is a projection of `HandoffHudFeature` state;
-/// clicking outside dismisses only while choosing or finished — a running
-/// hand-off keeps the panel up in this wave.
+/// Command-palette-style overlay hosting the hand-off flow (docs-ai 047.004).
+/// The panel is a projection of `HandoffHudFeature` state. While *requesting*
+/// (waiting for the live agent to run the hand-off) the panel is non-modal:
+/// the keyboard stays with the terminal — the source agent may need the user
+/// to approve a permission prompt — and clicking outside collapses the panel
+/// (the hand-off completes headlessly and notifies). Only the short
+/// fork/context-only fallbacks keep the panel modal.
 struct HandoffHudOverlayView: View {
   let store: StoreOf<HandoffHudFeature>
 
@@ -19,6 +22,8 @@ struct HandoffHudOverlayView: View {
             store.send(.cancelTapped)
           case .finished:
             store.send(.closeTapped)
+          case .running(let run) where run.stage == .requesting:
+            store.send(.cancelTapped)
           case .running:
             break
           }
@@ -65,11 +70,17 @@ private struct HandoffHudCard: View {
       }
     }
     .background {
-      HandoffHudKeyCaptureView(
-        onMove: { delta in store.send(.moveSelection(delta: delta)) },
-        onConfirm: { confirmForCurrentPhase() },
-        onEscape: { escapeForCurrentPhase() }
-      )
+      // Capture keys only while the panel truly owns the interaction
+      // (choosing / finished). While requesting, the keyboard must stay with
+      // the terminal so the user can approve the source agent's permission
+      // prompts; the fallbacks are button-driven.
+      if capturesKeyboard {
+        HandoffHudKeyCaptureView(
+          onMove: { delta in store.send(.moveSelection(delta: delta)) },
+          onConfirm: { confirmForCurrentPhase() },
+          onEscape: { escapeForCurrentPhase() }
+        )
+      }
     }
     .frame(maxWidth: 560)
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14))
@@ -129,6 +140,15 @@ private struct HandoffHudCard: View {
       return "The current state is saved for a later hand-off"
     case .finished(.failed(let message)):
       return message
+    }
+  }
+
+  private var capturesKeyboard: Bool {
+    switch store.phase {
+    case .choosing, .finished:
+      return true
+    case .running(let run):
+      return run.stage != .requesting
     }
   }
 

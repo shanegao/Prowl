@@ -225,7 +225,14 @@ struct HandoffHudFeature {
           HandoffHudRun(target: target, startedAt: now, stage: .requesting)
         )
         if delivered {
-          return .none
+          // The panel goes non-modal while waiting: hand the keyboard back to
+          // the terminal so the user can approve any permission prompt the
+          // injected request triggers in the source agent.
+          let worktree = state.worktree
+          let client = terminalClient
+          return .run { _ in
+            await client.send(.focusSelectedTab(worktree))
+          }
         }
         // The pane cannot take input (gone or wedged) — fall back without a
         // detour through the waiting state.
