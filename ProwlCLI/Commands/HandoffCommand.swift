@@ -53,6 +53,20 @@ struct HandoffBriefOptions: ParsableArguments {
   }
 }
 
+/// The HUD prefixes its injected shell command with a UUID environment value.
+/// Normal interactive CLI use never sets it.
+enum HandoffRequestContext {
+  static var currentID: UUID? {
+    requestID(in: ProcessInfo.processInfo.environment)
+  }
+
+  static func requestID(in environment: [String: String]) -> UUID? {
+    guard let rawID = environment[HandoffInput.requestIDEnvironmentKey] else { return nil }
+    return UUID(uuidString: rawID)
+  }
+}
+
+
 struct HandoffSaveCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "save",
@@ -80,7 +94,9 @@ struct HandoffSaveCommand: ParsableCommand {
             selector: try selector.resolve(positionalTarget: target),
             note: note,
             brief: resolvedBrief.brief,
-            contextOnly: resolvedBrief.contextOnly
+            contextOnly: resolvedBrief.contextOnly,
+            requestID: HandoffRequestContext.currentID
+
           )
         )
       )
@@ -141,7 +157,8 @@ struct HandoffToCommand: ParsableCommand {
             note: note,
             launch: !noLaunch,
             brief: resolvedBrief.brief,
-            contextOnly: resolvedBrief.contextOnly
+            contextOnly: resolvedBrief.contextOnly,
+            requestID: HandoffRequestContext.currentID
           )
         )
       )

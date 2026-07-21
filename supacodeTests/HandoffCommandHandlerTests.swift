@@ -62,7 +62,9 @@ struct HandoffCommandHandlerTests {
     resolveFailure: HandoffResolveError? = nil,
     launchSpy: (@MainActor (AgentStartRequest) -> Void)? = nil,
     forkSpy: (@Sendable (AgentResumeRequest, URL) async throws -> String)? = nil,
-    completionSpy: (@MainActor (HandoffCLICompletion) -> Void)? = nil
+    completionSpy: (@MainActor (HandoffCLICompletion) -> Void)? = nil,
+    requestClaim: ((UUID) -> Bool)? = nil
+
   ) -> HandoffCommandHandler {
     HandoffCommandHandler(
       resolveProvider: { _, _ in
@@ -93,6 +95,9 @@ struct HandoffCommandHandlerTests {
       },
       completionObserver: { completion in
         completionSpy?(completion)
+      },
+      requestAuthorizer: { requestID in
+        requestClaim?(requestID) ?? true
       },
       now: { [fixedDate] in fixedDate }
     )
@@ -214,6 +219,34 @@ struct HandoffCommandHandlerTests {
 
     #expect(response.ok == false)
     #expect(response.error?.code == CLIErrorCode.invalidBrief)
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
+  }
+
+  @Test func supersededHudRequestIsRejectedBeforeSideEffects() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let requestID = UUID()
+
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      requestClaim: { _ in false }
+
+    )
+
+    let response = await handler.handle(
+      envelope: envelope(
+        HandoffInput(
+          action: .toAgent,
+          toAgent: "claude",
+          brief: validHandoffBriefing,
+          requestID: requestID
+        )
+      )
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.handoffRequestSuperseded)
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
   }
 

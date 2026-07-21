@@ -178,6 +178,10 @@ public enum HandoffAction: String, Codable, Sendable {
 }
 
 public struct HandoffInput: Codable, Sendable {
+  /// Environment variable used only by HUD-injected shell commands to carry
+  /// the one-shot request authorization ID to the socket payload.
+  public nonisolated static let requestIDEnvironmentKey = "PROWL_HANDOFF_REQUEST_ID"
+
   public let action: HandoffAction
   public let selector: TargetSelector
   /// Target agent for `to` (e.g. "claude", "codex"). Required for `.to`, nil otherwise.
@@ -193,6 +197,9 @@ public struct HandoffInput: Codable, Sendable {
   /// Explicit context-only run (`--no-brief`): no briefing is collected and
   /// no fork resume is attempted.
   public let contextOnly: Bool
+  /// Optional ID assigned by the HUD to authorize one injected transition.
+  /// Ordinary CLI handoffs omit it and remain independent of HUD state.
+  public let requestID: UUID?
 
   enum CodingKeys: String, CodingKey {
     case action
@@ -202,6 +209,8 @@ public struct HandoffInput: Codable, Sendable {
     case launch
     case brief
     case contextOnly = "context_only"
+    case requestID = "request_id"
+
   }
 
   public init(
@@ -211,7 +220,9 @@ public struct HandoffInput: Codable, Sendable {
     note: String? = nil,
     launch: Bool = true,
     brief: String? = nil,
-    contextOnly: Bool = false
+    contextOnly: Bool = false,
+    requestID: UUID? = nil
+
   ) {
     self.action = action
     self.selector = selector
@@ -220,6 +231,8 @@ public struct HandoffInput: Codable, Sendable {
     self.launch = launch
     self.brief = brief
     self.contextOnly = contextOnly
+    self.requestID = requestID
+
   }
 
   public init(from decoder: Decoder) throws {
@@ -231,6 +244,7 @@ public struct HandoffInput: Codable, Sendable {
     self.launch = try container.decodeIfPresent(Bool.self, forKey: .launch) ?? true
     self.brief = try container.decodeIfPresent(String.self, forKey: .brief)
     self.contextOnly = try container.decodeIfPresent(Bool.self, forKey: .contextOnly) ?? false
+    self.requestID = try container.decodeIfPresent(UUID.self, forKey: .requestID)
   }
 }
 

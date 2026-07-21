@@ -42,8 +42,9 @@ enum HandoffStage: Equatable, Sendable {
   case requesting
   /// Fallback: fork briefing + transition, headless.
   case forking
-  /// Fallback: context-only transition (sub-second).
-  case saving
+  /// Artifact persistence and receiver launch have committed; this phase runs
+  /// to completion rather than presenting a misleading cancel affordance.
+  case finishing
 }
 
 enum HandoffHudOutcome: Equatable, Sendable {
@@ -56,6 +57,9 @@ struct HandoffHudRun: Equatable, Sendable {
   let target: HandoffTargetOption
   let startedAt: Date
   var stage: HandoffStage
+  /// Non-nil only for an inline request injected by this HUD run.
+  let requestID: UUID?
+
 }
 
 enum HandoffHudPhase: Equatable {
@@ -171,6 +175,10 @@ struct HandoffHudFeature {
     case confirmSelection
     case fallbackForkTapped
     case fallbackContextOnlyTapped
+    /// Fork collection has produced a validated (or context-only) briefing.
+    /// Handling this action establishes the non-cancellable commit boundary.
+    case fallbackBriefingCollected(HandoffPreparedBriefing)
+
     /// A CLI handoff completed somewhere in the app; the reducer ignores it
     /// unless it came from this HUD's source pane.
     case cliCompleted(HandoffCLICompletion)
@@ -192,6 +200,9 @@ struct HandoffHudFeature {
 
   @Dependency(AgentRuntimeClient.self) private var agentRuntimeClient
   @Dependency(TerminalClient.self) private var terminalClient
+  @Dependency(HandoffRequestClient.self) private var handoffRequestClient
+  @Dependency(\.uuid) private var uuid
+
   @Dependency(\.date.now) private var now
 
   var body: some Reducer<State, Action> {
@@ -216,14 +227,22 @@ struct HandoffHudFeature {
           case .agent(let agent): .handOff(agent: agent.rawValue)
           case .briefOnly: .checkpoint
           }
+        let requestID = uuid()
+        handoffRequestClient.register(requestID)
         let delivered = terminalClient.sendTextToSurface(
           state.worktree.id,
           state.source.sourceSurfaceID,
-          HandoffInjection.instruction(for: purpose)
+          HandoffInjection.instruction(for: purpose, requestID: requestID)
         )
         state.phase = .running(
-          HandoffHudRun(target: target, startedAt: now, stage: .requesting)
+          HandoffHudRun(
+            target: target,
+            startedAt: now,
+            stage: .requesting,
+            requestID: requestID
+          )
         )
+
         if delivered {
           // The panel goes non-modal while waiting: hand the keyboard back to
           // the terminal so the user can approve any permission prompt the
@@ -234,36 +253,51 @@ struct HandoffHudFeature {
             await client.send(.focusSelectedTab(worktree))
           }
         }
-        // The pane cannot take input (gone or wedged) — fall back without a
-        // detour through the waiting state.
+        // The pane cannot take input (gone or wedged) — cancel its just-registered
+        // request before the HUD takes the independent fallback path.
+        _ = handoffRequestClient.supersede(requestID)
         return state.canFork
           ? startForkFallback(&state)
           : startContextOnlyFallback(&state)
 
       case .fallbackForkTapped:
-        guard state.run?.stage == .requesting else { return .none }
+        guard
+          let requestID = state.run?.requestID,
+          handoffRequestClient.supersede(requestID)
+        else { return .none }
         return startForkFallback(&state)
 
       case .fallbackContextOnlyTapped:
-        guard state.run?.stage == .requesting else { return .none }
+        guard
+          let requestID = state.run?.requestID,
+          handoffRequestClient.supersede(requestID)
+        else { return .none }
         return startContextOnlyFallback(&state)
+
+      case .fallbackBriefingCollected(let briefing):
+        guard state.run?.stage == .forking else { return .none }
+        return startFallbackCommit(&state, briefing: briefing)
 
       case .cliCompleted(let completion):
         guard let run = state.run,
-          completion.sourcePaneID == state.source.sourceSurfaceID.uuidString
+          run.stage == .requesting,
+          completion.sourcePaneID == state.source.sourceSurfaceID.uuidString,
+          completion.requestID == run.requestID
         else { return .none }
         let expectedAction: HandoffAction = run.target.kind == .briefOnly ? .save : .toAgent
         guard completion.action == expectedAction else { return .none }
         switch run.target.kind {
         case .briefOnly:
+          guard completion.toAgent == nil else { return .none }
           state.phase = .finished(.briefSaved)
-        case .agent:
+        case .agent(let expectedAgent):
+          guard completion.toAgent == expectedAgent.rawValue, let launched = completion.launched,
+            let paneID = UUID(uuidString: launched.paneID)
+          else { return .none }
           state.phase = .finished(.handedOff(agentDisplayName: run.target.title))
-          if let launched = completion.launched, let paneID = UUID(uuidString: launched.paneID) {
-            // The user is present and asked for this hand-off — jump to the
-            // receiver. The transition core itself never focuses anything.
-            _ = terminalClient.focusSurface(launched.worktreeID, paneID)
-          }
+          // The user is present and asked for this hand-off — jump to the
+          // receiver. The transition core itself never focuses anything.
+          _ = terminalClient.focusSurface(launched.worktreeID, paneID)
         }
         return .cancel(id: FallbackCancelID(worktreeID: state.worktree.id))
 
@@ -285,13 +319,17 @@ struct HandoffHudFeature {
           // The injected request cannot be unsent; if the agent still hands
           // off, the CLI path completes headlessly and notifies.
           return .send(.delegate(.dismiss))
-        case .running:
-          // Abort the in-flight fallback: a cancelled fork never mutates the
-          // artifact.
+        case .running(let run) where run.stage == .forking:
+          // Fork collection is the only cancellable fallback phase. No
+          // artifact work begins until it reports a prepared briefing.
           return .merge(
             .cancel(id: FallbackCancelID(worktreeID: state.worktree.id)),
             .send(.delegate(.dismiss))
           )
+        case .running:
+          // The fallback crossed its commit boundary and must finish as one
+          // transition; cancellation here would leave a partial handoff.
+          return .none
         case .finished:
           return .none
         }
@@ -322,21 +360,37 @@ struct HandoffHudFeature {
     guard let forkRequest = state.source.forkRequest else {
       return startContextOnlyFallback(&state)
     }
-    return startFallback(&state, briefingSource: .fork(forkRequest), stage: .forking)
+    guard var run = state.run else { return .none }
+    run.stage = .forking
+    state.phase = .running(run)
+
+    let coordinator = makeCoordinator(state)
+    let worktreeID = state.worktree.id
+    return .run { send in
+      let briefing = try await coordinator.collectBriefing(.fork(forkRequest))
+      await send(.fallbackBriefingCollected(briefing))
+    } catch: { error, send in
+      guard !(error is CancellationError) else { return }
+      await send(.runFailed(message: error.localizedDescription))
+    }
+    .cancellable(id: FallbackCancelID(worktreeID: worktreeID), cancelInFlight: true)
   }
 
   private func startContextOnlyFallback(_ state: inout State) -> Effect<Action> {
-    startFallback(&state, briefingSource: HandoffBriefingSource.none, stage: .saving)
+    startFallbackCommit(&state, briefing: .contextOnly)
   }
 
-  private func startFallback(
+  /// Crosses the fallback's visible commit boundary. From here onward the
+  /// transition must run to one consistent outcome: archive/write/save/log and
+  /// receiver launch cannot be independently cancelled.
+  private func startFallbackCommit(
     _ state: inout State,
-    briefingSource: HandoffBriefingSource,
-    stage: HandoffStage
+    briefing: HandoffPreparedBriefing
   ) -> Effect<Action> {
     guard var run = state.run else { return .none }
-    run.stage = stage
+    run.stage = .finishing
     state.phase = .running(run)
+
     let coordinator = makeCoordinator(state)
     let source = state.source
     let worktree = state.worktree
@@ -352,15 +406,13 @@ struct HandoffHudFeature {
           outgoingAgent: source.agentToken,
           sessionContext: source.sessionContext,
           note: nil,
-          briefingSource: briefingSource,
+          briefing: briefing,
           now: timestamp
         )
         await send(.fallbackFinished(.briefSaved))
       } catch: { error, send in
-        guard !(error is CancellationError) else { return }
         await send(.runFailed(message: error.localizedDescription))
       }
-      .cancellable(id: FallbackCancelID(worktreeID: worktree.id), cancelInFlight: true)
 
     case .agent(let destination):
       let configuration = inheritedConfiguration(source: source, destination: destination)
@@ -370,7 +422,7 @@ struct HandoffHudFeature {
           outgoingAgent: source.agentToken,
           toAgent: destination.rawValue,
           sessionContext: source.sessionContext,
-          briefingSource: briefingSource,
+          briefing: briefing,
           now: timestamp
         )
         let request = AgentStartRequest(
@@ -400,10 +452,8 @@ struct HandoffHudFeature {
         )
         await send(.fallbackFinished(.handedOff(agentDisplayName: targetTitle)))
       } catch: { error, send in
-        guard !(error is CancellationError) else { return }
         await send(.runFailed(message: error.localizedDescription))
       }
-      .cancellable(id: FallbackCancelID(worktreeID: worktree.id), cancelInFlight: true)
     }
   }
 

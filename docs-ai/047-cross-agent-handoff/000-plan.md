@@ -102,3 +102,6 @@ cwd, which is weaker than the pid-anchored, ambiguity-safe native session identi
   explicit fallback, pure archive-first transition with template/manual-maintenance
   abolished, headless launch + completion notification, `status`/auto-save removed —
   see [004-inline-handoff-redesign](004-inline-handoff-redesign.md).
+- Updated 2026-07-21: HUD request ownership — injected requests now need an
+  atomic single-transition claim, and fallback cancellation needs a visible commit
+  boundary — see [005-hud-request-ownership](005-hud-request-ownership.md).

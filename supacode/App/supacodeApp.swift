@@ -200,6 +200,8 @@ struct SupacodeApp: App {
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let storeBox = SupacodeAppStoreBox()
+    let handoffRequestRegistry = HandoffRequestRegistry()
+
     let coordinator = Self.makePullRequestRefreshCoordinator(storeBox: storeBox)
     _pullRequestRefreshCoordinator = State(initialValue: coordinator)
     let keyObserver = CommandKeyObserver()
@@ -229,11 +231,26 @@ struct SupacodeApp: App {
       values.pullRequestRefreshCoordinator = Self.makePullRequestRefreshCoordinatorClient(
         coordinator: coordinator
       )
+      values.handoffRequestClient = HandoffRequestClient(
+        register: { requestID in
+          handoffRequestRegistry.register(requestID)
+        },
+        supersede: { requestID in
+          handoffRequestRegistry.supersede(requestID)
+        }
+      )
+
     }
+
     _store = State(initialValue: appStore)
     storeBox.store = appStore
 
-    let cliServer = Self.makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
+    let cliServer = Self.makeCLISocketServer(
+      appStore: appStore,
+      terminalManager: terminalManager,
+      handoffRequestRegistry: handoffRequestRegistry
+    )
+
     _cliSocketServer = State(initialValue: cliServer)
 
     let watchdog = Self.makeMemoryWatchdog(appStore: appStore, terminalManager: terminalManager)
@@ -499,8 +516,10 @@ struct SupacodeApp: App {
   // swiftlint:disable:next function_body_length
   static func makeCLICommandRouter(
     appStore: StoreOf<AppFeature>,
-    terminalManager: WorktreeTerminalManager
+    terminalManager: WorktreeTerminalManager,
+    handoffRequestRegistry: HandoffRequestRegistry = HandoffRequestRegistry()
   ) -> CLICommandRouter {
+
     let listHandler = ListCommandHandler {
       ListRuntimeSnapshotBuilder.makeSnapshot(
         repositoriesState: appStore.state.repositories,
@@ -758,7 +777,11 @@ struct SupacodeApp: App {
       },
       completionObserver: { completion in
         appStore.send(.handoffCliCompleted(completion))
+      },
+      requestAuthorizer: { requestID in
+        handoffRequestRegistry.claim(requestID)
       }
+
     )
     return CLICommandRouter(
       openHandler: openHandler,
@@ -849,9 +872,15 @@ struct SupacodeApp: App {
 
   private static func makeCLISocketServer(
     appStore: StoreOf<AppFeature>,
-    terminalManager: WorktreeTerminalManager
+    terminalManager: WorktreeTerminalManager,
+    handoffRequestRegistry: HandoffRequestRegistry
   ) -> CLISocketServer {
-    let cliRouter = makeCLICommandRouter(appStore: appStore, terminalManager: terminalManager)
+
+    let cliRouter = makeCLICommandRouter(
+      appStore: appStore,
+      terminalManager: terminalManager,
+      handoffRequestRegistry: handoffRequestRegistry
+    )
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")
     do {

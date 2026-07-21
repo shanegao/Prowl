@@ -32,6 +32,7 @@ struct HandoffHudFeatureTests {
   }
 
   private let sourcePaneID = UUID(uuidString: "5A0B7B44-11A2-4C6C-9A0F-2B93A8B0E001")!
+  private let requestID = UUID(uuidString: "5A0B7B44-11A2-4C6C-9A0F-2B93A8B0E002")!
 
   private func makeSourceContext(
     agent: String = "codex",
@@ -218,6 +219,7 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { worktreeID, surfaceID, text in
         injected.withValue {
           $0.append(InjectedRequest(worktreeID: worktreeID, surfaceID: surfaceID, text: text))
@@ -228,11 +230,7 @@ struct HandoffHudFeatureTests {
 
     await store.send(.confirmSelection) {
       $0.phase = .running(
-        HandoffHudRun(
-          target: $0.targets[claudeIndex],
-          startedAt: startedAt,
-          stage: .requesting
-        )
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
       )
     }
 
@@ -240,6 +238,7 @@ struct HandoffHudFeatureTests {
     #expect(request.worktreeID == worktree.id)
     #expect(request.surfaceID == sourcePaneID)
     #expect(request.text.contains("prowl handoff to claude --brief -"))
+    #expect(request.text.contains("\(HandoffInput.requestIDEnvironmentKey)=\(requestID.uuidString)"))
     #expect(request.text.contains("## Objective"))
     #expect(!request.text.contains("\n"))
   }
@@ -260,6 +259,7 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
       $0[TerminalClient.self].focusSurface = { worktreeID, surfaceID in
         focused.withValue { $0.append((worktreeID, surfaceID)) }
@@ -270,10 +270,8 @@ struct HandoffHudFeatureTests {
     await store.send(.confirmSelection) {
       $0.phase = .running(
         HandoffHudRun(
-          target: $0.targets[claudeIndex],
-          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
-          stage: .requesting
-        )
+          target: $0.targets[claudeIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
       )
     }
 
@@ -284,7 +282,8 @@ struct HandoffHudFeatureTests {
           sourcePaneID: sourcePaneID.uuidString,
           toAgent: "claude",
           briefing: .inline,
-          launched: launched
+          launched: launched,
+          requestID: requestID
         )
       )
     ) {
@@ -310,16 +309,15 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
     }
 
     await store.send(.confirmSelection) {
       $0.phase = .running(
         HandoffHudRun(
-          target: $0.targets[claudeIndex],
-          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
-          stage: .requesting
-        )
+          target: $0.targets[claudeIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
       )
     }
 
@@ -331,7 +329,8 @@ struct HandoffHudFeatureTests {
           sourcePaneID: UUID().uuidString,
           toAgent: "claude",
           briefing: .inline,
-          launched: nil
+          launched: nil,
+          requestID: requestID
         )
       )
     )
@@ -343,7 +342,34 @@ struct HandoffHudFeatureTests {
           sourcePaneID: sourcePaneID.uuidString,
           toAgent: nil,
           briefing: .inline,
-          launched: nil
+          launched: nil,
+          requestID: requestID
+        )
+      )
+    )
+    // Our pane and request, but a different destination: not this HUD run.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "codex",
+          briefing: .inline,
+          launched: launchedPane(worktreeID: worktree.id),
+          requestID: requestID
+        )
+      )
+    )
+    // A matching destination without a receiver is still not a completed handoff.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "claude",
+          briefing: .inline,
+          launched: nil,
+          requestID: requestID
         )
       )
     )
@@ -364,6 +390,7 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { _, _, text in
         injected.withValue { $0.append(text) }
         return true
@@ -373,10 +400,8 @@ struct HandoffHudFeatureTests {
     await store.send(.confirmSelection) {
       $0.phase = .running(
         HandoffHudRun(
-          target: $0.targets[briefIndex],
-          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
-          stage: .requesting
-        )
+          target: $0.targets[briefIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
       )
     }
     #expect(injected.value.first?.contains("prowl handoff save --brief -") == true)
@@ -388,7 +413,8 @@ struct HandoffHudFeatureTests {
           sourcePaneID: sourcePaneID.uuidString,
           toAgent: nil,
           briefing: .inline,
-          launched: nil
+          launched: nil,
+          requestID: requestID
         )
       )
     ) {
@@ -410,11 +436,18 @@ struct HandoffHudFeatureTests {
 
     let sent = LockIsolated<[TerminalClient.Command]>([])
     let startedAt = Date(timeIntervalSince1970: 1_760_000_000)
+    let requestRegistry = HandoffRequestRegistry()
 
     let store = TestStore(initialState: initial) {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
+      $0.handoffRequestClient = HandoffRequestClient(
+        register: { requestRegistry.register($0) },
+        supersede: { requestRegistry.supersede($0) }
+      )
+
       $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
       $0[TerminalClient.self].send = { command in
         sent.withValue { $0.append(command) }
@@ -424,14 +457,21 @@ struct HandoffHudFeatureTests {
 
     await store.send(.confirmSelection) {
       $0.phase = .running(
-        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting)
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
       )
     }
     await store.send(.fallbackForkTapped) {
       $0.phase = .running(
-        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking)
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking, requestID: requestID)
       )
     }
+    #expect(!requestRegistry.claim(requestID))
+    await store.receive(\.fallbackBriefingCollected) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .finishing, requestID: requestID)
+      )
+    }
+
     await store.receive(\.fallbackFinished) {
       $0.phase = .finished(.handedOff(agentDisplayName: "Claude Code"))
     }
@@ -476,18 +516,20 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
       $0[TerminalClient.self].send = { _ in }
     }
 
     await store.send(.confirmSelection) {
       $0.phase = .running(
-        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting)
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
       )
     }
     await store.send(.fallbackContextOnlyTapped) {
       $0.phase = .running(
-        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .saving)
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .finishing, requestID: requestID)
+
       )
     }
     await store.receive(\.fallbackFinished) {
@@ -515,6 +557,7 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { _, _, _ in false }
       $0[TerminalClient.self].send = { _ in }
       $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in Self.usableReply })
@@ -522,9 +565,15 @@ struct HandoffHudFeatureTests {
 
     await store.send(.confirmSelection) {
       $0.phase = .running(
-        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking)
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking, requestID: requestID)
       )
     }
+    await store.receive(\.fallbackBriefingCollected) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .finishing, requestID: requestID)
+      )
+    }
+
     await store.receive(\.fallbackFinished) {
       $0.phase = .finished(.handedOff(agentDisplayName: "Claude Code"))
     }
@@ -546,16 +595,15 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
     }
 
     await store.send(.confirmSelection) {
       $0.phase = .running(
         HandoffHudRun(
-          target: $0.targets[claudeIndex],
-          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
-          stage: .requesting
-        )
+          target: $0.targets[claudeIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
       )
     }
     await store.send(.cancelTapped)
@@ -577,6 +625,7 @@ struct HandoffHudFeatureTests {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
       $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
       $0[TerminalClient.self].send = { _ in }
       $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in
@@ -586,14 +635,28 @@ struct HandoffHudFeatureTests {
 
     await store.send(.confirmSelection) {
       $0.phase = .running(
-        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting)
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
       )
     }
     await store.send(.fallbackForkTapped) {
       $0.phase = .running(
-        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking)
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking, requestID: requestID)
       )
     }
+    // A delayed CLI completion from the injected request cannot replace the
+    // fallback that already superseded it.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "claude",
+          briefing: .inline,
+          launched: launchedPane(worktreeID: worktree.id),
+          requestID: requestID
+        )
+      )
+    )
     await store.send(.cancelTapped)
     await store.receive(\.delegate.dismiss)
     await store.finish()
@@ -601,4 +664,29 @@ struct HandoffHudFeatureTests {
     // The aborted fork never touched the filesystem.
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
   }
+
+  @Test func cancelWhileFinishingIsIgnored() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: makeWorktree(root: root), source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.phase = .running(
+      HandoffHudRun(
+        target: initial.targets[claudeIndex],
+        startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+        stage: .finishing,
+        requestID: requestID
+      )
+    )
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    }
+
+    await store.send(.cancelTapped)
+    await store.finish()
+  }
+
 }

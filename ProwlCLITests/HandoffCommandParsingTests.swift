@@ -1,4 +1,5 @@
 import ProwlCLIShared
+import Foundation
 import XCTest
 
 @testable import prowl
@@ -49,6 +50,15 @@ final class HandoffCommandParsingTests: XCTestCase {
     let resolved = try command.briefOptions.resolve()
     XCTAssertEqual(resolved.brief, "# Handoff\nbody")
     XCTAssertFalse(resolved.contextOnly)
+  }
+
+  func testHUDRequestEnvironmentParsesOnlyValidUUID() {
+    let requestID = UUID()
+    let key = HandoffInput.requestIDEnvironmentKey
+
+    XCTAssertEqual(HandoffRequestContext.requestID(in: [key: requestID.uuidString]), requestID)
+    XCTAssertNil(HandoffRequestContext.requestID(in: [key: "not-a-uuid"]))
+    XCTAssertNil(HandoffRequestContext.requestID(in: [:]))
   }
 
   func testToAcceptsPositionalTargetAfterAgent() throws {

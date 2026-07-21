@@ -131,8 +131,8 @@ private struct HandoffHudCard: View {
         return "Waiting for \(store.source.displayName) to write its briefing and run the hand-off"
       case .forking:
         return "Collecting a briefing from \(store.source.displayName)'s recorded session"
-      case .saving:
-        return "Preparing a context-only hand-off"
+      case .finishing:
+        return "Finishing the hand-off"
       }
     case .finished(.handedOff):
       return "The receiving agent picks up the task in a new tab"
@@ -148,7 +148,7 @@ private struct HandoffHudCard: View {
     case .choosing, .finished:
       return true
     case .running(let run):
-      return run.stage != .requesting
+      return run.stage == .forking
     }
   }
 
@@ -334,11 +334,13 @@ private struct HandoffHudRunView: View {
           }
           .help("Don't wait: hand off with generated context only, no briefing")
         }
-        Button("Cancel") {
-          onCancel()
+        if run.stage != .finishing {
+          Button("Cancel") {
+            onCancel()
+          }
+          .keyboardShortcut(.cancelAction)
+          .help(cancelHelp)
         }
-        .keyboardShortcut(.cancelAction)
-        .help(cancelHelp)
       }
       .padding(12)
     }
@@ -355,8 +357,8 @@ private struct HandoffHudRunView: View {
       }
     case .forking:
       return "Collecting a briefing from \(sourceDisplayName)'s recorded session"
-    case .saving:
-      return "Handing off with generated context only"
+    case .finishing:
+      return "Finishing the hand-off"
     }
   }
 
@@ -366,8 +368,8 @@ private struct HandoffHudRunView: View {
       return "The request is queued if \(sourceDisplayName) is busy."
     case .forking:
       return "This can take a moment; the live session is untouched."
-    case .saving:
-      return ""
+    case .finishing:
+      return "This hand-off has started and will finish in the background."
     }
   }
 
@@ -375,8 +377,10 @@ private struct HandoffHudRunView: View {
     switch run.stage {
     case .requesting:
       return "Close this panel; if \(sourceDisplayName) still hands off, it completes in the background"
-    case .forking, .saving:
+    case .forking:
       return "Stop this hand-off; nothing is changed"
+    case .finishing:
+      return ""
     }
   }
 }

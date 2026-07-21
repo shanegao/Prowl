@@ -28,6 +28,15 @@ nonisolated enum HandoffBriefingError: Error, Equatable, Sendable {
   case invalidInlineBrief
 }
 
+/// A briefing collected before the handoff's irreversible artifact work
+/// begins. HUD fallbacks use this to establish a visible commit boundary.
+nonisolated struct HandoffPreparedBriefing: Equatable, Sendable {
+  let artifact: String?
+  let outcome: HandoffBriefing
+
+  static let contextOnly = Self(artifact: nil, outcome: .none)
+}
+
 /// The one pure transition core every handoff entry point drives — the CLI
 /// handler for agent-initiated handoffs and the HUD's fork/context-only
 /// fallbacks. A transition always runs the same sequence:
@@ -75,31 +84,33 @@ nonisolated struct HandoffCoordinator: Sendable {
   /// fails validation throws (the caller reports it; nothing was written).
   /// A cancelled fork rethrows `CancellationError` so an aborted UI run never
   /// degrades into a context-only transition behind the user's back.
-  private func collectBriefing(
-    _ source: HandoffBriefingSource
-  ) async throws -> (artifact: String?, briefing: HandoffBriefing) {
+  /// Resolve a briefing source to validated artifact text. Inline text that
+  /// fails validation throws (the caller reports it; nothing was written).
+  /// A cancelled fork rethrows `CancellationError` so an aborted UI run never
+  /// degrades into a context-only transition behind the user's back.
+  func collectBriefing(_ source: HandoffBriefingSource) async throws -> HandoffPreparedBriefing {
     switch source {
     case .inline(let raw):
       guard let artifact = HandoffStore.validatedBriefing(from: raw) else {
         throw HandoffBriefingError.invalidInlineBrief
       }
-      return (artifact, .inline)
+      return HandoffPreparedBriefing(artifact: artifact, outcome: .inline)
     case .fork(let request):
       do {
         let reply = try await resume(request, store.rootURL)
         try Task.checkCancellation()
         guard let artifact = HandoffStore.validatedBriefing(from: reply) else {
-          return (nil, .failed)
+          return HandoffPreparedBriefing(artifact: nil, outcome: .failed)
         }
-        return (artifact, .fork)
+        return HandoffPreparedBriefing(artifact: artifact, outcome: .fork)
       } catch is CancellationError {
         throw CancellationError()
       } catch {
         if Task.isCancelled { throw CancellationError() }
-        return (nil, .failed)
+        return HandoffPreparedBriefing(artifact: nil, outcome: .failed)
       }
     case .none:
-      return (nil, .none)
+      return .contextOnly
     }
   }
 
@@ -115,12 +126,29 @@ nonisolated struct HandoffCoordinator: Sendable {
     briefingSource: HandoffBriefingSource,
     now: Date
   ) async throws -> TransitionArtifacts {
-    let (artifact, briefing) = try await collectBriefing(briefingSource)
+    try await makeTransitionArtifacts(
+      outgoingAgent: outgoingAgent,
+      toAgent: toAgent,
+      sessionContext: sessionContext,
+      briefing: try await collectBriefing(briefingSource),
+      now: now
+    )
+  }
+
+  /// Performs an already-authorized artifact transition. HUD fallbacks call
+  /// this only after their reducer enters the non-cancellable finishing stage.
+  func makeTransitionArtifacts(
+    outgoingAgent: String?,
+    toAgent: String,
+    sessionContext: HandoffStore.SessionContext?,
+    briefing: HandoffPreparedBriefing,
+    now: Date
+  ) async throws -> TransitionArtifacts {
     let store = self.store
     let from = outgoingAgent ?? "agent"
     return try await Task.detached {
       let archivedPath = try store.archiveCurrent(from: from, toAgent: toAgent, now: now)
-      if let artifact {
+      if let artifact = briefing.artifact {
         try store.writeBriefing(artifact, archivingPrevious: false, now: now)
       } else {
         try store.removeCurrentArtifact()
@@ -132,7 +160,7 @@ nonisolated struct HandoffCoordinator: Sendable {
         briefing: nil,
         now: now
       )
-      return TransitionArtifacts(briefing: briefing, save: save, archivedPath: archivedPath)
+      return TransitionArtifacts(briefing: briefing.outcome, save: save, archivedPath: archivedPath)
     }.value
   }
 
@@ -147,21 +175,37 @@ nonisolated struct HandoffCoordinator: Sendable {
     briefingSource: HandoffBriefingSource,
     now: Date
   ) async throws -> (save: HandoffStore.SaveResult, briefing: HandoffBriefing) {
-    let (artifact, briefing) = try await collectBriefing(briefingSource)
+    try await makeCheckpoint(
+      outgoingAgent: outgoingAgent,
+      sessionContext: sessionContext,
+      note: note,
+      briefing: try await collectBriefing(briefingSource),
+      now: now
+    )
+  }
+
+  /// Persists a briefing collected before the HUD's commit boundary.
+  func makeCheckpoint(
+    outgoingAgent: String?,
+    sessionContext: HandoffStore.SessionContext?,
+    note: String?,
+    briefing: HandoffPreparedBriefing,
+    now: Date
+  ) async throws -> (save: HandoffStore.SaveResult, briefing: HandoffBriefing) {
     let store = self.store
     let save = try await Task.detached {
-      if let artifact {
+      if let artifact = briefing.artifact {
         try store.writeBriefing(artifact, archivingPrevious: true, now: now)
       }
       return try store.save(
         outgoingAgent: outgoingAgent,
         sessionContext: sessionContext,
         note: note,
-        briefing: briefing,
+        briefing: briefing.outcome,
         now: now
       )
     }.value
-    return (save, briefing)
+    return (save, briefing.outcome)
   }
 
   /// Append the single transition line; every entry point shares this format.

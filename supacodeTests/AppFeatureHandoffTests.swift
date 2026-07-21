@@ -283,6 +283,7 @@ struct AppFeatureHandoffTests {
       AppFeature()
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = .incrementing
       $0.terminalClient.sendTextToSurface = { _, _, text in
         injected.withValue { $0.append(text) }
         return true
@@ -327,6 +328,7 @@ struct AppFeatureHandoffTests {
       Issue.record("Expected requesting stage, got \(String(describing: store.state.handoffHud?.phase))")
       return
     }
+    let requestID = try #require(run.requestID)
 
     // The agent ran the CLI; the socket handler announces the completion and
     // the app routes it into the HUD, which finishes and focuses the receiver.
@@ -344,7 +346,8 @@ struct AppFeatureHandoffTests {
             tabID: uuid(12).uuidString,
             paneID: launchedPaneID.uuidString,
             paneTitle: "claude"
-          )
+          ),
+          requestID: requestID
         )
       )
     )
