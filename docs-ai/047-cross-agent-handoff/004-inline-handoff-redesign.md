@@ -115,8 +115,63 @@ transition(source, destination, briefing) =
 
 ## Implementation
 
-(to be completed with the PR)
+- **Caller-pane identity.** `CLISocketServer.handleClient` reads the peer PID
+  (`getsockopt(SOL_LOCAL, LOCAL_PEERPID)`) and threads a `CLICommandContext`
+  through `CLICommandRouter.route` to a new context-aware `CommandHandler`
+  method (default implementation forwards, so only the handoff handler cares).
+  `CallerPaneResolver` walks the caller's ancestry (`proc_bsdinfo.pbi_ppid`,
+  bounded) against `WorktreeTerminalManager.paneByShellPID()` — the shell PIDs
+  Ghostty already exposes per surface (`bridge.childPID()`).
+- **Side-effect-free fork.** `ClaudeCodeRuntimeAdapter` resume renders
+  `-p --fork-session --resume`; `CodexRuntimeAdapter` renders
+  `exec resume --ephemeral`. Verified against claude 2.1.216 (`--resume`
+  otherwise continues the same session ID) and codex 0.144.6.
+- **Pure transition core.** `HandoffCoordinator` exposes
+  `makeTransitionArtifacts` (collect briefing → `archiveCurrent` →
+  `writeBriefing`/`removeCurrentArtifact` → `save`) and `makeCheckpoint`.
+  `HandoffBriefingSource` (`inline`/`fork`/`none`) is the explicit input;
+  `HandoffBriefing` (`inline`/`fork`/`none`/`failed`) the recorded outcome.
+  An invalid inline brief throws before any filesystem write; a cancelled fork
+  rethrows `CancellationError` so UI aborts never degrade silently.
+  `HandoffStore` lost the template (`ensureLayout` seeds directories +
+  `.gitignore` only) and `readStatus`; `validatedBriefing(from:)` keeps the
+  fence/preamble normalization.
+- **CLI surface.** `handoff status` removed; `--no-prepare` replaced by
+  `--brief <text|->` (stdin heredoc) and `--no-brief`; payload schema bumped to
+  `prowl.cli.handoff.v2` (`briefing`, `has_briefing`; `preparation`/`exists`/
+  `last_log` dropped). New error codes `BRIEF_REQUIRED`, `INVALID_BRIEF`,
+  `SOURCE_REQUIRED` carry actionable, copy-pasteable messages.
+- **Headless launch + awareness.** `launchHandoffReceiver` no longer selects
+  the worktree; `createTab(focusing: false, selecting: false)` (a new
+  `selecting` knob down to `TerminalTabManager.createTab(select:)`) starts the
+  receiver in a background tab. `notifyHandoffLaunch` posts
+  `from → to · worktree` through the existing `appendNotification` pipeline,
+  suppressed while the user watches that worktree with the app active.
+- **UI as trigger + observer.** `HandoffHudFeature` injects a one-line
+  `HandoffInjection.instruction` into the source pane via the new
+  `TerminalClient.sendTextToSurface` and waits; the CLI handler announces
+  successes through a `completionObserver` → `AppFeature.handoffCliCompleted`
+  → `HandoffHudFeature.cliCompleted` (matched on the source pane). Fallbacks
+  (`Fork Briefing` when an exact/high session exists, `Context Only`) run the
+  same coordinator transition with `source=agents-hud`; the HUD focuses the
+  receiver on completion — the core never does. Status-transition auto-save
+  was deleted (`AppFeature` state + `handoffAutoSaveEffect`).
+- **Docs.** `docs/components/handoff.md` rewritten around the pure transition;
+  `cli.md` handoff section, `command-palette.md`, `active-agents.md`,
+  `docs/README.md`, and the `prowl-cli` skill updated (the skill now documents
+  the self-handoff heredoc as the standard agent posture).
 
 ## Verification
 
-(to be completed with the PR)
+- Unit: `AgentRuntimeAdapterTests` (fork/ephemeral argv), `HandoffStoreTests`
+  (validation, archive-before-write, removal, no-template layout),
+  `HandoffCommandHandlerTests` (briefing decision matrix, zero-side-effect
+  rejections, fork degradation removing the stale briefing, kickoff prompt
+  adaptation, completion observer), `HandoffHudFeatureTests` (injection
+  content, completion matching, fallbacks, cancellation without writes),
+  `AppFeatureHandoffTests` (entry points + CLI-completion routing),
+  `SupacodeAppCLITests`, CLI parsing + socket round-trip tests
+  (`--brief`/`--no-brief`, v2 payload rendering).
+- End-to-end: debug app on a dedicated `PROWL_CLI_SOCKET`, driving real
+  self-handoff (`--brief` heredoc), third-party fork, context-only, and the
+  HUD injection path. (See PR notes.)

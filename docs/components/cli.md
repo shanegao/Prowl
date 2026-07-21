@@ -248,70 +248,82 @@ inside-root / new-root), `app_launched`, `brought_to_front`, `created_tab`, and 
 `target`.
 
 ### `prowl handoff`
-Manage the cross-agent handoff artifact under a target's `.prowl/handoff/` and
-launch the receiving agent. Centred on [workspaces](workspaces.md), but works for
-any runnable target. Three subcommands:
+Hand a task off between agents: archive the outgoing state under the target's
+`.prowl/handoff/`, install a fresh agent-authored briefing, and launch the
+receiver in a background tab. Centred on [workspaces](workspaces.md), but works
+for any runnable target. Two subcommands:
 
 ```bash
-prowl handoff save       [target] [--note "…"] [--no-prepare]   # refresh context + session excerpt
-prowl handoff to <agent> [target] [--note "…"] [--no-launch] [--no-prepare]
-prowl handoff status     [target]
+prowl handoff to <agent> [target] [--brief -|--no-brief] [--note "…"] [--no-launch]
+prowl handoff save       [target] [--brief -|--no-brief] [--note "…"]
 ```
 
-- **`save`** — when Prowl has an exact or high-confidence native session for
-  the detected outgoing Claude Code or Codex process, it first resumes that
-  session non-interactively (read-only, bounded to 2 minutes) and asks it to
-  **reply** with a fresh agent-authored `current.md` snapshot, written
-  entirely from that session's own knowledge; Prowl validates the
-  reply and transcribes it into the file (the previous version is backed up
-  to `archive/` first). It then refreshes
-  `.prowl/handoff/context.md` from live git state (per-repo branch + change
-  counts, changed-file list, detected outgoing agent, and captured session
-  excerpt). The single `save` log line records whether source preparation
-  completed, failed, or was skipped. `--no-prepare` skips the source turn for a
-  fast mechanical refresh. `current.md` is seeded from a template on the first
-  run; Prowl only rewrites it to transcribe a validated preparation reply.
-- **`to <agent>`** — performs the same safe source preparation, saves, archives
-  the current artifact to `.prowl/handoff/archive/<ts>-<from>-to-<to>.md`, and
-  launches the receiving agent in a **new tab** with a semantic kickoff prompt
-  for `current.md` and generated `context.md`. Returns the launched `pane`.
-  An observed unrestricted source execution policy is translated between the
+**Source resolution.** An explicit selector (`--pane p3`, `--tab t2`,
+`--worktree <name>`, or the positional target) wins; otherwise the source is
+**the calling pane** — Prowl maps the `prowl` process's ancestry to the pane
+whose shell spawned it, so an agent running the command hands off *itself*
+regardless of UI focus. Outside any Prowl pane with no selector the command
+errors with `SOURCE_REQUIRED`; the focused pane is never guessed.
+
+**Briefing.** `--brief -` reads an inline agent-authored briefing from stdin
+(heredoc) — the standard self-handoff posture, and required for one: a
+brief-less self-handoff errors (`BRIEF_REQUIRED`) with a copy-pasteable
+example, and `--no-brief` is the explicit context-only escape. A briefing must
+contain at least `## Objective`, `## Current State`, and `## Next Steps`; an
+invalid inline brief errors (`INVALID_BRIEF`) with **zero side effects**. For
+third-party sources with an exact/high-confidence claude/codex session, Prowl
+falls back to a side-effect-free session fork (Claude `--fork-session`, Codex
+`--ephemeral`, bounded to 2 minutes) to collect the briefing; a failed fork
+degrades the transition to context-only (`briefing=failed`) instead of
+blocking it.
+
+- **`to <agent>`** — archives the current artifact to
+  `.prowl/handoff/archive/<ts>-<from>-to-<to>.md` **first**, installs the
+  fresh briefing as `current.md` (or removes a stale one when the transition
+  is context-only), regenerates `context.md` from live git state, and launches
+  the receiver in a **background tab** — no worktree switch, no focus steal; a
+  notification announces the completed handoff unless you are already watching
+  that worktree. The kickoff prompt adapts to whether a briefing exists. An
+  observed unrestricted source execution policy carries over between the
   verified Claude Code and Codex adapters for the destination launch only;
-  model identifiers remain with their original agent family. `--no-launch`
-  still prepares, archives, and saves; `--no-prepare` skips the source turn.
-  Interactive launch is verified for `claude` and `codex`; `--no-launch`
-  accepts the full detected-agent list: `pi`, `claude`, `codex`, `gemini`,
-  `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`,
-  `qodercli`, `qwen`, `grok`.
-- **`status`** — report the artifact path, whether it exists, the agent
-  currently detected in the target, and the last handoff-log line.
+  model identifiers remain with their original agent family. Interactive
+  launch is verified for `claude` and `codex`; `--no-launch` still archives +
+  saves and accepts the full detected-agent list: `pi`, `claude`, `codex`,
+  `gemini`, `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`,
+  `amp`, `qodercli`, `qwen`, `grok`.
+- **`save`** — a deferred-handoff checkpoint: installs a fresh briefing
+  (archiving the replaced one) and regenerates `context.md`, with no
+  destination and no launch. A context-only `save --no-brief` refreshes
+  generated state without touching the last valid briefing.
 
 ```bash
-prowl handoff to claude --json     # codex → claude, launch claude in a new tab
-prowl handoff save --note "ui done, api next" --json
+prowl handoff to codex --brief - <<'EOF'      # self-handoff with inline briefing
+# Handoff
+## Objective
+…
+## Current State
+…
+## Next Steps
+…
+EOF
+prowl handoff save --brief - --note "eod checkpoint" <<'EOF' … EOF
+prowl handoff to claude --pane p7 --json      # hand off a third pane (fork fallback)
 ```
 
-The outgoing agent is whatever Prowl detects in the target's pane (see
-`pane.agent` in [`list`](#prowl-list)). Response payload includes `action`,
-`artifact_path`, `outgoing_agent`, `to_agent`, `repos`, `changed_file_count`,
-`archived_path`, `session_context`, `preparation` (`completed` / `failed` /
-`skipped`, for `save` and `to`), and `launched_pane`. `session_context` includes
-the generated excerpt path plus native `session_id` / `transcript_path` only when
-the selected pane already has unambiguous native-session evidence (the same
-identity exposed by `prowl agents`). When no session is resolved, Prowl keeps the
-terminal excerpt and omits native metadata. Unsafe or ambiguous native sessions
-are never resumed: source preparation is skipped and any existing `current.md`
-(or its template) remains the durable artifact. Full feature guide:
-[handoff](handoff.md).
+The outgoing agent is whatever Prowl detects in the source pane (see
+`pane.agent` in [`list`](#prowl-list)). Response payload
+(`prowl.cli.handoff.v2`) includes `action`, `artifact_path`, `outgoing_agent`,
+`to_agent`, `repos`, `changed_file_count`, `archived_path`, `session_context`,
+`briefing` (`inline` / `fork` / `none` / `failed`), `has_briefing`, and
+`launched_pane`. `session_context` includes the generated excerpt path plus
+native `session_id` / `transcript_path` only when the source pane has
+unambiguous native-session evidence (the same identity exposed by
+`prowl agents`); ambiguous sessions are never forked. `current.md` exists iff
+a validated briefing produced it — there is no template and nothing to
+maintain between handoffs. Full feature guide: [handoff](handoff.md).
 
 The generated `.prowl/handoff/` directory contains its own `.gitignore`, so its
 artifacts and terminal excerpts do not appear in `git status`.
-
-After a target has an existing `.prowl/handoff/current.md`, the app also
-auto-runs the same save path when Prowl sees the detected agent move from
-**working** to **done** or **blocked**. This auto-save is throttled per pane and
-does not initialize handoff files by itself; use `prowl handoff save` or
-`prowl handoff to` once to opt the target in.
 
 ## Transport & app launch
 

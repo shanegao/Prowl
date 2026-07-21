@@ -49,7 +49,7 @@ Rows appear in the order agents are first detected. (See
 - **Click a row** → focuses that worktree + tab + pane and brings Prowl forward. A
   **Done** row downgrades to **Idle** once focused.
 - **Right-click a row** for the context menu:
-  - **Hand Off…** — opens the staged Hand Off HUD for that agent's pane
+  - **Hand Off…** — opens the Hand Off HUD for that agent's pane
     (selecting and focusing it first), regardless of which pane currently has
     focus. Same flow as the toolbar Agents capsule; see
     [handoff](handoff.md).

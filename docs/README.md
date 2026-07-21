@@ -58,7 +58,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | [`components/settings.md`](components/settings.md) | The Settings window (`⌘,`): every tab and what it controls. |
 | [`components/updates.md`](components/updates.md) | Sparkle auto-updates: auto-check, `⌘⇧U`. |
 | [`components/cli.md`](components/cli.md) | The `prowl` CLI — let an agent inspect and drive panes (`list`, `read`, `send`, `key`, `focus`, `tab`, `pane`, `open`, `handoff`). |
-| [`components/handoff.md`](components/handoff.md) | Hand a task off between agents: the `.prowl/handoff/` artifact, captured session context, the protocol agents follow, `prowl handoff`, and the Agents capsule + Hand Off HUD. |
+| [`components/handoff.md`](components/handoff.md) | Hand a task off between agents: the `.prowl/handoff/` artifact, inline briefings (`--brief`), caller-pane source resolution, `prowl handoff`, and the Agents capsule + Hand Off HUD. |
 
 ## Reference (exact lookups)
 
