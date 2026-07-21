@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.7.22](https://github.com/onevcat/Prowl/releases/tag/v2026.7.22)
+
+This release introduces cross-agent handoff, letting you pass work from one coding agent to another without losing context.
+
+### New
+- Hand off a task between coding agents: open the command palette and choose "Hand Off…", or use the new Agents capsule in the worktree toolbar. The current agent writes a briefing, then the chosen agent launches in a background tab to continue — your current tab stays focused, and a notification lets you jump over once it's ready. Any detected agent can hand off its work; the receiving side currently supports Claude Code and Codex, with more agents coming in future releases.
+- Handoffs are also available from the CLI: run `prowl handoff save` or `prowl handoff to <agent>` inside an agent's terminal to capture and hand off its current state.
+- Right-click a row in the Active Agents panel for a new context menu: Hand Off…, Mark as Read, Copy Path, and Reveal in Finder.
+
+### Improved
+- The Agents capsule now shows the launch alias you actually used to start an agent (e.g. "omp") instead of always showing the underlying agent name, and got a cleaner look (plain font, sparkles icon for the no-agent state).
+- The Hand Off waiting screen is now non-modal, so you can keep using the terminal — for example to approve a permission prompt — while a briefing is being prepared.
+
+### Fixed
+- Fixed handoff requests occasionally being attributed to the wrong pane or session.
+- Fixed pre-transport handoff CLI errors not rendering as proper JSON output.
+
 ## [2026.7.20](https://github.com/onevcat/Prowl/releases/tag/v2026.7.20)
 
 ### New
