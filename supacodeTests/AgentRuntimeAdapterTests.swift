@@ -43,6 +43,7 @@ struct AgentRuntimeAdapterTests {
       invocation.arguments
         == [
           "-p",
+          "--fork-session",
           "--resume",
           "9B0E3B0E-67B3-4D45-A3A0-7DD9BC713711",
           "--model",
@@ -76,6 +77,7 @@ struct AgentRuntimeAdapterTests {
         == [
           "exec",
           "resume",
+          "--ephemeral",
           "--model",
           "gpt-5.4",
           "--output-last-message",
@@ -187,7 +189,7 @@ struct AgentRuntimeAdapterTests {
     #expect(reply == "## Objective\nreply")
     #expect(recordedExecutable.value?.path == "/usr/bin/env")
     let arguments = recordedArguments.value
-    #expect(arguments.prefix(3) == ["codex", "exec", "resume"])
+    #expect(arguments.prefix(4) == ["codex", "exec", "resume", "--ephemeral"])
     #expect(arguments.contains("--output-last-message"))
     #expect(!arguments.contains("--dangerously-bypass-approvals-and-sandbox"))
     #expect(
