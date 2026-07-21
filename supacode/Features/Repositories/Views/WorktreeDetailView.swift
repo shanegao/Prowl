@@ -390,12 +390,6 @@ struct WorktreeDetailView: View {
       let paneState = state.surfaceAgentStates[surfaceID],
       let agent = paneState.detectedAgent
     else { return nil }
-    let resumable =
-      HandoffCommandHandler.preparationRequest(
-        outgoingAgent: agent.rawValue,
-        session: paneState.session,
-        observation: paneState.launchObservation
-      ) != nil
     let iconSource =
       paneState.iconLookupToken.flatMap(CommandIconMap.iconForFirstToken)
       ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken)
@@ -408,10 +402,8 @@ struct WorktreeDetailView: View {
     return AgentsCapsuleState(
       displayName: displayName,
       iconSource: iconSource,
-      infoLine: resumable
-        ? "Pass this task to another agent in a new tab. "
-          + "\(displayName) will summarize its progress first."
-        : "Pass this task to another agent in a new tab."
+      infoLine: "Pass this task to another agent in a new tab. "
+        + "\(displayName) writes its own briefing first."
     )
   }
 

@@ -1546,7 +1546,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let response = try CommandResponse(
       ok: true,
       command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
+      schemaVersion: "prowl.cli.handoff.v2",
       data: RawJSON(encoding: makeHandoffPayload(action: .save))
     )
 
@@ -1563,6 +1563,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       XCTAssertEqual(input.selector, .worktree("App"))
       XCTAssertEqual(input.note, "wip")
       XCTAssertTrue(input.launch)
+      XCTAssertNil(input.brief)
+      XCTAssertFalse(input.contextOnly)
     } else {
       XCTFail("Expected handoff command envelope")
     }
@@ -1572,12 +1574,63 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(payload["command"] as? String, "handoff")
   }
 
+  func testHandoffToSendsInlineBriefAndContextOnly() throws {
+    let socketPath = temporarySocketPath(suffix: "handoff-brief")
+    let response = try CommandResponse(
+      ok: true,
+      command: "handoff",
+      schemaVersion: "prowl.cli.handoff.v2",
+      data: RawJSON(encoding: makeHandoffPayload(action: .toAgent))
+    )
+
+    let brief = "# Handoff\n\n## Objective\nShip.\n\n## Current State\nGreen.\n\n## Next Steps\n1. Go."
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["handoff", "to", "claude", "--brief", brief, "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .handoff(let input) = envelope.command {
+      XCTAssertEqual(input.brief, brief)
+      XCTAssertFalse(input.contextOnly)
+    } else {
+      XCTFail("Expected handoff command envelope")
+    }
+
+    let contextOnlySocket = temporarySocketPath(suffix: "handoff-no-brief")
+    let (contextOnlyRequest, contextOnlyResult) = try runWithMockServer(
+      socketPath: contextOnlySocket,
+      response: response,
+      args: ["handoff", "to", "claude", "--no-brief", "--json"]
+    )
+    XCTAssertEqual(contextOnlyResult.exitCode, 0)
+    let contextOnlyEnvelope = try JSONDecoder().decode(CommandEnvelope.self, from: contextOnlyRequest)
+    if case .handoff(let input) = contextOnlyEnvelope.command {
+      XCTAssertNil(input.brief)
+      XCTAssertTrue(input.contextOnly)
+    } else {
+      XCTFail("Expected handoff command envelope")
+    }
+  }
+
+  func testHandoffBriefConflictFailsBeforeTransport() throws {
+    let result = try runProwl(args: ["handoff", "to", "claude", "--brief", "x", "--no-brief", "--json"])
+
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
+  }
+
   func testHandoffToRoundTripsOverSocket() throws {
     let socketPath = temporarySocketPath(suffix: "handoff-to")
     let response = try CommandResponse(
       ok: true,
       command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
+      schemaVersion: "prowl.cli.handoff.v2",
       data: RawJSON(encoding: makeHandoffPayload(action: .toAgent))
     )
 
@@ -1604,7 +1657,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let response = try CommandResponse(
       ok: true,
       command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
+      schemaVersion: "prowl.cli.handoff.v2",
       data: RawJSON(encoding: makeHandoffPayload(action: .toAgent))
     )
 
@@ -1629,7 +1682,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let response = try CommandResponse(
       ok: true,
       command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
+      schemaVersion: "prowl.cli.handoff.v2",
       data: RawJSON(encoding: makeHandoffPayload(action: .toAgent))
     )
 
@@ -1660,43 +1713,12 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
   }
 
-  func testHandoffStatusRoundTripsOverSocket() throws {
-    let socketPath = temporarySocketPath(suffix: "handoff-status")
-    let response = try CommandResponse(
-      ok: true,
-      command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
-      data: RawJSON(encoding: HandoffCommandPayload(
-        action: .status,
-        artifactPath: "/Projects/App/.prowl/handoff/current.md",
-        outgoingAgent: "codex",
-        exists: true,
-        lastLog: "- 2026-06-12T14:30:00Z  save  agent=codex  repos=2  changed=3"
-      ))
-    )
-
-    let (requestData, result) = try runWithMockServer(
-      socketPath: socketPath,
-      response: response,
-      args: ["handoff", "status", "--json"]
-    )
-
-    XCTAssertEqual(result.exitCode, 0)
-    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
-    if case .handoff(let input) = envelope.command {
-      XCTAssertEqual(input.action, .status)
-      XCTAssertEqual(input.selector, .none)
-    } else {
-      XCTFail("Expected handoff command envelope")
-    }
-  }
-
   func testHandoffToTextRenderingFromSocket() throws {
     let socketPath = temporarySocketPath(suffix: "handoff-to-text")
     let response = try CommandResponse(
       ok: true,
       command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
+      schemaVersion: "prowl.cli.handoff.v2",
       data: RawJSON(encoding: HandoffCommandPayload(
         action: .toAgent,
         artifactPath: "/Projects/App/.prowl/handoff/current.md",
@@ -1717,6 +1739,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
           excerptPath: "handoff/sessions/2026-06-12T1430-pane-0.md",
           transcriptPath: "/tmp/codex.jsonl"
         ),
+        briefing: "inline",
+        hasBriefing: true,
         launchedPane: HandoffPanePayload(
           worktreeID: "App:/Projects/App",
           worktreeName: "App",
@@ -1736,6 +1760,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(result.exitCode, 0)
     XCTAssertTrue(result.stdout.contains("codex → claude"), "Missing transition header: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("artifact:"), "Missing artifact line: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("briefing:"), "Missing briefing line: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("session:"), "Missing session line: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("launched:"), "Missing launched line: \(result.stdout)")
     XCTAssertTrue(result.stdout.contains("pane-9"), "Missing launched pane id: \(result.stdout)")
@@ -1746,7 +1771,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let response = try CommandResponse(
       ok: true,
       command: "handoff",
-      schemaVersion: "prowl.cli.handoff.v1",
+      schemaVersion: "prowl.cli.handoff.v2",
       data: RawJSON(encoding: HandoffCommandPayload(
         action: .toAgent,
         artifactPath: "/Projects/App/.prowl/handoff/current.md",

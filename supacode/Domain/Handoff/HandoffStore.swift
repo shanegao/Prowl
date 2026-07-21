@@ -1,11 +1,21 @@
 import Darwin
 import Foundation
 
-/// Outcome of asking the outgoing agent to refresh `current.md` before a save.
-nonisolated enum HandoffPreparationOutcome: String, Equatable, Sendable {
-  case completed
-  case skipped
+/// How the transition's briefing was (or wasn't) obtained. `current.md` exists
+/// iff a validated briefing produced it, so this value is the whole story of
+/// the semantic side of a handoff.
+nonisolated enum HandoffBriefing: String, Equatable, Sendable {
+  /// Agent-authored brief supplied inline with the command (`--brief`).
+  case inline
+  /// Brief collected by resuming the source session headlessly (fallback).
+  case fork
+  /// Intentionally context-only (`--no-brief`, or no resumable source).
+  case none
+  /// A fork was attempted and failed; the transition degraded to context-only.
   case failed
+
+  /// A validated briefing was written for this outcome.
+  var wroteBriefing: Bool { self == .inline || self == .fork }
 }
 
 /// On-disk store for the cross-agent handoff artifact that lives under a
@@ -57,36 +67,19 @@ nonisolated struct HandoffStore: Sendable {
     FileManager.default.fileExists(atPath: currentURL.path(percentEncoded: false))
   }
 
-  /// Initial agent-authored artifact. Generated state is kept separately in
-  /// `context.md` so Prowl never needs to rewrite this file after scaffolding.
-  static let template = """
-    # Handoff
-
-    ## Objective
-    <!-- one-paragraph task goal; stable across the whole run -->
-
-    ## Current State
-    <!-- where things stand right now -->
-
-    ## What Has Been Done
-    <!-- completed steps + key decisions/dead-ends -->
-
-    ## Open Questions
-    <!-- unresolved decisions the next agent (or human) must settle -->
-
-    ## Risks / Watch Out
-    <!-- anything fragile, half-done, or easy to break -->
-
-    ## Next Steps
-    <!-- ordered, concrete; the receiving agent starts here -->
-
-    ## Suggested Prompt For Next Agent
-    <!-- a ready-to-paste kickoff instruction -->
-
-    ---
-    Generated repository and session state: [context.md](context.md) (managed by Prowl).
-
-    """
+  /// The section skeleton a briefing must follow. Referenced by error messages
+  /// and the pane-injected UI instruction; never written to disk by Prowl —
+  /// `current.md` exists iff a validated briefing produced it.
+  static let briefingSections = [
+    "# Handoff",
+    "## Objective",
+    "## Current State",
+    "## What Has Been Done",
+    "## Open Questions",
+    "## Risks / Watch Out",
+    "## Next Steps",
+    "## Suggested Prompt For Next Agent",
+  ]
 
   // MARK: - Result models
 
@@ -140,34 +133,17 @@ nonisolated struct HandoffStore: Sendable {
     }
   }
 
-  struct StatusResult: Sendable, Equatable {
-    let artifactPath: String
-    let exists: Bool
-    let workspaceTitle: String?
-    let lastLogLine: String?
-  }
+  // MARK: - Layout
 
-  // MARK: - Scaffold
-
-  /// Create the `.prowl/handoff/` tree and seed `current.md` from the template
-  /// when it does not yet exist.
-  func ensureScaffold() throws {
+  /// Create the `.prowl/handoff/` tree and its self-ignoring `.gitignore`.
+  /// Never seeds `current.md`: the artifact exists only as the product of a
+  /// validated briefing.
+  func ensureLayout() throws {
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
     if !fileManager.fileExists(atPath: ignoreURL.path(percentEncoded: false)) {
       try "*\n".write(to: ignoreURL, atomically: true, encoding: .utf8)
-    }
-    if !fileManager.fileExists(atPath: currentURL.path(percentEncoded: false)) {
-      let temporaryURL = handoffDirectory.appending(path: ".current-\(UUID().uuidString).tmp")
-      defer { try? fileManager.removeItem(at: temporaryURL) }
-      try Data(Self.template.utf8).write(to: temporaryURL, options: .atomic)
-      if Darwin.link(
-        temporaryURL.path(percentEncoded: false),
-        currentURL.path(percentEncoded: false)
-      ) != 0, errno != EEXIST {
-        throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-      }
     }
   }
 
@@ -180,10 +156,10 @@ nonisolated struct HandoffStore: Sendable {
     outgoingAgent: String?,
     sessionContext: SessionContext? = nil,
     note: String?,
-    preparation: HandoffPreparationOutcome? = nil,
+    briefing: HandoffBriefing? = nil,
     now: Date
   ) throws -> SaveResult {
-    try ensureScaffold()
+    try ensureLayout()
 
     let repos = repoSummaries()
     let changedFiles = changedFilePaths(for: repos)
@@ -200,8 +176,8 @@ nonisolated struct HandoffStore: Sendable {
 
     let total = repos.reduce(0) { $0 + $1.changedFileCount }
     var logLine = "save  agent=\(outgoingAgent ?? "unknown")  repos=\(repos.count)  changed=\(total)"
-    if let preparation {
-      logLine += "  preparation=\(preparation.rawValue)"
+    if let briefing {
+      logLine += "  briefing=\(briefing.rawValue)"
     }
     try appendLog(logLine + Self.noteSuffix(note), now: now)
 
@@ -214,38 +190,52 @@ nonisolated struct HandoffStore: Sendable {
     )
   }
 
-  // MARK: - Prepared artifact
+  // MARK: - Briefing
 
-  /// Validates a source agent's preparation reply and transcribes it into
-  /// `current.md`. Prowl never authors semantic prose: the reply text is the
-  /// source agent's, this method only checks shape and writes it verbatim.
-  /// Returns false (leaving the existing artifact in place) when the reply is
-  /// empty, still the seeded template, or missing the core semantic sections.
-  /// The previous artifact is snapshotted into `archive/` first, so a reply
-  /// that drops sections never destroys the only copy of earlier notes.
-  func applyPreparationReply(_ reply: String, now: Date) -> Bool {
-    guard let artifact = Self.preparedArtifact(fromAgentReply: reply) else { return false }
-    do {
-      try FileManager.default.createDirectory(at: handoffDirectory, withIntermediateDirectories: true)
-      try snapshotCurrentBeforePreparation(now: now)
-      try artifact.write(to: currentURL, atomically: true, encoding: .utf8)
-      return true
-    } catch {
-      return false
-    }
+  /// Normalizes agent-authored briefing text — an inline `--brief` payload or a
+  /// fork reply — into artifact content, or nil when unusable. Prowl never
+  /// authors semantic prose: this only strips chat wrapping (fences, preamble)
+  /// and checks that the core sections are present.
+  static func validatedBriefing(from text: String) -> String? {
+    var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let hadOpeningFence = text.hasPrefix("```")
+    text = droppingOpeningFence(text)
+    text = droppingPreamble(text)
+    text = droppingClosingFence(text, truncatingTrailer: hadOpeningFence)
+    let requiredSections = ["## Objective", "## Current State", "## Next Steps"]
+    guard !text.isEmpty, requiredSections.allSatisfy(text.contains) else { return nil }
+    return text + "\n"
   }
 
-  /// Copy the existing `current.md` into `archive/<ts>-preparation-backup.md`
-  /// before a preparation reply overwrites it. The seeded template carries no
-  /// prose and is not worth archiving; a missing artifact means a first-ever
-  /// preparation. An unreadable artifact throws, failing the preparation and
-  /// leaving `current.md` untouched.
-  private func snapshotCurrentBeforePreparation(now: Date) throws {
-    guard FileManager.default.fileExists(atPath: currentURL.path(percentEncoded: false)) else { return }
+  /// Write a validated briefing to `current.md`. With `archivingPrevious` the
+  /// existing artifact is snapshotted into `archive/` first, so a rewrite can
+  /// never destroy the only copy of the previous briefing. Transitions pass
+  /// `false` because they already archived the outgoing state as a combined
+  /// snapshot.
+  func writeBriefing(_ artifact: String, archivingPrevious: Bool, now: Date) throws {
+    try ensureLayout()
+    if archivingPrevious {
+      try snapshotCurrentBeforeRewrite(now: now)
+    }
+    try artifact.write(to: currentURL, atomically: true, encoding: .utf8)
+  }
+
+  /// Remove `current.md` after the caller archived it: with no fresh briefing
+  /// the receiver must read `context.md` and the `archive/` chain — a previous
+  /// round's briefing must never impersonate the handoff contract.
+  func removeCurrentArtifact() throws {
+    guard hasCurrentArtifact else { return }
+    try FileManager.default.removeItem(at: currentURL)
+  }
+
+  /// Copy the existing `current.md` into `archive/<ts>-replaced-current.md`
+  /// before a checkpoint rewrite. A missing artifact means a first-ever write.
+  /// An unreadable artifact throws, leaving `current.md` untouched.
+  private func snapshotCurrentBeforeRewrite(now: Date) throws {
+    guard hasCurrentArtifact else { return }
     let existing = try String(contentsOf: currentURL, encoding: .utf8)
-    guard existing != Self.template else { return }
     try FileManager.default.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
-    let stem = "\(Self.fileStamp(now))-preparation-backup"
+    let stem = "\(Self.fileStamp(now))-replaced-current"
     let destination = try Self.reserveFileURL(in: archiveDirectory, stem: stem, fileExtension: "md")
     var didWrite = false
     defer {
@@ -255,19 +245,6 @@ nonisolated struct HandoffStore: Sendable {
     }
     try existing.write(to: destination, atomically: true, encoding: .utf8)
     didWrite = true
-  }
-
-  /// Normalizes a preparation reply into artifact content, or nil when unusable.
-  static func preparedArtifact(fromAgentReply reply: String) -> String? {
-    var text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-    let hadOpeningFence = text.hasPrefix("```")
-    text = droppingOpeningFence(text)
-    text = droppingPreamble(text)
-    text = droppingClosingFence(text, truncatingTrailer: hadOpeningFence)
-    let requiredSections = ["## Objective", "## Current State", "## Next Steps"]
-    guard !text.isEmpty, requiredSections.allSatisfy(text.contains) else { return nil }
-    guard text != template.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
-    return text + "\n"
   }
 
   /// Unwraps the opening line of a markdown code fence ("```markdown").
@@ -349,22 +326,6 @@ nonisolated struct HandoffStore: Sendable {
     defer { try? handle.close() }
     try handle.seekToEnd()
     try handle.write(contentsOf: Data(line.utf8))
-  }
-
-  // MARK: - Status
-
-  func readStatus() -> StatusResult {
-    let exists = FileManager.default.fileExists(atPath: currentURL.path(percentEncoded: false))
-    let lastLogLine = (try? String(contentsOf: logURL, encoding: .utf8))?
-      .split(separator: "\n", omittingEmptySubsequences: true)
-      .last { $0.hasPrefix("- ") }
-      .map(String.init)
-    return StatusResult(
-      artifactPath: currentURL.path(percentEncoded: false),
-      exists: exists,
-      workspaceTitle: workspaceTitle,
-      lastLogLine: lastLogLine
-    )
   }
 
   // MARK: - Repo enumeration

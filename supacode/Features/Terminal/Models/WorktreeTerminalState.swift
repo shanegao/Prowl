@@ -337,6 +337,7 @@ final class WorktreeTerminalState {
   @discardableResult
   func createTab(
     focusing: Bool = true,
+    selecting: Bool = true,
     title: String? = nil,
     setupScript: String? = nil,
     initialInput: String? = nil,
@@ -370,6 +371,7 @@ final class WorktreeTerminalState {
         isTitleLocked: false,
         initialInput: resolvedInput,
         focusing: focusing,
+        selecting: selecting,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
         context: context,
         workingDirectoryOverride: workingDirectoryOverride
@@ -451,6 +453,7 @@ final class WorktreeTerminalState {
     let isTitleLocked: Bool
     let initialInput: String?
     let focusing: Bool
+    var selecting: Bool = true
     let inheritingFromSurfaceId: UUID?
     let context: ghostty_surface_context_e
     let workingDirectoryOverride: URL?
@@ -460,7 +463,8 @@ final class WorktreeTerminalState {
     let tabId = tabManager.createTab(
       title: creation.title,
       icon: creation.icon,
-      isTitleLocked: creation.isTitleLocked
+      isTitleLocked: creation.isTitleLocked,
+      select: creation.selecting
     )
     let tree = splitTree(
       for: tabId,

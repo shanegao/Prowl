@@ -7,9 +7,11 @@ nonisolated protocol AgentRuntimeAdapter: Sendable {
 
   func observe(arguments: [String]) -> AgentLaunchObservation
   func makeStartInvocation(_ request: AgentStartRequest) throws -> AgentInvocation
-  /// Resume is read-only by design: the invocation never renders execution-mode
-  /// flags. The resumed agent replies with content; Prowl persists any artifact.
-  /// `replyFile`, when supported, asks the CLI to write its final message there.
+  /// Resume is side-effect-free by design: the invocation never renders
+  /// execution-mode flags, and it must not mutate the source session's recorded
+  /// state (fork/ephemeral variants only). The resumed agent replies with
+  /// content; Prowl persists any artifact. `replyFile`, when supported, asks the
+  /// CLI to write its final message there.
   func makeResumeInvocation(_ request: AgentResumeRequest, replyFile: URL?) throws -> AgentInvocation
 }
 
@@ -178,7 +180,9 @@ nonisolated private struct CodexRuntimeAdapter: AgentRuntimeAdapter {
   }
 
   func makeResumeInvocation(_ request: AgentResumeRequest, replyFile: URL?) throws -> AgentInvocation {
-    var arguments = ["exec", "resume"]
+    // `--ephemeral` keeps the preparation turn out of `~/.codex/sessions`, so a
+    // resume never mutates the recorded state of the live source session.
+    var arguments = ["exec", "resume", "--ephemeral"]
     if let model = request.model {
       arguments += ["--model", model]
     }
@@ -223,7 +227,10 @@ nonisolated private struct ClaudeCodeRuntimeAdapter: AgentRuntimeAdapter {
 
   func makeResumeInvocation(_ request: AgentResumeRequest, replyFile: URL?) throws -> AgentInvocation {
     // `claude -p` prints only the final reply on stdout, so no reply file is needed.
-    var arguments = ["-p", "--resume", request.session.id]
+    // `--fork-session` is load-bearing: without it `--resume` continues the same
+    // session ID and appends the preparation turn to the transcript of a session
+    // that is usually still live in the pane (dual-writer on one JSONL).
+    var arguments = ["-p", "--fork-session", "--resume", request.session.id]
     if let model = request.model {
       arguments += ["--model", model]
     }

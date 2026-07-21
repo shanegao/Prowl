@@ -30,8 +30,6 @@ struct AppFeature {
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
     var leftSidebarVisibility: NavigationSplitViewVisibility = .all
-    var handoffAutoSaveDisplayStates: [ActiveAgentEntry.ID: AgentDisplayState] = [:]
-    var handoffAutoSaveLastSavedAt: [ActiveAgentEntry.ID: Date] = [:]
     @Presents var handoffHud: HandoffHudFeature.State?
     @Presents var alert: AlertState<Alert>?
 
@@ -89,6 +87,9 @@ struct AppFeature {
     case terminalEvent(TerminalClient.Event)
     case openHandoffHud
     case handoffHud(PresentationAction<HandoffHudFeature.Action>)
+    /// A CLI handoff completed (announced by the socket-service handler); the
+    /// HUD uses it to observe the request it injected into the source pane.
+    case handoffCliCompleted(HandoffCLICompletion)
   }
 
   enum Alert: Equatable {
@@ -990,6 +991,10 @@ struct AppFeature {
 
       case .handoffHud:
         return .none
+
+      case .handoffCliCompleted(let completion):
+        guard state.handoffHud != nil else { return .none }
+        return .send(.handoffHud(.presented(.cliCompleted(completion))))
 
       case .terminalEvent(let event):
         return reduceTerminalEvent(event, state: &state)

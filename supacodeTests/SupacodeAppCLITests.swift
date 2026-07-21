@@ -55,9 +55,15 @@ struct SupacodeAppCLITests {
     )
   }
 
-  @Test func handoffStatusUsesNonMainWorktreePath() async throws {
-    let repositoryRoot = URL(fileURLWithPath: "/tmp/Prowl", isDirectory: true)
-    let worktreeRoot = URL(fileURLWithPath: "/tmp/Prowl-feature", isDirectory: true)
+  @Test func handoffSaveUsesNonMainWorktreePath() async throws {
+    let base = FileManager.default.temporaryDirectory
+      .appending(path: "app-cli-handoff-tests", directoryHint: .isDirectory)
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let repositoryRoot = base.appending(path: "Prowl", directoryHint: .isDirectory)
+    let worktreeRoot = base.appending(path: "Prowl-feature", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: repositoryRoot, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: worktreeRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
     let worktree = Worktree(
       id: worktreeRoot.path(percentEncoded: false),
       name: "feature",
@@ -90,12 +96,19 @@ struct SupacodeAppCLITests {
     let response = await router.route(
       CommandEnvelope(
         output: .json,
-        command: .handoff(HandoffInput(action: .status, selector: .worktree(worktree.id)))
+        command: .handoff(
+          HandoffInput(action: .save, selector: .worktree(worktree.id), contextOnly: true)
+        )
       )
     )
 
     #expect(response.ok)
     let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
-    #expect(payload.artifactPath == worktreeRoot.appending(path: ".prowl/handoff/current.md").path)
+    #expect(
+      payload.artifactPath
+        == worktreeRoot.standardizedFileURL.appending(path: ".prowl/handoff/current.md")
+        .path(percentEncoded: false)
+    )
+    #expect(payload.briefing == "none")
   }
 }

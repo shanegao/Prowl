@@ -104,6 +104,17 @@ struct CLISendTabSnapshot {
 }
 
 extension WorktreeTerminalState {
+  /// Shell child PIDs for every live pane, for CLI caller-pane resolution.
+  func shellPIDsBySurface() -> [UUID: pid_t] {
+    var pids: [UUID: pid_t] = [:]
+    for (surfaceID, view) in surfaces {
+      if let pid = view.bridge.childPID() {
+        pids[surfaceID] = pid
+      }
+    }
+    return pids
+  }
+
   func makeCLISendSnapshot(for tabId: TerminalTabID) -> CLISendTabSnapshot? {
     let paneIDs = trees[tabId]?.leaves().map(\.id) ?? []
     guard !paneIDs.isEmpty else { return nil }

@@ -31,6 +31,9 @@ struct HandoffHudFeatureTests {
     )
   }
 
+  private let sourcePaneID = UUID(uuidString: "5A0B7B44-11A2-4C6C-9A0F-2B93A8B0E001")!
+  private let requestID = UUID(uuidString: "5A0B7B44-11A2-4C6C-9A0F-2B93A8B0E002")!
+
   private func makeSourceContext(
     agent: String = "codex",
     confidence: AgentSession.Confidence = .exact,
@@ -39,7 +42,7 @@ struct HandoffHudFeatureTests {
     HandoffSourceContext(
       sessionContext: HandoffStore.SessionContext(
         agent: agent,
-        paneID: "pane-0",
+        paneID: sourcePaneID.uuidString,
         paneTitle: agent,
         source: "terminal-scrollback",
         confidence: "fallback",
@@ -68,9 +71,25 @@ struct HandoffHudFeatureTests {
     1. Ship it.
     """
 
+  private struct InjectedRequest: Equatable {
+    let worktreeID: Worktree.ID
+    let surfaceID: UUID
+    let text: String
+  }
+
+  private func launchedPane(worktreeID: String) -> HandoffLaunchedPane {
+    HandoffLaunchedPane(
+      worktreeID: worktreeID,
+      worktreeName: "feature-handoff",
+      tabID: UUID().uuidString,
+      paneID: UUID().uuidString,
+      paneTitle: "claude"
+    )
+  }
+
   // MARK: - State construction
 
-  @Test func makeRequiresDetectedAgent() throws {
+  @Test func makeRequiresDetectedAgentAndPaneIdentity() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let worktree = makeWorktree(root: root)
@@ -79,7 +98,7 @@ struct HandoffHudFeatureTests {
     let noAgent = HandoffSourceContext(
       sessionContext: HandoffStore.SessionContext(
         agent: nil,
-        paneID: "pane-0",
+        paneID: sourcePaneID.uuidString,
         paneTitle: nil,
         source: "terminal-scrollback",
         confidence: "fallback",
@@ -89,6 +108,19 @@ struct HandoffHudFeatureTests {
       session: nil
     )
     #expect(HandoffHudFeature.State.make(worktree: worktree, source: noAgent) == nil)
+    let noPaneUUID = HandoffSourceContext(
+      sessionContext: HandoffStore.SessionContext(
+        agent: "codex",
+        paneID: "not-a-uuid",
+        paneTitle: nil,
+        source: "terminal-scrollback",
+        confidence: "fallback",
+        excerptText: nil
+      ),
+      observation: nil,
+      session: nil
+    )
+    #expect(HandoffHudFeature.State.make(worktree: worktree, source: noPaneUUID) == nil)
   }
 
   @Test func makeBuildsRegistryTargetsAndMarksCurrentAgent() throws {
@@ -105,11 +137,13 @@ struct HandoffHudFeatureTests {
     #expect(codexTarget.isCurrentAgent)
     let claudeTarget = try #require(state.targets.first { $0.agent == .claude })
     #expect(!claudeTarget.isCurrentAgent)
-    #expect(state.source.preparationRequest != nil)
+    #expect(state.source.forkRequest != nil)
+    #expect(state.canFork)
     #expect(state.source.displayName == "codex")
+    #expect(state.source.sourceSurfaceID == sourcePaneID)
   }
 
-  @Test func makeWithMediumConfidenceSkipsPreparationRequest() throws {
+  @Test func makeWithMediumConfidenceSkipsForkRequest() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let state = try #require(
@@ -118,7 +152,8 @@ struct HandoffHudFeatureTests {
         source: makeSourceContext(confidence: .medium)
       )
     )
-    #expect(state.source.preparationRequest == nil)
+    #expect(state.source.forkRequest == nil)
+    #expect(!state.canFork)
   }
 
   @Test func makeSurfacesCarriedOverUnrestrictedMode() throws {
@@ -165,9 +200,231 @@ struct HandoffHudFeatureTests {
     }
   }
 
-  // MARK: - Full hand-off run
+  // MARK: - Inline path: inject, then observe the CLI completion
 
-  @Test(.dependencies) func handOffRunPersistsArtifactsAndLaunches() async throws {
+  @Test(.dependencies) func confirmInjectsRequestIntoSourcePane() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.selectedIndex = claudeIndex
+
+    let injected = LockIsolated<[InjectedRequest]>([])
+    let startedAt = Date(timeIntervalSince1970: 1_760_000_000)
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { worktreeID, surfaceID, text in
+        injected.withValue {
+          $0.append(InjectedRequest(worktreeID: worktreeID, surfaceID: surfaceID, text: text))
+        }
+        return true
+      }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
+      )
+    }
+
+    let request = try #require(injected.value.first)
+    #expect(request.worktreeID == worktree.id)
+    #expect(request.surfaceID == sourcePaneID)
+    #expect(request.text.contains("prowl handoff to claude --brief -"))
+    #expect(request.text.contains("\(HandoffInput.requestIDEnvironmentKey)=\(requestID.uuidString)"))
+    #expect(request.text.contains("## Objective"))
+    #expect(!request.text.contains("\n"))
+  }
+
+  @Test(.dependencies) func cliCompletionFromSourcePaneFinishesAndFocusesReceiver() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.selectedIndex = claudeIndex
+    let launched = launchedPane(worktreeID: worktree.id)
+    let focused = LockIsolated<[(Worktree.ID, UUID)]>([])
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+      $0[TerminalClient.self].focusSurface = { worktreeID, surfaceID in
+        focused.withValue { $0.append((worktreeID, surfaceID)) }
+        return true
+      }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[claudeIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
+      )
+    }
+
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "claude",
+          briefing: .inline,
+          launched: launched,
+          requestID: requestID
+        )
+      )
+    ) {
+      $0.phase = .finished(.handedOff(agentDisplayName: "Claude Code"))
+    }
+
+    let (focusWorktreeID, focusSurfaceID) = try #require(focused.value.first)
+    #expect(focusWorktreeID == launched.worktreeID)
+    #expect(focusSurfaceID.uuidString == launched.paneID)
+  }
+
+  @Test(.dependencies) func cliCompletionFromOtherPaneOrActionIsIgnored() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.selectedIndex = claudeIndex
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[claudeIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
+      )
+    }
+
+    // Another pane's handoff: not ours.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: UUID().uuidString,
+          toAgent: "claude",
+          briefing: .inline,
+          launched: nil,
+          requestID: requestID
+        )
+      )
+    )
+    // Our pane, but a checkpoint — the run waits for a transition.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .save,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: nil,
+          briefing: .inline,
+          launched: nil,
+          requestID: requestID
+        )
+      )
+    )
+    // Our pane and request, but a different destination: not this HUD run.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "codex",
+          briefing: .inline,
+          launched: launchedPane(worktreeID: worktree.id),
+          requestID: requestID
+        )
+      )
+    )
+    // A matching destination without a receiver is still not a completed handoff.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "claude",
+          briefing: .inline,
+          launched: nil,
+          requestID: requestID
+        )
+      )
+    )
+  }
+
+  @Test(.dependencies) func briefOnlyCompletionFinishesAsSaved() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
+    )
+    let briefIndex = try #require(initial.targets.firstIndex { $0.kind == .briefOnly })
+    initial.selectedIndex = briefIndex
+    let injected = LockIsolated<[String]>([])
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, text in
+        injected.withValue { $0.append(text) }
+        return true
+      }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[briefIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
+      )
+    }
+    #expect(injected.value.first?.contains("prowl handoff save --brief -") == true)
+
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .save,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: nil,
+          briefing: .inline,
+          launched: nil,
+          requestID: requestID
+        )
+      )
+    ) {
+      $0.phase = .finished(.briefSaved)
+    }
+  }
+
+  // MARK: - Fallbacks
+
+  @Test(.dependencies) func forkFallbackRunsTransitionAndLaunches() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let worktree = makeWorktree(root: root)
@@ -179,355 +436,257 @@ struct HandoffHudFeatureTests {
 
     let sent = LockIsolated<[TerminalClient.Command]>([])
     let startedAt = Date(timeIntervalSince1970: 1_760_000_000)
+    let requestRegistry = HandoffRequestRegistry()
 
     let store = TestStore(initialState: initial) {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
+      $0.handoffRequestClient = HandoffRequestClient(
+        register: { requestRegistry.register($0) },
+        supersede: { requestRegistry.supersede($0) }
+      )
+
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
       $0[TerminalClient.self].send = { command in
         sent.withValue { $0.append(command) }
       }
       $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in Self.usableReply })
     }
 
-    let claudeTarget = initial.targets[claudeIndex]
     await store.send(.confirmSelection) {
       $0.phase = .running(
-        HandoffHudRun(
-          target: claudeTarget,
-          startedAt: startedAt,
-          stages: [.briefing, .saving, .archiving, .launching],
-          stage: .briefing
-        )
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
       )
     }
-    await store.receive(\.briefingReplyReceived) {
+    await store.send(.fallbackForkTapped) {
       $0.phase = .running(
-        HandoffHudRun(
-          target: claudeTarget,
-          startedAt: startedAt,
-          stages: [.briefing, .saving, .archiving, .launching],
-          stage: .saving
-        )
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking, requestID: requestID)
       )
     }
-    await store.receive(\.briefingFinished) {
+    #expect(!requestRegistry.claim(requestID))
+    await store.receive(\.fallbackBriefingCollected) {
       $0.phase = .running(
-        HandoffHudRun(
-          target: claudeTarget,
-          startedAt: startedAt,
-          stages: [.briefing, .saving, .archiving, .launching],
-          stage: .saving,
-          preparation: .completed
-        )
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .finishing, requestID: requestID)
       )
     }
-    await store.receive(\.savingFinished) {
-      $0.phase = .running(
-        HandoffHudRun(
-          target: claudeTarget,
-          startedAt: startedAt,
-          stages: [.briefing, .saving, .archiving, .launching],
-          stage: .archiving,
-          preparation: .completed
-        )
-      )
-    }
-    await store.receive(\.archivingFinished) {
-      $0.phase = .running(
-        HandoffHudRun(
-          target: claudeTarget,
-          startedAt: startedAt,
-          stages: [.briefing, .saving, .archiving, .launching],
-          stage: .launching,
-          preparation: .completed
-        )
-      )
-    }
-    await store.receive(\.launchFinished) {
+
+    await store.receive(\.fallbackFinished) {
       $0.phase = .finished(.handedOff(agentDisplayName: "Claude Code"))
     }
 
-    let handoffStore = HandoffStore(rootURL: root)
-    let current = try String(contentsOf: handoffStore.currentURL, encoding: .utf8)
+    // The transition persisted the forked briefing and launched visibly.
+    let store2 = HandoffStore(rootURL: root)
+    let current = try String(contentsOf: store2.currentURL, encoding: .utf8)
     #expect(current.contains("Finish the HUD."))
-
-    // Mechanical context, archive, and the unified transition log line exist.
-    #expect(FileManager.default.fileExists(atPath: handoffStore.contextURL.path(percentEncoded: false)))
-    let archives = try FileManager.default.contentsOfDirectory(atPath: handoffStore.archiveDirectory.path)
-    #expect(archives.contains { $0.contains("codex-to-claude") })
-    let log = try String(contentsOf: handoffStore.logURL, encoding: .utf8)
+    let log = try String(contentsOf: store2.logURL, encoding: .utf8)
     #expect(log.contains("codex → claude"))
-    #expect(log.contains("launch=requested"))
-    #expect(log.contains("preparation=completed"))
+    #expect(log.contains("briefing=fork"))
     #expect(log.contains("source=agents-hud"))
-
-    // The receiving tab was requested with the adapter invocation.
-    guard case .createTabWithInput(_, let input, let workingDirectory, _, _, let name, _)? = sent.value.first
-    else {
-      Issue.record("Expected createTabWithInput, got \(sent.value)")
-      return
-    }
-    #expect(input.contains("'claude'"))
-    #expect(input.contains(HandoffCommandHandler.kickoffPrompt()))
-    #expect(workingDirectory == root)
-    #expect(name == "Hand off → Claude Code")
+    let commands = sent.value
+    #expect(
+      commands.contains { command in
+        if case .createTabWithInput(let commandWorktree, let input, _, _, _, _, _) = command {
+          return commandWorktree.id == worktree.id && input.contains("claude")
+        }
+        return false
+      }
+    )
   }
 
-  @Test(.dependencies) func briefOnlyRunSavesWithoutArchiveOrLaunch() async throws {
+  @Test(.dependencies) func contextOnlyFallbackRemovesStaleBriefing() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    let handoffStore = HandoffStore(rootURL: root)
+    try handoffStore.writeBriefing(
+      "# Handoff\n\n## Objective\nStale.\n\n## Current State\nx\n\n## Next Steps\n1. y\n",
+      archivingPrevious: false,
+      now: Date(timeIntervalSince1970: 1_759_000_000)
+    )
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.selectedIndex = claudeIndex
+    let startedAt = Date(timeIntervalSince1970: 1_760_000_000)
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+      $0[TerminalClient.self].send = { _ in }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
+      )
+    }
+    await store.send(.fallbackContextOnlyTapped) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .finishing, requestID: requestID)
+
+      )
+    }
+    await store.receive(\.fallbackFinished) {
+      $0.phase = .finished(.handedOff(agentDisplayName: "Claude Code"))
+    }
+
+    // Context-only: the stale briefing was archived away, never handed over.
+    #expect(!handoffStore.hasCurrentArtifact)
+    let log = try String(contentsOf: handoffStore.logURL, encoding: .utf8)
+    #expect(log.contains("briefing=none"))
+  }
+
+  @Test(.dependencies) func failedInjectionFallsBackAutomatically() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let worktree = makeWorktree(root: root)
     var initial = try #require(
       HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
     )
-    let briefIndex = try #require(initial.targets.firstIndex { $0.kind == .briefOnly })
-    initial.selectedIndex = briefIndex
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.selectedIndex = claudeIndex
+    let startedAt = Date(timeIntervalSince1970: 1_760_000_000)
 
-    let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: initial) {
       HandoffHudFeature()
     } withDependencies: {
-      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
-      $0[TerminalClient.self].send = { command in
-        sent.withValue { $0.append(command) }
-      }
+      $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in false }
+      $0[TerminalClient.self].send = { _ in }
       $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in Self.usableReply })
     }
-    store.exhaustivity = .off
-
-    await store.send(.confirmSelection)
-    await store.receive(\.briefingReplyReceived)
-    await store.receive(\.briefingFinished)
-    await store.receive(\.savingFinished) {
-      $0.phase = .finished(.briefSaved)
-    }
-    await store.finish()
-
-    #expect(sent.value.isEmpty)
-    let handoffStore = HandoffStore(rootURL: root)
-    let log = try String(contentsOf: handoffStore.logURL, encoding: .utf8)
-    #expect(log.contains("save"))
-    #expect(log.contains("preparation=completed"))
-    #expect(!log.contains("→"))
-    let archiveContents =
-      (try? FileManager.default.contentsOfDirectory(atPath: handoffStore.archiveDirectory.path)) ?? []
-    #expect(archiveContents.isEmpty)
-  }
-
-  @Test(.dependencies) func runWithoutResumableSessionSkipsBriefingStage() async throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    var initial = try #require(
-      HandoffHudFeature.State.make(
-        worktree: makeWorktree(root: root),
-        source: makeSourceContext(confidence: .medium)
-      )
-    )
-    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
-    initial.selectedIndex = claudeIndex
-
-    let store = TestStore(initialState: initial) {
-      HandoffHudFeature()
-    } withDependencies: {
-      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
-      $0[TerminalClient.self].send = { _ in }
-      $0[AgentRuntimeClient.self] = AgentRuntimeClient(
-        resume: { _, _ in
-          Issue.record("Resume must not run without a preparation request")
-          return ""
-        }
-      )
-    }
-    store.exhaustivity = .off
 
     await store.send(.confirmSelection) {
-      #expect($0.run?.stages == [.saving, .archiving, .launching])
-      #expect($0.run?.stage == .saving)
-      #expect($0.run?.preparation == .skipped)
-    }
-    await store.receive(\.launchFinished)
-    await store.finish()
-
-    let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
-    #expect(log.contains("preparation=skipped"))
-  }
-
-  // MARK: - Skip and Cancel
-
-  @Test(.dependencies) func skipDuringBriefingContinuesMechanically() async throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    var initial = try #require(
-      HandoffHudFeature.State.make(worktree: makeWorktree(root: root), source: makeSourceContext())
-    )
-    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
-    initial.selectedIndex = claudeIndex
-
-    let store = TestStore(initialState: initial) {
-      HandoffHudFeature()
-    } withDependencies: {
-      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
-      $0[TerminalClient.self].send = { _ in }
-      $0[AgentRuntimeClient.self] = AgentRuntimeClient(
-        resume: { _, _ in
-          // Hangs until Skip cancels the briefing effect.
-          try await Task.never()
-        }
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking, requestID: requestID)
       )
     }
-    store.exhaustivity = .off
+    await store.receive(\.fallbackBriefingCollected) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .finishing, requestID: requestID)
+      )
+    }
 
-    await store.send(.confirmSelection) {
-      #expect($0.run?.stage == .briefing)
-    }
-    await store.send(.skipBriefingTapped) {
-      #expect($0.run?.stage == .saving)
-      #expect($0.run?.preparation == .skipped)
-    }
-    await store.receive(\.launchFinished) {
+    await store.receive(\.fallbackFinished) {
       $0.phase = .finished(.handedOff(agentDisplayName: "Claude Code"))
     }
-    await store.finish()
-
-    let handoffStore = HandoffStore(rootURL: root)
-    let log = try String(contentsOf: handoffStore.logURL, encoding: .utf8)
-    #expect(log.contains("preparation=skipped"))
-    // The seeded template stays: no reply was transcribed.
-    let current = try String(contentsOf: handoffStore.currentURL, encoding: .utf8)
-    #expect(current == HandoffStore.template)
   }
 
-  @Test(.dependencies) func cancelDuringBriefingAbortsWithoutArtifacts() async throws {
+  // MARK: - Cancellation
+
+  @Test(.dependencies) func cancelWhileRequestingDismisses() async throws {
     let root = try makeTempRoot()
     defer { remove(root) }
-    var initial = try #require(
-      HandoffHudFeature.State.make(worktree: makeWorktree(root: root), source: makeSourceContext())
-    )
-    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
-    initial.selectedIndex = claudeIndex
-
-    let store = TestStore(initialState: initial) {
-      HandoffHudFeature()
-    } withDependencies: {
-      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
-      $0[TerminalClient.self].send = { _ in }
-      $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in try await Task.never() })
-    }
-    store.exhaustivity = .off
-
-    await store.send(.confirmSelection)
-    await store.send(.cancelTapped)
-    await store.receive(\.delegate.dismiss)
-    await store.finish()
-
-    // Nothing was persisted and nothing was logged.
-    let handoffDirectory = HandoffStore(rootURL: root).handoffDirectory
-    #expect(!FileManager.default.fileExists(atPath: handoffDirectory.path(percentEncoded: false)))
-  }
-
-  @Test(.dependencies) func lateCancellationInsensitiveReplyAfterCancelDoesNotWriteArtifact() async throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    var initial = try #require(
-      HandoffHudFeature.State.make(worktree: makeWorktree(root: root), source: makeSourceContext())
-    )
-    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
-    initial.selectedIndex = claudeIndex
-    let replyContinuation = LockIsolated<CheckedContinuation<String, Never>?>(nil)
-
-    let store = TestStore(initialState: initial) {
-      HandoffHudFeature()
-    } withDependencies: {
-      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
-      $0[TerminalClient.self].send = { _ in }
-      $0[AgentRuntimeClient.self] = AgentRuntimeClient(
-        resume: { _, _ in
-          await withCheckedContinuation { continuation in
-            replyContinuation.setValue(continuation)
-          }
-        }
-      )
-    }
-    store.exhaustivity = .off
-
-    await store.send(.confirmSelection)
-    while replyContinuation.value == nil {
-      await Task.yield()
-    }
-    await store.send(.cancelTapped)
-    await store.receive(\.delegate.dismiss)
-
-    replyContinuation.withValue { continuation in
-      continuation?.resume(returning: Self.usableReply)
-      continuation = nil
-    }
-    for _ in 0..<10 {
-      await Task.yield()
-    }
-
-    let handoffDirectory = HandoffStore(rootURL: root).handoffDirectory
-    #expect(!FileManager.default.fileExists(atPath: handoffDirectory.path(percentEncoded: false)))
-  }
-
-  @Test(.dependencies) func lateBriefingResultAfterSkipIsIgnored() async throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    var initial = try #require(
-      HandoffHudFeature.State.make(worktree: makeWorktree(root: root), source: makeSourceContext())
-    )
-    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
-    initial.selectedIndex = claudeIndex
-
-    let store = TestStore(initialState: initial) {
-      HandoffHudFeature()
-    } withDependencies: {
-      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
-      $0[TerminalClient.self].send = { _ in }
-      $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in try await Task.never() })
-    }
-    store.exhaustivity = .off
-
-    await store.send(.confirmSelection)
-    await store.send(.skipBriefingTapped)
-    await store.receive(\.launchFinished)
-    // A racing reply that arrives after Skip must not resurrect the run or
-    // transcribe source prose after the mechanical hand-off has started.
-    await store.send(.briefingReplyReceived(.reply(Self.usableReply)))
-    let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
-    #expect(log.contains("preparation=skipped"))
-    #expect(!log.contains("preparation=completed"))
-  }
-
-  @Test(.dependencies) func saveFailureFinishesRunAsFailed() async throws {
-    let root = try makeTempRoot()
     let worktree = makeWorktree(root: root)
     var initial = try #require(
-      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext(confidence: .medium))
+      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
     )
     let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
     initial.selectedIndex = claudeIndex
-    // Break the root: a plain file where the directory should be.
-    try FileManager.default.removeItem(at: root)
-    try "not a directory".write(to: root, atomically: true, encoding: .utf8)
-    defer { remove(root) }
 
     let store = TestStore(initialState: initial) {
       HandoffHudFeature()
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
-      $0[TerminalClient.self].send = { _ in }
-      $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in "" })
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
     }
-    store.exhaustivity = .off
 
-    await store.send(.confirmSelection)
-    await store.receive(\.runFailed)
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[claudeIndex], startedAt: Date(timeIntervalSince1970: 1_760_000_000), stage: .requesting,
+          requestID: requestID)
+      )
+    }
+    await store.send(.cancelTapped)
+    await store.receive(\.delegate.dismiss)
+  }
+
+  @Test(.dependencies) func cancelWhileForkingAbortsWithoutWriting() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: worktree, source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.selectedIndex = claudeIndex
+    let startedAt = Date(timeIntervalSince1970: 1_760_000_000)
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = startedAt
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+      $0[TerminalClient.self].send = { _ in }
+      $0[AgentRuntimeClient.self] = AgentRuntimeClient(resume: { _, _ in
+        try await Task.never()
+      })
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .requesting, requestID: requestID)
+      )
+    }
+    await store.send(.fallbackForkTapped) {
+      $0.phase = .running(
+        HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking, requestID: requestID)
+      )
+    }
+    // A delayed CLI completion from the injected request cannot replace the
+    // fallback that already superseded it.
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "claude",
+          briefing: .inline,
+          launched: launchedPane(worktreeID: worktree.id),
+          requestID: requestID
+        )
+      )
+    )
+    await store.send(.cancelTapped)
+    await store.receive(\.delegate.dismiss)
     await store.finish()
 
-    guard case .finished(.failed) = store.state.phase else {
-      Issue.record("Expected failed outcome, got \(store.state.phase)")
-      return
-    }
+    // The aborted fork never touched the filesystem.
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
   }
+
+  @Test func cancelWhileFinishingIsIgnored() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    var initial = try #require(
+      HandoffHudFeature.State.make(worktree: makeWorktree(root: root), source: makeSourceContext())
+    )
+    let claudeIndex = try #require(initial.targets.firstIndex { $0.agent == .claude })
+    initial.phase = .running(
+      HandoffHudRun(
+        target: initial.targets[claudeIndex],
+        startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+        stage: .finishing,
+        requestID: requestID
+      )
+    )
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    }
+
+    await store.send(.cancelTapped)
+    await store.finish()
+  }
+
 }

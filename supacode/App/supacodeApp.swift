@@ -200,6 +200,8 @@ struct SupacodeApp: App {
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let storeBox = SupacodeAppStoreBox()
+    let handoffRequestRegistry = HandoffRequestRegistry()
+
     let coordinator = Self.makePullRequestRefreshCoordinator(storeBox: storeBox)
     _pullRequestRefreshCoordinator = State(initialValue: coordinator)
     let keyObserver = CommandKeyObserver()
@@ -229,11 +231,26 @@ struct SupacodeApp: App {
       values.pullRequestRefreshCoordinator = Self.makePullRequestRefreshCoordinatorClient(
         coordinator: coordinator
       )
+      values.handoffRequestClient = HandoffRequestClient(
+        register: { requestID in
+          handoffRequestRegistry.register(requestID)
+        },
+        supersede: { requestID in
+          handoffRequestRegistry.supersede(requestID)
+        }
+      )
+
     }
+
     _store = State(initialValue: appStore)
     storeBox.store = appStore
 
-    let cliServer = Self.makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
+    let cliServer = Self.makeCLISocketServer(
+      appStore: appStore,
+      terminalManager: terminalManager,
+      handoffRequestRegistry: handoffRequestRegistry
+    )
+
     _cliSocketServer = State(initialValue: cliServer)
 
     let watchdog = Self.makeMemoryWatchdog(appStore: appStore, terminalManager: terminalManager)
@@ -365,6 +382,11 @@ struct SupacodeApp: App {
       focusSurface: { worktreeID, surfaceID in
         terminalManager.focusSurface(worktreeID: worktreeID, surfaceID: surfaceID)
       },
+      sendTextToSurface: { worktreeID, surfaceID, text in
+        guard let state = terminalManager.stateIfExists(for: worktreeID) else { return false }
+        guard state.insertCommittedText(text, in: surfaceID) else { return false }
+        return state.submitLine(in: surfaceID)
+      },
       markNotificationRead: { worktreeID, notificationID in
         terminalManager.markNotificationRead(worktreeID: worktreeID, notificationID: notificationID)
       },
@@ -494,8 +516,10 @@ struct SupacodeApp: App {
   // swiftlint:disable:next function_body_length
   static func makeCLICommandRouter(
     appStore: StoreOf<AppFeature>,
-    terminalManager: WorktreeTerminalManager
+    terminalManager: WorktreeTerminalManager,
+    handoffRequestRegistry: HandoffRequestRegistry = HandoffRequestRegistry()
   ) -> CLICommandRouter {
+
     let listHandler = ListCommandHandler {
       ListRuntimeSnapshotBuilder.makeSnapshot(
         repositoriesState: appStore.state.repositories,
@@ -687,33 +711,52 @@ struct SupacodeApp: App {
       }
     )
     let handoffHandler = HandoffCommandHandler(
-      resolveProvider: { selector in
+      resolveProvider: { selector, callerPID in
         let resolver = TargetResolver {
           TargetResolutionSnapshotBuilder.makeSnapshot(
             repositoriesState: appStore.state.repositories,
             terminalManager: terminalManager
           )
         }
-        return resolver.resolve(selector).map { resolved in
-          let agentState = terminalManager.stateIfExists(for: resolved.worktreeID)?
-            .surfaceAgentStates[resolved.paneID]
-          let agent = agentState?.detectedAgent?.rawValue
-          return HandoffResolvedTarget(
-            worktreeID: resolved.worktreeID,
-            worktreeName: resolved.worktreeName,
-            rootPath: resolved.worktreePath,
-            paneID: resolved.paneID.uuidString,
-            outgoingAgent: agent,
-            outgoingLaunchObservation: agentState?.launchObservation,
-            outgoingSession: agentState?.session,
-            sessionContext: makeHandoffSessionContext(
-              worktreeID: resolved.worktreeID,
-              paneID: resolved.paneID,
-              paneTitle: resolved.paneTitle,
-              terminalManager: terminalManager
-            )
+        // The caller's own pane is the default source; an explicit selector
+        // overrides it. Never fall back to the focused pane — a handoff must
+        // not guess its subject from unstable UI state.
+        let callerPane = callerPID.flatMap { pid in
+          CallerPaneResolver.pane(
+            forCallerProcess: pid,
+            paneByShellPID: terminalManager.paneByShellPID()
           )
         }
+        let effectiveSelector: TargetSelector
+        if case .none = selector {
+          guard let callerPane else { return .failure(.noCallerPane) }
+          effectiveSelector = .pane(callerPane.surfaceID.uuidString)
+        } else {
+          effectiveSelector = selector
+        }
+        return resolver.resolve(effectiveSelector)
+          .map { resolved in
+            let agentState = terminalManager.stateIfExists(for: resolved.worktreeID)?
+              .surfaceAgentStates[resolved.paneID]
+            let agent = agentState?.detectedAgent?.rawValue
+            return HandoffResolvedTarget(
+              worktreeID: resolved.worktreeID,
+              worktreeName: resolved.worktreeName,
+              rootPath: resolved.worktreePath,
+              paneID: resolved.paneID.uuidString,
+              outgoingAgent: agent,
+              outgoingLaunchObservation: agentState?.launchObservation,
+              outgoingSession: agentState?.session,
+              sessionContext: makeHandoffSessionContext(
+                worktreeID: resolved.worktreeID,
+                paneID: resolved.paneID,
+                paneTitle: resolved.paneTitle,
+                terminalManager: terminalManager
+              ),
+              isSelfHandoff: callerPane?.surfaceID == resolved.paneID
+            )
+          }
+          .mapError { .resolver($0) }
       },
       launchProvider: { target, request in
         Self.launchHandoffReceiver(
@@ -723,7 +766,22 @@ struct SupacodeApp: App {
           terminalManager: terminalManager
         )
       },
-      preparationProvider: Self.prepareHandoffSource
+      forkProvider: Self.forkHandoffBriefing,
+      notifyLaunch: { launched, from, toAgent in
+        Self.notifyHandoffLaunch(
+          launched: launched,
+          from: from,
+          toAgent: toAgent,
+          terminalManager: terminalManager
+        )
+      },
+      completionObserver: { completion in
+        appStore.send(.handoffCliCompleted(completion))
+      },
+      requestAuthorizer: { requestID in
+        handoffRequestRegistry.claim(requestID)
+      }
+
     )
     return CLICommandRouter(
       openHandler: openHandler,
@@ -739,6 +797,9 @@ struct SupacodeApp: App {
     )
   }
 
+  /// Headless by construction: the receiving agent starts in a background tab
+  /// of the source's worktree — no worktree switch, no focus steal, no tab
+  /// selection. Awareness comes from `notifyHandoffLaunch`.
   private static func launchHandoffReceiver(
     target: HandoffResolvedTarget,
     request: AgentStartRequest,
@@ -749,17 +810,14 @@ struct SupacodeApp: App {
     guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
       return nil
     }
-    selectCLIWorktreeContext(
-      worktreeID: target.worktreeID,
-      appStore: appStore,
-      terminalManager: terminalManager
-    )
     guard let initialInput = try? AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput else {
       return nil
     }
     let state = terminalManager.state(for: worktree)
     guard
       let tabID = state.createTab(
+        focusing: false,
+        selecting: false,
         initialInput: initialInput,
         workingDirectoryOverride: URL(fileURLWithPath: target.rootPath, isDirectory: true)
       )
@@ -781,7 +839,31 @@ struct SupacodeApp: App {
     }
   }
 
-  nonisolated private static func prepareHandoffSource(
+  /// One completion notification per launched transition, suppressed when the
+  /// user is already watching the target worktree (the appearing tab is the
+  /// signal there). Click-to-focus routes to the receiving pane through the
+  /// regular notification pipeline.
+  private static func notifyHandoffLaunch(
+    launched: HandoffLaunchedPane,
+    from: String,
+    toAgent: String,
+    terminalManager: WorktreeTerminalManager
+  ) {
+    let watching =
+      terminalManager.selectedWorktreeID == launched.worktreeID
+      && NSApplication.shared.isActive
+    guard !watching else { return }
+    guard let paneID = UUID(uuidString: launched.paneID),
+      let state = terminalManager.stateIfExists(for: launched.worktreeID)
+    else { return }
+    state.appendNotification(
+      title: "\(from) → \(toAgent)",
+      body: "Took over in \(launched.worktreeName)",
+      surfaceId: paneID
+    )
+  }
+
+  nonisolated private static func forkHandoffBriefing(
     request: AgentResumeRequest,
     directory: URL
   ) async throws -> String {
@@ -790,9 +872,15 @@ struct SupacodeApp: App {
 
   private static func makeCLISocketServer(
     appStore: StoreOf<AppFeature>,
-    terminalManager: WorktreeTerminalManager
+    terminalManager: WorktreeTerminalManager,
+    handoffRequestRegistry: HandoffRequestRegistry
   ) -> CLISocketServer {
-    let cliRouter = makeCLICommandRouter(appStore: appStore, terminalManager: terminalManager)
+
+    let cliRouter = makeCLICommandRouter(
+      appStore: appStore,
+      terminalManager: terminalManager,
+      handoffRequestRegistry: handoffRequestRegistry
+    )
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")
     do {
